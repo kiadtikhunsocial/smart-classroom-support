@@ -211,7 +211,7 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
         <div className="login-logo">
           <div className="login-logo-icon"><AppLogo size={22} /></div>
           <div>
-            <h1 className="login-title">Smart Classroom Support</h1>
+            <h1 className="login-title">IWA Smart Classroom Support</h1>
             <p className="login-subtitle">ระบบจัดการแจ้งซ่อมอุปกรณ์อัจฉริยะ</p>
           </div>
         </div>
@@ -1620,7 +1620,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
         <div className="login-logo">
           <div className="login-logo-icon"><AppLogo size={22} /></div>
           <div>
-            <h1 className="login-title">Smart Classroom Support</h1>
+            <h1 className="login-title">IWA Smart Classroom Support</h1>
             <p className="login-subtitle">แจ้งซ่อมออนไลน์ — ไม่ต้องเข้าสู่ระบบ</p>
           </div>
         </div>
@@ -2037,7 +2037,7 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
         <div className="login-logo">
           <div className="login-logo-icon"><AppLogo size={22} /></div>
           <div>
-            <h1 className="login-title">Smart Classroom Support</h1>
+            <h1 className="login-title">IWA Smart Classroom Support</h1>
             <p className="login-subtitle">ติดตามสถานะการแจ้งซ่อม — ไม่ต้องเข้าสู่ระบบ</p>
           </div>
         </div>
@@ -2195,7 +2195,7 @@ function QrTokenResolveView({ token }: { token: string }) {
           <div className="login-logo">
             <div className="login-logo-icon"><AppLogo size={22} /></div>
             <div>
-              <h1 className="login-title">Smart Classroom Support</h1>
+              <h1 className="login-title">IWA Smart Classroom Support</h1>
               <p className="login-subtitle">แจ้งซ่อมออนไลน์</p>
             </div>
           </div>
