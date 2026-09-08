@@ -588,9 +588,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = [o.strip() for o in os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:5173,https://unnoticed-simplify-disclose.ngrok-free.dev",
+).split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
