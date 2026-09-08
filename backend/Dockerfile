@@ -20,5 +20,5 @@ RUN mkdir -p data
 
 EXPOSE 8000
 
-# รัน uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# รัน uvicorn — ฟัง port จาก env PORT (Railway inject ไว้, default 8080) เพื่อให้ Railway router เข้าถึงได้
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
