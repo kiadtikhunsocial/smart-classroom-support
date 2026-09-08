@@ -1,0 +1,76 @@
+/* Theme: Purple (default) */
+:root, .theme-purple {
+  --color-primary: #7C3AED;
+  --color-primary-dark: #6D28D9;
+  --color-primary-light: #EDE9FE;
+  --color-bg: #F4F3F8;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #FAFAF9;
+  --color-border: #E5E2EB;
+  --color-text: #1C1925;
+  --color-text-secondary: #5E5870;
+  --color-text-tertiary: #8F8A9C;
+  --sidebar-bg: #1A1626;
+  --sidebar-bg-2: #211D2F;
+  --sidebar-text: #C7C2D6;
+  --sidebar-text-muted: #7E7892;
+  --sidebar-active: #7C3AED;
+  --header-bg: #FFFFFF;
+  --header-border: #EDEAF0;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+/* Theme: Blue */
+.theme-blue {
+  --color-primary: #2563EB;
+  --color-primary-dark: #1D4ED8;
+  --color-primary-light: #DBEAFE;
+  --color-bg: #F0F4FA;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #F8FAFC;
+  --color-border: #E2E8F0;
+  --color-text: #0F172A;
+  --color-text-secondary: #475569;
+  --sidebar-bg: #0F172A;
+  --sidebar-bg-2: #1E293B;
+  --sidebar-text: #CBD5E1;
+  --sidebar-active: #2563EB;
+  --header-bg: #FFFFFF;
+  --header-border: #E2E8F0;
+}
+
+/* Theme: Dark */
+.theme-dark {
+  --color-primary: #A78BFA;
+  --color-primary-dark: #8B5CF6;
+  --color-primary-light: #2E1A5E;
+  --color-bg: #0F0D1A;
+  --color-surface: #1A1626;
+  --color-surface-raised: #211D2F;
+  --color-border: #2D2840;
+  --color-border-strong: #3A3452;
+  --color-text: #EDE9FE;
+  --color-text-secondary: #C7C2D6;
+  --color-text-tertiary: #7E7892;
+  /* Semantic — dark variants so badges/lights don't glare */
+  --color-success: #34D399;
+  --color-success-light: #0B2E24;
+  --color-warning: #FBBF24;
+  --color-warning-light: #33240B;
+  --color-danger: #F87171;
+  --color-danger-light: #3A1216;
+  --color-info: #38BDF8;
+  --color-info-light: #0C2A3A;
+  --color-muted: #6B6680;
+  --sidebar-bg: #0A0814;
+  --sidebar-bg-2: #120E20;
+  --sidebar-text: #A59CB8;
+  --sidebar-active: #A78BFA;
+  --header-bg: #1A1626;
+  --header-border: #2D2840;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}

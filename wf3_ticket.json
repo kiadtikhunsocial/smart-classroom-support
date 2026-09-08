@@ -1,0 +1,58 @@
+{
+  "name": "WF3 Ticket & Database Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "create-ticket",
+        "responseMode": "onReceived"
+      },
+      "id": "wh-ticket",
+      "name": "Webhook สร้าง Ticket",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// รับข้อมูลจาก WF1/WF2 → สร้าง payload ให้ FastAPI\nconst d = $input.first().json;\nreturn [{\n  json: {\n    device_id: d.device_id || 'TEST1-00001',\n    title: d.title || d.problem || (d.symptom ? d.symptom.slice(0,100) : 'แจ้งซ่อมจาก LINE'),\n    description: d.problem_detail || d.symptom || '',\n    reporter_name: d.reporter_name || 'ผู้ใช้ LINE',\n    reporter_phone: d.contact || '',\n    priority: (d.urgency || 'normal').toLowerCase() === 'high' ? 'high' : (d.urgency || '').toLowerCase() === 'critical' ? 'critical' : 'normal',\n    channel: 'line'\n  }\n}];"
+      },
+      "id": "build-payload",
+      "name": "สร้าง payload ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/api/tickets",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "http-create",
+      "name": "POST /api/tickets (FastAPI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { ticket_id: r.ticket_id, status: 'created', ok: true } }];"
+      },
+      "id": "resp-ticket",
+      "name": "คืนหมายเลข Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    }
+  ],
+  "connections": {
+    "Webhook สร้าง Ticket": {"main": [[{"node": "สร้าง payload ticket", "type": "main", "index": 0}]]},
+    "สร้าง payload ticket": {"main": [[{"node": "POST /api/tickets (FastAPI)", "type": "main", "index": 0}]]},
+    "POST /api/tickets (FastAPI)": {"main": [[{"node": "คืนหมายเลข Ticket", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

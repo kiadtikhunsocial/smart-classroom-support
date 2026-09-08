@@ -1,0 +1,45 @@
+{
+  "name": "WF2 AI Chatbot Troubleshooting",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// input: symptom text จาก LINE message\nconst msg = $input.first().json.message || '';\n// ส่งให้ backend ai/diagnose\nreturn [{ json: { symptom: msg } }];"
+      },
+      "id": "start-ai",
+      "name": "รับอาการ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/api/ai/diagnose",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ device_type: $json.device_type || undefined, symptom_text: $json.symptom }) }}",
+        "options": {}
+      },
+      "id": "http-ai",
+      "name": "เรียก AI Diagnose (backend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\n// ถ้าเจอวิธีแก้ → มี steps / ถ้าไม่ → ต้องสร้าง ticket\nconst found = r.found === true && r.steps && r.steps.length > 0;\nreturn [{ json: { found, steps: r.steps || [], kb_id: r.kb_article_id, message: r.message, title: r.title } }];"
+      },
+      "id": "parse-ai",
+      "name": "แยกผล AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    }
+  ],
+  "connections": {
+    "รับอาการ": {"main": [[{"node": "เรียก AI Diagnose (backend)", "type": "main", "index": 0}]]},
+    "เรียก AI Diagnose (backend)": {"main": [[{"node": "แยกผล AI", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

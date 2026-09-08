@@ -1,0 +1,34 @@
+{
+  "name": "WF4 Notification Dispatcher",
+  "nodes": [
+    {
+      "parameters": {"jsCode": "// รับ event จาก WF3\nconst d = $input.first().json;\nreturn [{ json: d }];"},
+      "id": "notif-in",
+      "name": "รับ event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {"jsCode": "const d = $input.first().json;\n// สร้างข้อความแจ้งเตือนตาม event\nconst msgMap = {\n  TICKET_CREATED: '📋 มี Ticket ใหม่ ' + (d.ticket_id||''),\n  STATUS_CHANGED: '🔄 Ticket ' + (d.ticket_id||'') + ' เปลี่ยนสถานะเป็น ' + (d.status||''),\n  COMPLETED: '✅ Ticket ' + (d.ticket_id||'') + ' เสร็จแล้ว'\n};\nreturn [{ json: { ...d, notif_message: msgMap[d.event] || ('แจ้งเตือน Ticket '+(d.ticket_id||'')) } }];"},
+      "id": "notif-msg",
+      "name": "สร้างข้อความ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {"jsCode": "// placeholder: push LINE จริงเมื่อมี Channel Token + URL\nconst d = $input.first().json;\nreturn [{ json: { ...d, line_push_ready: true } }];"},
+      "id": "notif-send",
+      "name": "ส่ง LINE Push (placeholder)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    }
+  ],
+  "connections": {
+    "รับ event": {"main": [[{"node": "สร้างข้อความ", "type": "main", "index": 0}]]},
+    "สร้างข้อความ": {"main": [[{"node": "ส่ง LINE Push (placeholder)", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

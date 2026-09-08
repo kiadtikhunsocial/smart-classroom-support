@@ -1,0 +1,73 @@
+{
+  "name": "WF1 Intake & QR Resolver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-webhook",
+        "responseMode": "onReceived"
+      },
+      "id": "wh-line",
+      "name": "LINE Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ตรวจ signature (LINE) + แยก event type\nconst body = $input.first().json;\nconst ev = (body.events || [])[0];\nif (!ev) return [{ json: { handled: false, reason: 'no_event' } }];\nconst src = ev.source || {};\nconst type = ev.type;\nconst msgType = (ev.message || {}).type;\nconst userId = src.userId || '';\nconst text = (ev.message || {}).text || '';\nconst replyToken = ev.replyToken || '';\nreturn [{\n  json: {\n    handled: type === 'message',\n    event_type: type,\n    msg_type: msgType,\n    userId,\n    text,\n    replyToken,\n    device_type: (ev.message || {}).text ? null : null\n  }\n}];"
+      },
+      "id": "parse-line",
+      "name": "แยก LINE event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+          "conditions": [{"leftValue": "={{ $json.msg_type }}", "rightValue": "text", "operator": {"type": "string", "operation": "equals"}}]
+        }
+      },
+      "id": "if-text",
+      "name": "เป็นข้อความ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": "M3SEt1QaTuIBOUbi",
+        "options": {}
+      },
+      "id": "exec-wf2",
+      "name": "เรียก WF2 (AI Chatbot)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [660, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ตอบกลับ LINE ผ่าน LINE API (push กลับผู้ใช้)\nconst data = $input.first().json;\nconst LINE_TOKEN = 'NcoCcYU/FHi9rEjEf5ru2V+0ko3x+0uT9dk7IqozRPg2TxHDyxI0WFz8fIxi5+3NBmzVTWnw+zAjPOY2d/bmwr27hngm43cJoi5mqHXwObFTm2sIajxmG4/FDywdS1DKhR39L403FU8uIuMhNbtpggdB04t89/1O/w1cDnyilFU=';\n// placeholder: จะต่อ LINE push จริงเมื่อมี URL — ตอนนี้ log ไว้\nreturn [{ json: { ...data, line_token_ready: true } }];"
+      },
+      "id": "line-reply",
+      "name": "LINE Reply (placeholder)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -120]
+    }
+  ],
+  "connections": {
+    "LINE Webhook": {"main": [[{"node": "แยก LINE event", "type": "main", "index": 0}]]},
+    "แยก LINE event": {"main": [[{"node": "เป็นข้อความ?", "type": "main", "index": 0}]]},
+    "เป็นข้อความ?": {
+      "main": [
+        [{"node": "เรียก WF2 (AI Chatbot)", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "เรียก WF2 (AI Chatbot)": {"main": [[{"node": "LINE Reply (placeholder)", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

@@ -1,0 +1,250 @@
+import React from 'react';
+
+interface SidebarProps {
+  activeMenu: string;
+  onMenuChange: (menu: string) => void;
+  schoolName?: string;
+  userRole?: string;
+  userName?: string;
+  userAvatar?: string | null;
+  open?: boolean;
+  onClose?: () => void;
+  onLogout?: () => void;
+}
+
+export interface MenuItem {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  badge?: number;
+}
+
+const menuItems: MenuItem[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'devices',
+    label: 'อุปกรณ์',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="2" y="4" width="20" height="14" rx="2"/>
+        <path d="M2 10h20M12 14v6"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'scan',
+    label: 'สแกน QR',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'tickets',
+    label: 'Tickets',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="5" width="18" height="14" rx="2"/>
+        <path d="M3 10h18M8 20a2 2 0 004 0M12 20a2 2 0 004 0M16 20a2 2 0 004 0"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'kb',
+    label: 'ฐานความรู้',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'pm',
+    label: 'บำรุงรักษา',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'qrbatch',
+    label: 'พิมพ์ QR',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M7 8h3v3H7zM14 8h3v3h-3zM7 14h3v3H7zM14 14h3v3h-3z"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 4-7 8-7s8 3 8 7"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M18 20V10M12 20V4M6 20v-6"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'sales',
+    label: 'ยอดขาย',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'schools',
+    label: 'โรงเรียน',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'settings',
+    label: 'การตั้งค่า',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'profile',
+    label: 'โปรไฟล์',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 4-7 8-7s8 3 8 7"/>
+      </svg>
+    ),
+  },
+];
+
+const baseMenuItems = menuItems.filter((i) => i.id !== 'schools');
+const adminMenuItems = menuItems.filter((i) => i.id === 'schools');
+
+// ─── บทบาทเห็นเมนูอะไรบ้าง (Role-based menu) ────────────────────────────
+// super_admin   : เห็นทุกอย่าง
+// admin         : จัดการรร ตัวเอง (อุปกรณ์/ติcket/user/รายงาน) — ไม่เห็นโรงเรียนอื่น/ตั้งค่าระบบ
+// it_support    : ทำงานซ่อม (อุปกรณ์/สแกน/ticket/รายงาน) — ไม่จัดการ user/ตั้งค่า
+// teacher/student: แจ้งซ่อม + ติดตาม — เห็นแค่ Dashboard/สแกน/Tickets ของตัวเอง
+const ROLE_MENUS: Record<string, string[]> = {
+  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
+  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'users', 'reports', 'settings', 'profile'],
+  it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'reports', 'settings', 'profile'],
+  teacher: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
+  student: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
+};
+
+export { ROLE_MENUS };
+
+// เรียงเมนูตามลำดับเดิมใน menuItems
+const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'];
+
+function visibleMenusFor(role: string | undefined): MenuItem[] {
+  const allowed = ROLE_MENUS[role || ''] || ROLE_MENUS.teacher;
+  return ROLE_MENU_ORDER
+    .filter((id) => allowed.includes(id))
+    .map((id) => menuItems.find((i) => i.id === id)!)
+    .filter(Boolean);
+}
+
+export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart Classroom', userRole, userName, userAvatar, open, onClose, onLogout }: SidebarProps) {
+  const visibleItems = visibleMenusFor(userRole);
+
+  return (
+    <>
+      {/* Overlay เฉพาะมือถือ — คลิกปิด */}
+      <div className={`sidebar-overlay${open ? ' open' : ''}`} onClick={onClose} />
+      <aside className={`sidebar${open ? ' open' : ''}`}>
+        <div className="sidebar-top">
+          <div className="sidebar-brand">
+            <div className="sidebar-brand-icon">
+              <img src="/logo.jpg" alt="IWA" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
+            </div>
+            <div>
+              <div className="sidebar-brand-text">Smart Classroom</div>
+              <div className="sidebar-brand-sub">{schoolName}</div>
+            </div>
+            <button className="sidebar-close-mobile" onClick={onClose} aria-label="ปิดเมนู">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <nav className="sidebar-nav">
+          <div className="sidebar-nav-section">
+            <span className="sidebar-nav-section-label">เมนูหลัก</span>
+          </div>
+          <ul className="sidebar-nav-items">
+            {visibleItems.map((item) => (
+              <li key={item.id}>
+                <button
+                  className={`sidebar-link${activeMenu === item.id ? ' active' : ''}`}
+                  onClick={() => { onMenuChange(item.id); onClose?.(); }}
+                >
+                  <span className="sidebar-link-icon">{item.icon}</span>
+                  <span className="sidebar-link-label">{item.label}</span>
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className="sidebar-link-badge">{item.badge}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-footer-user">
+            {userAvatar ? (
+              <img className="sidebar-footer-avatar" src={userAvatar} alt="" style={{ objectFit: 'cover' }} />
+            ) : (
+              <div className="sidebar-footer-avatar">{(userName || 'U').charAt(0).toUpperCase()}</div>
+            )}
+            <div>
+              <div className="sidebar-footer-name">{userName || 'ผู้ใช้'}</div>
+              <div className="sidebar-footer-role">{userRole || ''}</div>
+            </div>
+          </div>
+          {onLogout && (
+            <button className="sidebar-logout" onClick={onLogout}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6, verticalAlign: 'middle' }}>
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+              </svg>
+              ออกจากระบบ
+            </button>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}

@@ -1,0 +1,40 @@
+# ── Secrets / env — ห้าม commit เด็ดขาด ──
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.local
+
+# ── Node / frontend ──
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# ── Vercel ──
+.vercel/
+
+# ── Python / backend ──
+__pycache__/
+*.pyc
+.venv/
+venv/
+backend/.venv/
+
+# ── Docker / runtime data ──
+backend/data/
+data/
+pgdata/
+n8n_data/
+redis_data/
+minio_data/
+backend_data/
+
+# ── Data dumps / logs ──
+*.log
+training_data/
+*.jsonl
+!training_data/.gitkeep
+
+# ── Local tooling ──
+*.tmp
+.DS_Store

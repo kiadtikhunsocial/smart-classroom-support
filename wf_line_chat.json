@@ -1,0 +1,114 @@
+{
+  "name": "LINE Chatbot → Ticket (รวม)",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "line-webhook", "responseMode": "onReceived"},
+      "id": "wh-line",
+      "name": "LINE Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nconst ev = (body.events || [])[0] || {};\nconst src = ev.source || {};\nconst msg = ev.message || {};\nreturn [{\n  json: {\n    msg_type: msg.type || '',\n    text: msg.text || '',\n    userId: src.userId || '',\n    replyToken: ev.replyToken || ''\n  }\n}];"
+      },
+      "id": "parse-line",
+      "name": "แยก LINE event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {"conditions": [{"leftValue": "={{ $json.msg_type }}", "rightValue": "text", "operator": {"type": "string", "operation": "equals"}}]}
+      },
+      "id": "if-text",
+      "name": "ข้อความ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/api/ai/diagnose",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ symptom_text: $json.text }) }}",
+        "options": {}
+      },
+      "id": "http-ai",
+      "name": "AI Diagnose",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { found: r.found === true && (r.steps||[]).length > 0, steps: r.steps || [], diagnosis: r } }];"
+      },
+      "id": "parse-ai",
+      "name": "แยกผล AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -120]
+    },
+    {
+      "parameters": {
+        "conditions": {"conditions": [{"leftValue": "={{ $json.found }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true"}}]}
+      },
+      "id": "if-found",
+      "name": "เจอวิธีแก้?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// อาการไม่เจอใน KB → สร้าง ticket ผ่าน FastAPI\nconst ctx = $('แยก LINE event').first().json;\nreturn [{ json: {\n  device_id: 'TEST1-00001',\n  title: 'LINE แจ้ง: ' + (ctx.text || '').slice(0, 100),\n  description: ctx.text || '',\n  reporter_name: 'ผู้ใช้ LINE',\n  reporter_phone: ctx.userId,\n  priority: 'normal',\n  channel: 'line'\n} }];"
+      },
+      "id": "build-ticket",
+      "name": "สร้าง payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 60]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/api/tickets",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "http-ticket",
+      "name": "POST Ticket (FastAPI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 60]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('แยก LINE event').first().json;\nconst steps = $json.found ? $json.steps : [];\n// ประกอบข้อความตอบ LINE (placeholder — ตอนนี้ log)\nconst text = steps.length\n  ? 'ลองทำตามนี้:\\n' + steps.map((s,i)=>(i+1)+'. '+s).join('\\n')\n  : 'ไม่พบวิธีแก้ในระบบ ส่งต่อไปช่างแล้ว';\nreturn [{ json: { reply_to: ctx.userId, message: text } }];"
+      },
+      "id": "compose-reply",
+      "name": "ประกอบคำตอบ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 120]
+    }
+  ],
+  "connections": {
+    "LINE Webhook": {"main": [[{"node": "แยก LINE event", "type": "main", "index": 0}]]},
+    "แยก LINE event": {"main": [[{"node": "ข้อความ?", "type": "main", "index": 0}]]},
+    "ข้อความ?": {"main": [[{"node": "AI Diagnose", "type": "main", "index": 0}], []]},
+    "AI Diagnose": {"main": [[{"node": "แยกผล AI", "type": "main", "index": 0}]]},
+    "แยกผล AI": {"main": [[{"node": "เจอวิธีแก้?", "type": "main", "index": 0}]]},
+    "เจอวิธีแก้?": {"main": [[{"node": "สร้าง payload", "type": "main", "index": 0}], [{"node": "ประกอบคำตอบ", "type": "main", "index": 0}]]},
+    "สร้าง payload": {"main": [[{"node": "POST Ticket (FastAPI)", "type": "main", "index": 0}]]},
+    "POST Ticket (FastAPI)": {"main": [[{"node": "ประกอบคำตอบ", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}
