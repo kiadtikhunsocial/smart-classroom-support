@@ -15,5 +15,5 @@ RUN npm run build --prefix /app 2>/dev/null || echo "No build script found, usin
 
 EXPOSE 5173
 
-# ใช้ vite preview สำหรับ production, หรือ vite สำหรับ dev
-CMD ["npx", "vite", "preview", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]
+# ใช้ vite preview สำหรับ production — ฟัง port จาก env PORT (Railway inject) หรือ default 5173
+CMD ["sh", "-c", "npx vite preview --host 0.0.0.0 --port ${PORT:-5173} --strictPort"]

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const BASE = (typeof __VITE_API_URL__ !== 'undefined' ? __VITE_API_URL__ : import.meta.env.VITE_API_URL) || 'http://localhost:8000/api';
 
 type Msg = { role: 'user' | 'bot'; text: string };
 
