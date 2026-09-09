@@ -297,7 +297,9 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             session["ticket_no"] = ticket_no
             save_session(user_id, session)
             _notify_ticket_created(fields, ticket_no)
-            return (f"✅ สร้าง Ticket ให้แล้วนะคะ: **{ticket_no}**\n"
+            from app.gemini_service import phrase_repair_reply
+            natural = phrase_repair_reply("ticket_created", f"เลข ticket: {ticket_no}")
+            return natural or (f"✅ สร้าง Ticket ให้แล้วนะคะ: **{ticket_no}**\n"
                     "เจ้าหน้าที่จะรีบดำเนินการให้เร็วที่สุดเลยค่ะ ขอบคุณมากนะคะ 🙏 ถ้ามีอะไรเพิ่มเติม พิมพ์บอกได้เสมอค่ะ")
         if "แก้ไข" in text or "ไม่" in text or "ผิด" in text:
             session["phase"] = "collecting"
@@ -334,10 +336,15 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             if inferred_device:
                 session["saved_device"] = inferred_device
             save_session(user_id, session)
-            return "รับทราบค่ะ เสียใจด้วยนะคะที่ยังไม่หาย 😔 เดี๋ยวจะส่งลิงก์ฟอร์มแจ้งซ่อมให้ทีมช่างได้เลยค่ะ" + "\n\n" + _form_fallback_text()
+            # ให้ Gemini แต่งคำตอบเห็นใจ + แจ้งขั้นตอน (fallback template เดิม)
+            from app.gemini_service import phrase_repair_reply
+            natural = phrase_repair_reply("not_resolved", f"อาการเดิม: {original}")
+            base = natural or "รับทราบค่ะ เสียใจด้วยนะคะที่ยังไม่หาย 😔 เดี๋ยวจะส่งลิงก์ฟอร์มแจ้งซ่อมให้ทีมช่างได้เลยค่ะ"
+            return base + "\n\n" + _form_fallback_text()
         if resolved:
             clear_session(user_id)
-            return "ดีใจด้วยนะคะ 🎉 ที่แก้ได้ด้วยตัวเอง! บันทึกเป็นการแก้ไขเบื้องต้นไว้แล้วค่ะ 😊"
+            from app.gemini_service import phrase_repair_reply as _pr
+            return _pr("resolve_success", "") or "ดีใจด้วยนะคะ 🎉 ที่แก้ได้ด้วยตัวเอง! บันทึกเป็นการแก้ไขเบื้องต้นไว้แล้วค่ะ 😊"
         return "ลองทำตามขั้นตอนที่แนะนำแล้วเป็นอย่างไรบ้างคะ? พิมพ์ **หายแล้ว** หรือ **ยังไม่หาย** ได้เลยค่ะ 😊"
 
     # เริ่มต้นรอบใหม่เฉพาะ phase==new (ไม่ reset state resolving)

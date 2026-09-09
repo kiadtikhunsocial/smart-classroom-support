@@ -209,6 +209,37 @@ def phrase_slot_question(known: dict, next_field: str, last_user_msg: str) -> st
         return None
 
 
+def phrase_repair_reply(context: str, detail: str) -> str | None:
+    """ให้ Gemini แต่งคำตอบสั้นๆ ธรรมชาติในจุดต่างๆ ของ flow แจ้งซ่อม
+    (เริ่มวินิจฉัย / แก้ไม่ได้→ส่งช่าง / สร้าง ticket สำเร็จ) แทน template คงที่ซ้ำ
+    context: สถานการณ์ (เช่น 'begin_diagnose' / 'not_resolved' / 'ticket_created')
+    detail: ข้อมูลประกอบ (อาการที่พูด / ข้อมูลที่เก็บ / เลข ticket)
+    คืน None ถ้า Gemini ล่ม → caller ใช้ template เดิมเป็น fallback"""
+    if not API_KEY:
+        return None
+    scenario = {
+        "begin_diagnose": "เพิ่งเริ่มวินิจฉัยปัญหา ยังไม่รู้สาเหตุชัดเจน ต้องการขอรายละเอียดเพิ่มจากลูกค้า",
+        "not_resolved": "ลองแก้เบื้องต้นแล้วยังไม่หาย ต้องส่งต่อให้ช่าง ควรพูดเห็นใจและแจ้งขั้นตอนถัดไป",
+        "ticket_created": "เพิ่งสร้าง ticket แจ้งซ่อมสำเร็จ ควรแจ้งเลข ticket และบอกลูกค้าถึงขั้นตอนถัดไป",
+        "resolve_success": "ลูกค้าแจ้งว่าแก้ได้แล้ว ควรชื่นชมสั้นๆ",
+    }.get(context, context)
+    prompt = (
+        f"สถานการณ์: {scenario}\n"
+        f"ข้อมูลประกอบ: {detail}\n\n"
+        "จงเขียนคำตอบถึงลูกค้า 1-2 ประโยค ภาษาไทยสุภาพ อบอุ่น เป็นธรรมชาติ เหมือนพนักงานไทย "
+        "ไม่ใช้รูปแบบเดิมซ้ำทุกครั้ง ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย ถ้าเป็น ticket_created ให้ระบุเลข ticket"
+    )
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 120}}
+    try:
+        resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=6.0)
+        if resp.status_code != 200:
+            return None
+        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception:
+        return None
+
+
 def match_article(symptom_text: str, device_type: Optional[str], candidates: list) -> Optional[dict]:
     """ให้ Gemini เลือกบทความ KB ที่ตรงกับอาการจาก candidates ที่ keyword คัดมาแล้ว
     ตอบจาก candidates ที่ให้เท่านั้น — เลือก kb_id ที่ตรงที่สุด ไม่ให้สร้างขั้นตอนใหม่เอง (กัน hallucination)
