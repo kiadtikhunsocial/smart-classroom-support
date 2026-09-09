@@ -747,6 +747,23 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
             pass
         return reply
 
+    # ── Gemini orchestration layer (opt-in): ให้ Gemini ตัดสินใจ+ร่างคำตอบธรรมชาติ
+    # เฉพาะ phase ใหม่ + ข้อความปกติ (ไม่ใช่ flow เจาะจงที่ rule จัดการได้ดีอยู่แล้ว)
+    # ถ้า Gemini ล่ม/429 → fallback ไป rule FSM เดิม (ปลอดภัย ไม่พัง)
+    if (phase in ("new", "done") and intent in ("product", "service", "company", "greeting", "thanks", "other")
+            and not _is_product_followup(text)):
+        try:
+            from app.gemini_service import gemini_orchestrate
+            _gctx = {"phase": phase, "fields": session.get("fields", {}),
+                     "name": profile.get("name") if profile else None}
+            _go = gemini_orchestrate(text, _gctx)
+            if _go and _go.get("reply") and _go.get("confidence", 0) >= 0.6:
+                # เฉพาะ action ปลอดภัย: answer/ask_info (ไม่ override การสร้าง ticket/ซ่อม)
+                if _go.get("action") in ("answer", "ask_info"):
+                    return _finish(_go["reply"], intent_used=f"orchestrate_{_go.get('action')}")
+        except Exception:
+            pass
+
     from app.assistant_policy import contains_prompt_injection, classify_urgency, INJECTION_REPLY, SAFETY_REPLY
     # Security and safety gates run before normal intent/session routing.
     if contains_prompt_injection(text):

@@ -209,6 +209,76 @@ def phrase_slot_question(known: dict, next_field: str, last_user_msg: str) -> st
         return None
 
 
+# context ที่ใช้ในการ orchestration: เรียกแล้วถ้าล่มคืน None → caller fallback ไป rule FSM เดิม
+_ORCH_CONTEXT = {
+    "services": None,  # set at first call
+    "categories": None,
+}
+
+
+def _orchestrate_context() -> str:
+    """สร้าง context ย่อๆ (บริการ/หมวดสินค้า) สำหรับให้ Gemini ตอบ/ตัดสินใจ โดยไม่อ้างราคา"""
+    if _ORCH_CONTEXT["services"] is None:
+        from app.company_catalog import SERVICES, PRODUCT_CATEGORIES
+        _ORCH_CONTEXT["services"] = "; ".join(f"{s['name']}({s['desc']})" for s in SERVICES)
+        _ORCH_CONTEXT["categories"] = "; ".join(f"{c['name']}" for c in PRODUCT_CATEGORIES)
+    return (f"บริการที่มี: {_ORCH_CONTEXT['services']}\n"
+            f"หมวดสินค้า: {_ORCH_CONTEXT['categories']}")
+
+
+def gemini_orchestrate(text: str, user_context: dict) -> dict | None:
+    """ให้ Gemini ตัดสินใจ turn ถัดไป + ร่างคำตอบธรรมชาติ (ปลอดภัยแบบ opt-in)
+    คืน {"reply": str, "action": "answer|ask_info|search_kb|create_ticket|escalate",
+          "product": str, "service": str, "confidence": float}
+    คืน None ถ้า Gemini ล่ม/429 → caller fallback ไป rule FSM เดิม
+    user_context: {phase, fields, has_product, has_service, name}"""
+    if not API_KEY:
+        return None
+    ctx = _orchestrate_context()
+    prompt = (
+        f"ข้อความลูกค้า: {text}\n"
+        f"บริบทสนทนา: {user_context}\n"
+        f"ข้อมูลธุรกิจ:\n{ctx}\n\n"
+        "จงตัดสินใจว่าบอทควรทำอะไรใน turn นี้ และร่างคำตอบถึงลูกค้า:\n"
+        "- answer: ตอบตรงๆ (ข้อมูลสินค้า/บริการ/บริษัท/ทักทาย/ขอบคุณ)\n"
+        "- ask_info: ยังข้อมูลไม่พอ ต้องถามลูกค้าเพิ่ม (เช่น ชื่อ/เบอร์/อุปกรณ์/อาการ)\n"
+        "- search_kb: ดูเป็นปัญหาอุปกรณ์ที่ควรแนะนำวิธีแก้\n"
+        "- create_ticket: ข้อมูลครบแล้ว ควรสร้าง ticket แจ้งซ่อม\n"
+        "- escalate: อาการอันตราย/กำกวม ควรส่งช่าง\n"
+        "คำตอบภาษาไทยสุภาพ อบอุ่น เหมือนพนักงานไทย 1-3 ประโยค ใช้ 'ค่ะ' ไม่ใช้ 'ฉัน'\n"
+        'ตอบ JSON เท่านั้น: {"reply":"...", "action":"answer|ask_info|search_kb|create_ticket|escalate", '
+        '"product":"ชื่อสินค้าถ้าเจอ หรือว่าง", "service":"ชื่อบริการถ้าเจอ หรือว่าง", "confidence":0.0-1.0}'
+    )
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.6, "maxOutputTokens": 250}}
+    try:
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=7.0)
+            except Exception:
+                resp = None
+            if resp is not None and resp.status_code == 200:
+                break
+            if attempt < 1:
+                time.sleep(0.5)
+        if resp is None or resp.status_code != 200:
+            return None
+        raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`").lstrip("json").strip()
+        parsed = json.loads(raw)
+        return {
+            "reply": parsed.get("reply", ""),
+            "action": parsed.get("action", "answer"),
+            "product": parsed.get("product", ""),
+            "service": parsed.get("service", ""),
+            "confidence": float(parsed.get("confidence", 0)),
+        }
+    except Exception:
+        return None
+
+
 def phrase_repair_reply(context: str, detail: str) -> str | None:
     """ให้ Gemini แต่งคำตอบสั้นๆ ธรรมชาติในจุดต่างๆ ของ flow แจ้งซ่อม
     (เริ่มวินิจฉัย / แก้ไม่ได้→ส่งช่าง / สร้าง ticket สำเร็จ) แทน template คงที่ซ้ำ
