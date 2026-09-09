@@ -222,8 +222,9 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             if explained:
                 return explained
             steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(m["steps"][:6]))
-            return (f"ได้เลยค่ะ อยากให้ลองทำตามขั้นตอนนี้ก่อนนะคะ หวังว่าจะช่วยได้ 🔧\n{steps}\n\n"
-                    "ถ้าลองแล้ว **หาย** ก็บอก 'หายแล้ว' ได้เลย หรือถ้า**ยังไม่หาย** พิมพ์ 'ยังไม่หาย' เดี๋ยวให้ช่างไปช่วยตรวจถึงที่นะคะ")
+            return (f"รับทราบนะคะ 🙏 ขอให้ลองทำตามนี้ก่อน ลองทีละขั้นดูค่ะ:\n{steps}\n\n"
+                    "ถ้าลองทำตามแล้ว **หาย** ก็บอก 'หายแล้ว' ได้เลยนะคะ หรือถ้ายัง**ไม่หาย** พิมพ์ 'ยังไม่หาย' "
+                    "เดี๋ยวเราจะให้ช่างไปช่วยตรวจถึงที่ให้ค่ะ")
         # ยังไม่เจอ → เก็บรายละเอียดเพิ่ม (แต่ถ้า device มีแล้ว + มีรายละเอียดพอ ให้เข้าข้อมูลผู้แจ้งได้)
         has_detail = len([w for w in re.split(r"[\s,]", buf) if len(w) >= 2]) >= 4
         if rnd < 3 and not (dv and has_detail):
@@ -344,6 +345,18 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         _reply = _answer_business(text)
         # จำ context สินค้าล่าสุดไว้ใช้ตอบคำถามติดตาม (เช่น 'มีขนาดอื่นไหม')
         _prod = _take_pending_product()
+        if not _prod:
+            # thread-local อาจไม่ sync กับ async request — ลองหา product จาก text ตรงๆ
+            try:
+                from app.company_catalog import find_product as _fp, PRODUCT_CATEGORIES as _PC
+                _p = _fp(text)
+                if not _p and any(k in text.lower() for k in ["aiboard", "ai board", "สมาร์ทบอร์ด", "aboard"]):
+                    _bc = next((c for c in _PC if c["id"] == "smart-board"), None)
+                    if _bc and _bc["products"]:
+                        _p = {**_bc["products"][0], "cat_id": "smart-board", "category": _bc["name"]}
+                _prod = _p
+            except Exception:
+                pass
         if _prod:
             try:
                 _s = get_session(user_id)
@@ -351,8 +364,8 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                     "name": _prod.get("name"), "cat_id": _prod.get("cat_id"),
                     "category": _prod.get("category"), "summary": _prod.get("summary"),
                     "img": _prod.get("img")}})
-            except Exception:
-                pass
+            except Exception as _e:
+                print(f"[last_product save err] {_e}")
         return _reply
 
     # ── คำถามติดตามสินค้า (ขนาด/รุ่น/สเปก/เทียบ) — อิงจากสินค้าที่เพิ่งคุย ชนะ flow แจ้งซ่อม ──
@@ -388,8 +401,9 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                 return explained
             # fallback: เรียง list เดิมเมื่อ Gemini ล่ม
             steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(m["steps"][:6]))
-            return (f"ได้เลยค่ะ อยากให้ลองทำตามขั้นตอนนี้ก่อนนะคะ หวังว่าจะช่วยได้ 🔧\n{steps}\n\n"
-                    "ถ้าลองแล้ว **หาย** ก็บอก 'หายแล้ว' ได้เลย หรือถ้า**ยังไม่หาย** พิมพ์ 'ยังไม่หาย' เดี๋ยวให้ช่างไปช่วยตรวจถึงที่นะคะ")
+            return (f"รับทราบนะคะ 🙏 ขอให้ลองทำตามนี้ก่อน ลองทีละขั้นดูค่ะ:\n{steps}\n\n"
+                    "ถ้าลองทำตามแล้ว **หาย** ก็บอก 'หายแล้ว' ได้เลยนะคะ หรือถ้ายัง**ไม่หาย** พิมพ์ 'ยังไม่หาย' "
+                    "เดี๋ยวเราจะให้ช่างไปช่วยตรวจถึงที่ให้ค่ะ")
         # ไม่พบ KB จากข้อความแรก: เก็บอุปกรณ์ที่ผู้ใช้ระบุไว้ทันที
         # ห้ามถามอุปกรณ์ซ้ำ หากข้อความเดิมมี device/ห้องอยู่แล้ว
         session["phase"] = "diagnosing"
@@ -675,6 +689,21 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     session = get_session(user_id)
     phase = session.get("phase", "new")
     intent = detect_intent(text)
+    # Gemini ช่วยจำแนกเจตนา (เฉพาะเมื่อ quota มี) — ใช้แทน keyword ถ้าเจตนาไม่ชัดหรือพลาด
+    # กัน spam quota + กันทำลาย follow-up/product: ใช้เฉพาะ phase ใหม่ + ข้อความไม่เกี่ยวกับสินค้า
+    from app.company_catalog import _fuzzy_product_names
+    _has_product = bool(_fuzzy_product_names(text))
+    if (phase in ("new",) and intent in ("other", "service", "buy")
+            and not _is_product_followup(text) and not _has_product):
+        try:
+            from app.gemini_service import classify_intent
+            _gi = classify_intent(text)
+            if _gi and _gi.get("confidence", 0) >= 0.6:
+                _gintent = _gi.get("intent")
+                if _gintent in ("repair", "buy", "product", "service", "company", "contact", "track", "human"):
+                    intent = _gintent
+        except Exception:
+            pass
     profile = get_profile(user_id)
     name_known = profile.get("name")
 

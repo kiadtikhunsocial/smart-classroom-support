@@ -17,6 +17,7 @@ from sqlalchemy import (
     create_engine,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -573,6 +574,59 @@ class TicketComment(Base):
     is_internal: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ── Chatbot runtime tables (สร้างผ่าน create_all ให้ตรงกับ raw SQL ใน chat_session/helpers) ──
+
+class LineSession(Base):
+    __tablename__ = "line_sessions"
+
+    user_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    data: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class ChatbotLog(Base):
+    __tablename__ = "chatbot_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    intent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    resolved: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SalesLead(Base):
+    __tablename__ = "sales_leads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    interest: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    products: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="LINE", nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="new", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ChatbotProfile(Base):
+    __tablename__ = "chatbot_profiles"
+
+    user_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    profile: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 

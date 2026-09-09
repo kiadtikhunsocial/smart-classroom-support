@@ -99,6 +99,55 @@ def is_available() -> bool:
     return bool(API_KEY)
 
 
+def classify_intent(text: str) -> dict | None:
+    """ให้ Gemini จำแนกเจตนาเป็น JSON — ช่วยเข้าใจภาษาไทยหลากหลาย/กำกวมที่ keyword จับไม่ได้
+    คืน {"intent": "repair|buy|product|service|company|contact|track|human|greeting|thanks|other",
+          "product": "ชื่อสินค้าที่พูดถึง(ถ้ามี)", "service": "บริการที่พูดถึง(ถ้ามี)",
+          "confidence": 0-1}
+    คืน None ถ้า Gemini ล่ม/429 → caller ใช้ keyword fallback เดิม"""
+    if not API_KEY:
+        return None
+    prompt = (
+        "จงจำแนกเจตนาของข้อความลูกค้าต่อไปนี้ (ธุรกิจขาย ICT + สื่อการเรียนของไทย):\n"
+        f"ข้อความ: {text}\n\n"
+        "เลือก 1 เจตนาจาก: repair(แจ้งซ่อม/ปัญหาอุปกรณ์), buy(อยากซื้อ/ถามราคา/สั่งซื้อ), "
+        "product(ถามข้อมูลสินค้าตัวไหน), service(ถามบริการตัวไหน), company(ถามข้อมูลบริษัท), "
+        "contact(ขอช่องทางติดต่อ), track(ติดตามงาน/ticket), human(อยากคุยคนจริง), "
+        "greeting(ทักทาย), thanks(ขอบคุณ), other\n"
+        "ตอบ JSON เท่านั้น รูปแบบ: "
+        '{"intent":"...","product":"ชื่อสินค้า(ถ้าเจอ ไม่มี=ว่าง)","service":"ชื่อบริการ(ถ้าเจอ ไม่มี=ว่าง)","confidence":0.0-1.0}'
+    )
+    body = {
+        "contents": [{"parts": [{"text": _BASE_POLICY}, {"text": prompt}]}],
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 120},
+    }
+    try:
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=8.0)
+            except Exception:
+                resp = None
+            if resp is not None and resp.status_code == 200:
+                break
+            if attempt < 1:
+                time.sleep(0.5)
+        if resp is None or resp.status_code != 200:
+            return None
+        t = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if t.startswith("```"):
+            t = t.strip("`").lstrip("json").strip()
+        parsed = json.loads(t)
+        return {
+            "intent": parsed.get("intent", "other"),
+            "product": parsed.get("product", ""),
+            "service": parsed.get("service", ""),
+            "confidence": float(parsed.get("confidence", 0)),
+        }
+    except Exception:
+        return None
+
+
 def match_article(symptom_text: str, device_type: Optional[str], candidates: list) -> Optional[dict]:
     """ให้ Gemini เลือกบทความ KB ที่ตรงกับอาการจาก candidates ที่ keyword คัดมาแล้ว
     ตอบจาก candidates ที่ให้เท่านั้น — เลือก kb_id ที่ตรงที่สุด ไม่ให้สร้างขั้นตอนใหม่เอง (กัน hallucination)
