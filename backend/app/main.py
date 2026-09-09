@@ -296,6 +296,7 @@ class PublicReportIn(BaseModel):
     reporter_phone: str = Field(..., min_length=1, max_length=32)
     reporter_type: Optional[str] = None
     priority: str = "normal"
+    attachments: Optional[list[str]] = None
 
 
 class PublicOptionsOut(BaseModel):
@@ -985,7 +986,7 @@ def public_report(
             priority=priority,
             status=TicketStatus.NEW,
             channel="public",
-            attachments="[]",
+            attachments=json.dumps(payload.attachments or [], ensure_ascii=False),
             sla_due_at=sla_due,
         )
         db.add(ticket)

@@ -26,6 +26,7 @@ export default function PublicNoLoginReportView() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErr, setFieldErr] = useState<{ name?: string; phone?: string }>({});
+  const [photos, setPhotos] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [ticketId, setTicketId] = useState('');
   const [resultDevice, setResultDevice] = useState<any>(null);
@@ -74,6 +75,7 @@ export default function PublicNoLoginReportView() {
       reporter_phone: form.reporter_phone.trim(),
       reporter_type: form.reporter_type,
       priority: form.priority,
+      attachments: photos,
     };
     if (deviceMode === 'list' && selectedDeviceId) {
       payload.device_id = selectedDeviceId;
@@ -296,6 +298,33 @@ export default function PublicNoLoginReportView() {
                     <option value="critical">Critical — เร่งด่วนมาก</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">แนบรูปภาพปัญหา (ไม่บังคับ, สูงสุด 3 ภาพ)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="form-input"
+                  onChange={async (e) => {
+                    const files = e.target.files;
+                    if (!files) return;
+                    try {
+                      for (const f of Array.from(files).slice(0, 3)) {
+                        const r = await api.upload(f);
+                        setPhotos((prev) => [...prev, r.url]);
+                      }
+                    } catch (err: any) { setError(err.message || 'อัปโหลดรูปไม่สำเร็จ'); }
+                  }}
+                />
+                {photos.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    {photos.map((u, i) => (
+                      <img key={i} src={u} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6 }} alt="" />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {error && (
