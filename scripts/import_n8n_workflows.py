@@ -1,6 +1,6 @@
-import json, urllib.request, urllib.error, os
+import json, os, urllib.request, urllib.error, os
 
-KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5NzNhNTE5Mi00NGQxLTQyMjctOGYzYS00MWQxMjAwYTk0ZTYiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzUxNGExOWEtNjgzOC00NjZlLTg0YzYtMzQzYTcxOTJkN2NkIiwiaWF0IjoxNzg4OTIxODkxfQ.L8Wki3aSAWmyD-c7owdVm6z50CXfjtNZ6q5-KEEM1Jw"
+KEY = os.environ.get("N8N_API_KEY", "")
 BASE = "https://n8n-production-b27c.up.railway.app/api/v1"
 DIR = "/c/Users/nonam/smart-classroom-support"  # dir containing workflow jsons (staged in tmp via host)
 # staged copies are in /tmp/n8n_import (MSYS /tmp) -> real path

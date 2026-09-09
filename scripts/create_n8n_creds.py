@@ -1,7 +1,20 @@
-import json, urllib.request, urllib.error
+import json, os, urllib.request, urllib.error
 
-KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5NzNhNTE5Mi00NGQxLTQyMjctOGYzYS00MWQxMjAwYTk0ZTYiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzUxNGExOWEtNjgzOC00NjZlLTg0YzYtMzQzYTcxOTJkN2NkIiwiaWF0IjoxNzg4OTIxODkxfQ.L8Wki3aSAWmyD-c7owdVm6z50CXfjtNZ6q5-KEEM1Jw"
-BASE = "https://n8n-production-b27c.up.railway.app/api/v1"
+# อ่าน secrets จาก env (ไม่ hardcode) — ตั้ง N8N_API_KEY, LINE_CHANNEL_TOKEN, POSTGRES_URL ก่อนรัน
+KEY = os.environ.get("N8N_API_KEY", "")
+if not KEY:
+    raise SystemExit("ต้องตั้ง env N8N_API_KEY ก่อนรัน")
+BASE = os.environ.get("N8N_BASE_URL", "https://n8n-production-b27c.up.railway.app/api/v1")
+LINE_TOKEN = os.environ.get("LINE_CHANNEL_TOKEN", "")
+if not LINE_TOKEN:
+    raise SystemExit("ต้องตั้ง env LINE_CHANNEL_TOKEN ก่อนรัน")
+import re
+# DATABASE_URL ตัวอย่าง: postgresql://user:pass@host:5432/db
+_m = re.match(r"postgresql\+?\w*://([^:]+):([^@]+)@([^:/]+):(\d+)/([\w-]+)", os.environ.get("DATABASE_URL", ""))
+if _m:
+    _db_user, _db_pass, _db_host, _db_port, _db_name = _m.groups()
+else:
+    _db_user, _db_pass, _db_host, _db_port, _db_name = "postgres", "", "localhost", "5432", "railway"
 
 creds = [
     {
@@ -9,18 +22,18 @@ creds = [
         "type": "httpHeaderAuth",
         "data": {
             "name": "Authorization",
-            "value": "Bearer NcoCcYU/FHi9rEjEf5ru2V+0ko3x+0uT9dk7IqozRPg2TxHDyxI0WFz8fIxi5+3NBmzVTWnw+zAjPOY2d/bmwr27hngm43cJoi5mqHXwObFTm2sIajxmG4/FDywdS1DKhR39L403FU8uIuMhNbtpggdB04t89/1O/w1cDnyilFU=",
+            "value": f"Bearer {LINE_TOKEN}",
         },
     },
     {
         "name": "smart_classroom_db",
         "type": "postgres",
         "data": {
-            "host": "postgres.railway.internal",
-            "port": 5432,
-            "database": "railway",
-            "user": "postgres",
-            "password": "viWCnUeCwEpnOoskzcOWGTUKwidLZGfv",
+            "host": _db_host,
+            "port": int(_db_port),
+            "database": _db_name,
+            "user": _db_user,
+            "password": _db_pass,
             "ssl": "disable",
         },
     },

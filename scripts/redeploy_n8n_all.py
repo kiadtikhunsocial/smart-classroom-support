@@ -1,6 +1,6 @@
-import json, urllib.request, urllib.error, glob, os
+import json, os, urllib.request, urllib.error, glob, os
 
-KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmYmE4ZjU0NS1kYjRjLTQxNTktODBiNC04MWE2ZGJjYTYwODYiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjhhMTBlZGUtNDAxYS00OTEzLWE4YzMtNGY4ODkxNDFhZjI1IiwiaWF0IjoxNzg4OTI0MjAzfQ.Md6u1rCtUG1o2QgLnr6S7Cu3G5woBXsMILCd0sOJfYc"
+KEY = os.environ.get("N8N_API_KEY", "")
 BASE = "https://n8n-production-b27c.up.railway.app/api/v1"
 OUT = r"C:\Users\nonam\AppData\Local\Temp\n8n_real"
 
@@ -21,13 +21,17 @@ for fn in sorted(glob.glob(os.path.join(OUT, "*.json"))):
     wf_ids[d["name"]] = r["id"]
     print(f"WF: {d['name'][:45]} -> {r['id']}")
 
-# 2) create credentials
+# 2) create credentials (อ่านจาก env ไม่ hardcode)
+LINE_TOKEN = os.environ.get("LINE_CHANNEL_TOKEN", "")
+import re as _re
+_m = _re.match(r"postgresql\+?\w*://([^:]+):([^@]+)@([^:/]+):(\d+)/([\w-]+)", os.environ.get("DATABASE_URL", ""))
+_db_user, _db_pass, _db_host, _db_port, _db_name = _m.groups() if _m else ("postgres", "", "localhost", "5432", "railway")
 line_cred = call("/credentials", "POST", {
     "name": "line_bot", "type": "httpHeaderAuth",
-    "data": {"name": "Authorization", "value": "Bearer NcoCcYU/FHi9rEjEf5ru2V+0ko3x+0uT9dk7IqozRPg2TxHDyxI0WFz8fIxi5+3NBmzVTWnw+zAjPOY2d/bmwr27hngm43cJoi5mqHXwObFTm2sIajxmG4/FDywdS1DKhR39L403FU8uIuMhNbtpggdB04t89/1O/w1cDnyilFU="}})
+    "data": {"name": "Authorization", "value": f"Bearer {LINE_TOKEN}"}})
 db_cred = call("/credentials", "POST", {
     "name": "smart_classroom_db", "type": "postgres",
-    "data": {"host": "postgres.railway.internal", "port": 5432, "database": "railway", "user": "postgres", "password": "viWCnUeCwEpnOoskzcOWGTUKwidLZGfv", "ssl": "disable"}})
+    "data": {"host": _db_host, "port": int(_db_port), "database": _db_name, "user": _db_user, "password": _db_pass, "ssl": "disable"}})
 line_id, db_id = line_cred["id"], db_cred["id"]
 print(f"CREDS: line_bot={line_id}  db={db_id}")
 

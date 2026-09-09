@@ -1,7 +1,7 @@
 import sqlite3, base64, hashlib, subprocess, tempfile, os, json
 
 DB = r"C:\Users\nonam\smart-classroom-support\n8n_cred.sqlite"
-PASS = "changeme123"
+PASS = os.environ.get("N8N_ENCRYPTION_KEY", "") or "changeme123"
 
 
 def decrypt(ct_b64, password):
