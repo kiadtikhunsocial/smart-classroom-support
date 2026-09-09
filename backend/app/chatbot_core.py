@@ -758,9 +758,36 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                      "name": profile.get("name") if profile else None}
             _go = gemini_orchestrate(text, _gctx)
             if _go and _go.get("reply") and _go.get("confidence", 0) >= 0.6:
+                action = _go.get("action")
+                if action == "search_kb":
+                    # ให้ค้น KB + แนะนำขั้นตอนจริง (แทนการตอบเฉยๆ) — fallback ไป rule FSM
+                    from app.gemini_service import match_article, explain_steps
+                    from app.models import KBArticle
+                    _db = SessionLocal()
+                    try:
+                        _arts = _db.execute(
+                            __import__("sqlalchemy").select(KBArticle).where(KBArticle.is_published == True)
+                        ).scalars().all()
+                        _cand = [{"kb_id": a.kb_id, "device_type": a.device_type, "title": a.title,
+                                  "steps": [s["text"] for s in (json.loads(a.steps) if a.steps else [])]}
+                                 for a in _arts]
+                    finally:
+                        _db.close()
+                    _m = match_article(text, None, _cand)
+                    if _m and _m.get("steps"):
+                        _exp = explain_steps(text, _m["steps"], _m.get("device_type") or "")
+                        if _exp:
+                            return _finish(_exp, intent_used="orchestrate_search_kb")
+                        _steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(_m["steps"][:6]))
+                        return _finish(f"รับทราบนะคะ 🙏 ขอให้ลองทำตามนี้ก่อน ลองทีละขั้นดูค่ะ:\n{_steps}\n\n"
+                                       "ถ้าทำแล้วไม่หาย พิมพ์ 'ยังไม่หาย' เดี๋ยวให้ช่างช่วยตรวจถึงที่ค่ะ",
+                                       intent_used="orchestrate_search_kb")
+                    # ไม่เจอ KB → ใช้คำตอบ Gemini เดิม + เสนอแจ้งซ่อม
+                    return _finish(_go["reply"] + "\n\nถ้ายังแก้ไม่ได้ พิมพ์ 'แจ้งซ่อม' ได้เลยนะคะ",
+                                   intent_used="orchestrate_search_kb_nokb")
                 # เฉพาะ action ปลอดภัย: answer/ask_info (ไม่ override การสร้าง ticket/ซ่อม)
-                if _go.get("action") in ("answer", "ask_info"):
-                    return _finish(_go["reply"], intent_used=f"orchestrate_{_go.get('action')}")
+                if action in ("answer", "ask_info"):
+                    return _finish(_go["reply"], intent_used=f"orchestrate_{action}")
         except Exception:
             pass
 
