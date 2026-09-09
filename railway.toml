@@ -1,0 +1,21 @@
+[builds]
+
+[builds.backend]
+name = "backend"
+dockerfile = "backend/Dockerfile"
+
+[builds.frontend]
+name = "frontend"
+dockerfile = "frontend/Dockerfile"
+
+[environments.production]
+
+[[services]]
+name = "backend"
+dockerfile = "backend/Dockerfile"
+env = { DATABASE_URL = "postgresql://postgres:viWCnUeCwEpnOoskzcOWGTUKwidLZGfv@postgres.railway.internal:5432/railway", CORS_ORIGIN = "https://frontend-production-5c575.up.railway.app", GEMINI_API_KEY = "${GEMINI_API_KEY}", GEMINI_MODEL = "${GEMINI_MODEL}", LINE_CHANNEL_SECRET = "${LINE_CHANNEL_SECRET}", LINE_CHANNEL_TOKEN = "${LINE_CHANNEL_TOKEN}", LINE_GROUP_ID = "${LINE_GROUP_ID}", PORT = "8080" }
+
+[[services]]
+name = "frontend"
+dockerfile = "frontend/Dockerfile"
+env = { VITE_API_URL = "https://backend-production-728f.up.railway.app/api", PORT = "5173" }
