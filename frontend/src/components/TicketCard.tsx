@@ -1,4 +1,5 @@
 import { Ticket } from '../types';
+import { STATUS_LABEL, STATUS_COLOR } from '../statusLabels';
 
 interface TicketCardProps {
   ticket: Ticket;
@@ -6,24 +7,12 @@ interface TicketCardProps {
 }
 
 export function TicketCard({ ticket, onView }: TicketCardProps) {
-  const statusColor: Record<string, string> = {
-    open: '#e53e3e',
-    assigned: '#dd6b20',
-    in_progress: '#d69e2e',
-    waiting_parts: '#3182ce',
-    waiting_user: '#805ad5',
-    completed: '#38a169',
-    closed: '#718096',
-    cancelled: '#c53030',
-    pending: '#718096',
-  };
-
   return (
     <div className="ticket-card">
       <div className="ticket-card-header">
         <span className="ticket-id">{ticket.ticket_id}</span>
-        <span className="ticket-status-badge" style={{ backgroundColor: statusColor[ticket.status] || '#718096' }}>
-          {ticket.status}
+        <span className="ticket-status-badge" style={{ backgroundColor: STATUS_COLOR[ticket.status] || '#718096' }}>
+          {STATUS_LABEL[ticket.status] || ticket.status}
         </span>
       </div>
       <div className="ticket-title">{ticket.title}</div>

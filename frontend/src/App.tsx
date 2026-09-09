@@ -1053,9 +1053,10 @@ function DashboardContent({
 
 // ─── Tickets Page ───────────────────────────────────────────────────────────
 const STATUS_LABELS_TICKET: Record<string, string> = {
-  new: 'รอรับเรื่อง', assigned: 'มอบหมายแล้ว', in_progress: 'กำลังดำเนินการ',
-  pending: 'รออะไหล่/รอภายนอก', resolved: 'เสร็จสิ้น',
-  closed: 'ปิดงาน', cancelled: 'ยกเลิก',
+  new: 'รอรับเรื่อง (New)', assigned: 'มอบหมายแล้ว (Assigned)', in_progress: 'กำลังดำเนินการ (In Progress)',
+  pending: 'รออะไหล่/รอภายนอก (Pending)', waiting_parts: 'รออะไหล่ (Waiting for Parts)', waiting_user: 'รอผู้ใช้ (Waiting for User)',
+  resolved: 'ซ่อมเสร็จ รอยืนยัน (Resolved)',
+  closed: 'ปิดงาน (Closed)', cancelled: 'ยกเลิก (Cancelled)',
 };
 const ALL_STATUSES = Object.keys(STATUS_LABELS_TICKET);
 
@@ -1978,13 +1979,15 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
 
 // ─── Track Status (ติดตามสถานะด้วยเลข ticket — ไม่ต้อง login) ─────────────
 const STATUS_LABELS_PUBLIC: Record<string, string> = {
-  new: 'เปิดคำร้อง',
-  assigned: 'มอบหมายงาน',
-  in_progress: 'กำลังดำเนินการ',
-  pending: 'รออะไหล่/รอภายนอก',
-  resolved: 'ซ่อมเสร็จแล้ว',
-  closed: 'ปิดงาน',
-  cancelled: 'ยกเลิก',
+  new: 'เปิดคำร้อง (New)',
+  assigned: 'มอบหมายงาน (Assigned)',
+  in_progress: 'กำลังดำเนินการ (In Progress)',
+  pending: 'รออะไหล่/รอภายนอก (Pending)',
+  waiting_parts: 'รออะไหล่ (Waiting for Parts)',
+  waiting_user: 'รอผู้ใช้ (Waiting for User)',
+  resolved: 'ซ่อมเสร็จแล้ว (Resolved)',
+  closed: 'ปิดงาน (Closed)',
+  cancelled: 'ยกเลิก (Cancelled)',
 };
 
 const STATUS_ICONS: Record<string, string> = {
@@ -1992,6 +1995,8 @@ const STATUS_ICONS: Record<string, string> = {
   assigned: '👤',
   in_progress: '🔧',
   pending: '📦',
+  waiting_parts: '📦',
+  waiting_user: '👤',
   resolved: '✅',
   closed: '🔒',
   cancelled: '❌',

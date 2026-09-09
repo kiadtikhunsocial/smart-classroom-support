@@ -104,6 +104,8 @@ class TicketStatus(str):
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
     PENDING = "pending"
+    WAITING_PARTS = "waiting_parts"
+    WAITING_USER = "waiting_user"
     RESOLVED = "resolved"
     CLOSED = "closed"
     CANCELLED = "cancelled"
@@ -134,6 +136,7 @@ device_status_enum = SAEnum(
 
 ticket_status_enum = SAEnum(
     "new", "assigned", "in_progress", "pending",
+    "waiting_parts", "waiting_user",
     "resolved", "closed", "cancelled",
     name="ticket_status_enum",
     create_type=False,

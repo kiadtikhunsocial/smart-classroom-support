@@ -47,15 +47,16 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  listTickets: (params?: { status?: string; priority?: string; device_id?: string; organization_id?: number }) => {
-    const qs = new URLSearchParams();
-    if (params?.status) qs.set('status', params.status);
-    if (params?.priority) qs.set('priority', params.priority);
-    if (params?.device_id) qs.set('device_id', params.device_id);
-    if (params?.organization_id) qs.set('organization_id', String(params.organization_id));
-    const q = qs.toString();
-    return request<any[]>(`/tickets${q ? '?' + q : ''}`);
-  },
+  listTickets: (params?: { status?: string; priority?: string; device_id?: string; organization_id?: number; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.priority) qs.set('priority', params.priority);
+      if (params?.device_id) qs.set('device_id', params.device_id);
+      if (params?.organization_id !== undefined) qs.set('organization_id', String(params.organization_id));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      const q = qs.toString();
+      return request<any[]>(`/tickets${q ? '?' + q : ''}`);
+    },
 
   getTicket: (ticketId: string) => request<any>(`/tickets/${ticketId}`),
 
@@ -210,30 +211,35 @@ export const api = {
   getDeviceRecent: (deviceId: string) => request<any>(`/devices/${encodeURIComponent(deviceId)}/recent`),
 
   // ─── Ticket lifecycle actions (Batch 1 backend) ──────────────────
-  trackTicket: (ticketNo: string) => request<any>(`/tickets/track/${encodeURIComponent(ticketNo)}`),
-  assignTicket: (ticketId: string, data: { assignee: string; note?: string }) =>
-    request<any>(`/tickets/${ticketId}/assign`, { method: 'POST', body: JSON.stringify(data) }),
-  acceptTicket: (ticketId: string) =>
-    request<any>(`/tickets/${ticketId}/accept`, { method: 'POST' }),
-  resolveTicket: (ticketId: string, data: any) =>
-    request<any>(`/tickets/${ticketId}/resolve`, { method: 'POST', body: JSON.stringify(data) }),
-  closeTicket: (ticketId: string, data: { rating?: number; feedback?: string }) =>
-    request<any>(`/tickets/${ticketId}/close`, { method: 'POST', body: JSON.stringify(data) }),
-  reopenTicket: (ticketId: string, note: string) =>
-    request<any>(`/tickets/${ticketId}/reopen`, { method: 'POST', body: JSON.stringify({ note }) }),
-  cancelTicket: (ticketId: string, note: string) =>
-    request<any>(`/tickets/${ticketId}/cancel`, { method: 'POST', body: JSON.stringify({ note }) }),
-  listTicketComments: (ticketId: string) => request<any[]>(`/tickets/${ticketId}/comments`),
-  addTicketComment: (ticketId: string, data: { note: string; is_internal?: boolean }) =>
-    request<any>(`/tickets/${ticketId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
-  listTicketAttachments: (ticketId: string) => request<any[]>(`/tickets/${ticketId}/attachments`),
+    trackTicket: (ticketNo: string) => request<any>(`/tickets/track/${encodeURIComponent(ticketNo)}`),
+    assignTicket: (ticketId: string, data: { assignee: string; note?: string }) =>
+      request<any>(`/tickets/${ticketId}/assign`, { method: 'POST', body: JSON.stringify(data) }),
+    acceptTicket: (ticketId: string) =>
+      request<any>(`/tickets/${ticketId}/accept`, { method: 'POST' }),
+    resolveTicket: (ticketId: string, data: any) =>
+      request<any>(`/tickets/${ticketId}/resolve`, { method: 'POST', body: JSON.stringify(data) }),
+    closeTicket: (ticketId: string, data: { rating?: number; feedback?: string }) =>
+      request<any>(`/tickets/${ticketId}/close`, { method: 'POST', body: JSON.stringify(data) }),
+    reopenTicket: (ticketId: string, note: string) =>
+      request<any>(`/tickets/${ticketId}/reopen`, { method: 'POST', body: JSON.stringify({ note }) }),
+    cancelTicket: (ticketId: string, note: string) =>
+      request<any>(`/tickets/${ticketId}/cancel`, { method: 'POST', body: JSON.stringify({ note }) }),
+    listTicketComments: (ticketId: string) => request<any[]>(`/tickets/${ticketId}/comments`),
+    addTicketComment: (ticketId: string, data: { note: string; is_internal?: boolean }) =>
+      request<any>(`/tickets/${ticketId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
+    listTicketAttachments: (ticketId: string) => request<any[]>(`/tickets/${ticketId}/attachments`),
 
-  // ─── Settings / Reports ──────────────────────────────────────────
-  getSettings: () => request<any>('/settings'),
-  updateSettings: (data: any) => request<any>('/settings', { method: 'PATCH', body: JSON.stringify(data) }),
-  reportSummary: (orgId?: number) => request<any>(`/reports/summary${orgId ? `?organization_id=${orgId}` : ''}`),
-  reportTopIssues: (orgId?: number) => request<any>(`/reports/top-issues${orgId ? `?organization_id=${orgId}` : ''}`),
-  reportTopDevices: (orgId?: number) => request<any>(`/reports/top-devices${orgId ? `?organization_id=${orgId}` : ''}`),
+    // ─── Ticket history ─────────────────────────────────────────
+    getTicketHistory: (ticketId: string) => request<any[]>(`/tickets/${encodeURIComponent(ticketId)}/history`),
+
+    // ─── Reports + analytics ──────────────────────────────────
+    reportSummary: (orgId?: number) => request<any>(`/reports/summary${orgId ? `?organization_id=${orgId}` : ''}`),
+    reportTopIssues: (orgId?: number) => request<any>(`/reports/top-issues${orgId ? `?organization_id=${orgId}` : ''}`),
+    reportTopDevices: (orgId?: number) => request<any>(`/reports/top-devices${orgId ? `?organization_id=${orgId}` : ''}`),
+    getChatbotAnalytics: (days?: number) => request<any>(`/reports/chatbot-analytics${days != null ? `?days=${days}` : ''}`),
+
+    // ─── Avg resolution time ──────────────────────────────────
+    getAvgResolution: () => request<any>('/reports/avg-resolution'),
 
   // ─── Rooms / Buildings ───────────────────────────────────────────
   listRooms: (orgId: number) => request<any[]>(`/organizations/${orgId}/rooms`),

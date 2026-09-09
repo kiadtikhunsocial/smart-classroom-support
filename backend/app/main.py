@@ -366,8 +366,10 @@ class StatusUpdateRequest(BaseModel):
 STATUS_TRANSITIONS: dict[str, set[str]] = {
     "new": {"assigned", "cancelled"},
     "assigned": {"in_progress", "new", "cancelled"},
-    "in_progress": {"pending", "resolved", "cancelled"},
+    "in_progress": {"pending", "waiting_parts", "waiting_user", "resolved", "cancelled"},
     "pending": {"in_progress", "cancelled"},
+    "waiting_parts": {"in_progress", "pending", "resolved", "cancelled"},
+    "waiting_user": {"in_progress", "pending", "resolved", "cancelled"},
     "resolved": {"closed", "in_progress"},
     "closed": set(),
     "cancelled": set(),
@@ -3234,6 +3236,32 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
         "self_service_rate": round(resolved * 100.0 / total, 1) if total else 0.0,
         "intent_distribution": intents,
         "missed_queries": [r[0] for r in missed],
+    }
+
+
+@app.get("/api/reports/avg-resolution")
+def report_avg_resolution(organization_id: Optional[int] = Query(None, description="กรองตามองค์กร"),
+                          db: Session = Depends(get_db),
+                          user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+    """เวลาเฉลี่ยในการแก้ไข ticket ที่ status=resolved/closed (ชั่วโมง)"""
+    where = "WHERE t.status IN ('resolved', 'closed')"
+    params: dict = {}
+    if organization_id:
+        where += " AND t.organization_id = :oid"
+        params["oid"] = organization_id
+    row = db.execute(text(
+        "SELECT COUNT(*) AS total, "
+        "ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(resolved_at, updated_at) - created_at))/3600.0), 1) AS avg_hours, "
+        "MIN(EXTRACT(EPOCH FROM (COALESCE(resolved_at, updated_at) - created_at))/3600.0) AS min_hours, "
+        "MAX(EXTRACT(EPOCH FROM (COALESCE(resolved_at, updated_at) - created_at))/3600.0) AS max_hours "
+        "FROM repair_tickets t " + where), params).fetchone()
+    total = row[0] if row else 0
+    return {
+        "total_resolved": total,
+        "avg_hours": float(row[1]) if row and row[1] is not None else None,
+        "min_hours": float(row[2]) if row and row[2] is not None else None,
+        "max_hours": float(row[3]) if row and row[3] is not None else None,
+        "organization_id": organization_id,
     }
 
 

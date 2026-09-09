@@ -28,15 +28,15 @@ def reset_and_seed() -> None:
 
         # สร้าง super_admin (ไม่มี org — เห็นทุกโรงเรียน)
         admin = User(
-            line_user_id="superadmin",
-            line_display_name="ผู้ดูแลระบบสูงสุด",
+            line_user_id="iwasuperadmin",
+            line_display_name="ผู้ดูแลระบบ IWA",
             role="super_admin",
             is_active=True,
-            password_hash=hash_password("admin123"),
+            password_hash=hash_password("IwaScr2026!admin"),
         )
         db.add(admin)
         db.commit()
-        print("✅ สร้าง super_admin แล้ว: username=superadmin / password=admin123")
+        print("✅ สร้าง super_admin แล้ว: username=iwasuperadmin / password=IwaScr2026!admin")
     finally:
         db.close()
 

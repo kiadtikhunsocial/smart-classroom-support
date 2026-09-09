@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 
-const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'pending', 'resolved', 'closed', 'cancelled'];
+const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'pending', 'waiting_parts', 'waiting_user', 'resolved', 'closed', 'cancelled'];
 
 const STATUS_LABELS: Record<string, string> = {
-  new: 'รอรับเรื่อง',
-  assigned: 'มอบหมายแล้ว',
-  in_progress: 'กำลังดำเนินการ',
-  pending: 'รออะไหล่/รอภายนอก',
-  resolved: 'เสร็จสิ้น',
-  closed: 'ปิดงาน',
-  cancelled: 'ยกเลิก',
+  new: 'รอรับเรื่อง (New)',
+  assigned: 'มอบหมายแล้ว (Assigned)',
+  in_progress: 'กำลังดำเนินการ (In Progress)',
+  pending: 'รออะไหล่/รอภายนอก (Pending)',
+  waiting_parts: 'รออะไหล่ (Waiting for Parts)',
+  waiting_user: 'รอผู้ใช้ (Waiting for User)',
+  resolved: 'ซ่อมเสร็จแล้ว (Resolved)',
+  closed: 'ปิดงาน (Closed)',
+  cancelled: 'ยกเลิก (Cancelled)',
 };
 
 // ─── หน้ารายการโรงเรียน (super_admin) ─────────────────────────────
