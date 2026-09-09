@@ -81,7 +81,7 @@ LINE_CHANNEL_TOKEN=
 
 | บทบาท | username | password |
 |---|---|---|
-| ผู้ดูแลระบบสูงสุด | `superadmin` | `admin123` |
+
 
 > เปลี่ยนรหัสผ่านได้หลัง login ที่หน้า "โปรไฟล์"
 

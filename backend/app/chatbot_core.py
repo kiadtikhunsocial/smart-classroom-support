@@ -545,18 +545,34 @@ def _ab_inner(text: str) -> str:
                             "email", "ช่องทาง", "สั่ง", "inquire"]):
         return f"{company_summary_text()}\n\n📞 {contact_text()}"
 
-    # 2) รายชื่อบริการทั้งหมด / บริการ+อบรม
-    if any(w in t for w in ["บริการ", "service", "โซลูชัน", "อบรม", "training", "สัมมนา"]):
-        if any(w in t for w in ["อบรม", "training", "สัมมนา"]):
-            sv = find_service("training")
+    # 2) บริการ — ตรวจเจาะจงก่อน (ดูแลรักษา/บำรุง/network/software/จัดจำหน่าย/อบรม) แล้วตอบตัวนั้น
+    if any(w in t for w in ["บริการ", "service", "โซลูชัน", "อบรม", "training", "สัมมนา",
+                            "ดูแลรักษา", "บำรุง", "เครือข่าย", "network", "จัดจำหน่าย",
+                            "ซัพพลาย", "จำหน่ายอุปกรณ์", "net", "ระบบเน็ต", "maintenance",
+                            "เมนเทน", "ซ่อมบำรุง", "กู้คืน", "ติดตั้งระบบ", "software", "ซอฟต์แวร์"]):
+        # map คำไทย → service id
+        service_keywords = {
+            "network": ["network", "เครือข่าย", "เน็ตเวิร์ก", "ระบบเน็ต", "แลน", "lan", "fiber", "ไฟเบอร์"],
+            "software": ["software", "ซอฟต์แวร์", "แอป", "application", "แอปพลิเคชัน", "ระบบงาน", "พัฒนา"],
+            "maintenance": ["ดูแลรักษา", "บำรุง", "maintenance", "เมนเทน", "ดูแลระบบ", "ซ่อมบำรุง", "กู้คืน", "ตรวจเช็ก", "ตรวจเช็ค"],
+            "supply": ["จัดจำหน่าย", "จำหน่าย", "ขายอุปกรณ์", "อุปกรณ์", "hardware", "ซัพพลาย", "จัดหา"],
+            "training": ["อบรม", "training", "สัมมนา", "seminar", "train"],
+        }
+        found_sid = None
+        for sid, kws in service_keywords.items():
+            if any(k in t for k in kws):
+                found_sid = sid
+                break
+        if found_sid:
+            sv = find_service(found_sid)
             if sv:
                 items = "\n".join(f"• {i}" for i in sv["items"])
-                return (f"🎓 **{sv['name']}**\n{sv['desc']}\n{items}\n\n"
-                        "สนใจอบรม/สัมมนา ติดต่อทีมงานได้เลยค่ะ (พิมพ์ 'ติดต่อ')")
-        # บริการทั้งหมด
+                return (f"🏢 **{sv['name']}**\n{sv['desc']}\n{items}\n\n"
+                        "สนใจสอบถาม/ใช้บริการ ติดต่อทีมงานได้เลยค่ะ (พิมพ์ 'ติดต่อ')")
+        # ยังไม่เจาะจง → รายชื่อทั้งหมด
         lines = [f"{i+1}. **{s['name']}** — {s['desc']}" for i, s in enumerate(SERVICES)]
         return ("🏢 **บริการของ IWA RICH YOU D**\n" + "\n".join(lines) +
-                "\n\nพิมพ์ชื่อบริการ เช่น 'บริการอบรม' หรือ 'ติดต่อ' เพื่อสอบถามเพิ่มค่ะ")
+                "\n\nพิมพ์ชื่อบริการ เช่น 'บริการดูแลรักษา' 'อบรม' หรือ 'ติดต่อ' เพื่อสอบถามเพิ่มค่ะ")
 
     # 3) ดูหมวดสินค้าทั้งหมด
     if any(w in t for w in ["สินค้า", "product", "มีอะไร", "แคตตาล็อก", "catalog", "รายการ"]):
