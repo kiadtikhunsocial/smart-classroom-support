@@ -50,6 +50,51 @@ def _build_context(kb_articles: list) -> str:
     return "\n".join(parts) if parts else "(ไม่มีข้อมูลในฐานความรู้)"
 
 
+def explain_steps(symptom_text: str, kb_steps: list, device_type: str = "") -> str | None:
+    """ให้ Gemini ร่างคำตอบอธิบายขั้นตอนจาก KB เป็นภาษาไทยธรรมชาติ อบอุ่นเหมือนพนักงาน
+    รับมือกับคำกำกวม/ภาษาพูดที่ลูกค้าพิมพ์หลากหลาย แล้วอธิบายขั้นตอนให้เข้าใจง่าย
+    ยังอิงจาก kb_steps ที่ให้เท่านั้น (ห้ามสร้างขั้นตอนใหม่) — กัน hallucination
+    คืนข้อความไทย หรือ None ถ้า Gemini ล่ม (caller ใช้ list เปล่าแทน)"""
+    if not kb_steps:
+        return None
+    if not API_KEY:
+        return None
+    step_list = "\n".join(f"{i+1}. {s}" for i, s in enumerate(kb_steps))
+    prompt = (
+        f"ลูกค้าแจ้งปัญหา: {symptom_text}\n"
+        f"ประเภทอุปกรณ์: {device_type or 'ไม่ระบุ'}\n\n"
+        "ขั้นตอนแก้ไขเบื้องต้นที่ระบบระบุไว้ (ใช้ขั้นตอนเหล่านี้เท่านั้น ห้ามเพิ่ม/แก้ไข/สร้างขั้นตอนใหม่):\n"
+        f"{step_list}\n\n"
+        "จงเขียนคำตอบถึงลูกค้าเป็นภาษาไทย อบอุ่น เหมือนพนักงานบริการคนไทย ปรับภาษาตามที่ลูกค้าพิมพ์ "
+        "(ถ้าลูกค้าพิมพ์ภาษาพูด/กำกวม/สั้น ก็ตอบแบบสบายๆ เข้าใจง่าย ไม่ยัดเยียดศัพท์เทคนิค) "
+        "เกริ่นอย่างเห็นใจก่อน แล้วอธิบายขั้นตอนให้เข้าใจง่ายทีละข้อ (เรียงตามลำดับ) "
+        "ปิดท้ายด้วยคำแนะนำว่า ถ้าทำแล้วไม่หาย ให้บอก 'ยังไม่หาย' เพื่อให้ช่างช่วยต่อ\n"
+        "ห้ามประดิษฐ์ขั้นตอนที่ไม่ใช่ในรายการ ห้ามแนะนำการถอด/เปิดฝาอุปกรณ์ ห้ามใช้คำว่า 'ฉัน' ใช้ 'คะ/ค่ะ'"
+    )
+    body = {
+        "contents": [{"parts": [{"text": _BASE_POLICY}, {"text": prompt}]}],
+        "generationConfig": {"temperature": 0.6, "maxOutputTokens": 500},
+    }
+    try:
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=12.0)
+            except Exception:
+                resp = None
+            if resp is not None and resp.status_code == 200:
+                break
+            if attempt < 1:
+                time.sleep(0.8)
+        if resp is None or resp.status_code != 200:
+            return None
+        data = resp.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return text if text else None
+    except Exception:
+        return None
+
+
 def is_available() -> bool:
     return bool(API_KEY)
 
@@ -107,7 +152,8 @@ def match_article(symptom_text: str, device_type: Optional[str], candidates: lis
         # หาบทความที่เลือกใน candidates (ต้องอยู่ใน list เท่านั้น)
         for a in candidates:
             if a.get("kb_id") == chosen_id:
-                return {"kb_id": chosen_id, "steps": a.get("steps", [])}
+                return {"kb_id": chosen_id, "steps": a.get("steps", []),
+                        "device_type": a.get("device_type", "")}
         return None  # เลือกบทความที่ไม่อยู่ใน list / ไม่มี → ไม่ match
     except Exception:
         pass
@@ -173,5 +219,5 @@ def match_article(symptom_text: str, device_type: Optional[str], candidates: lis
         if same_type:
             same_type.sort(key=lambda a: str(a.get("kb_id", "")))
             best, best_score = same_type[0], 2
-    return ({"kb_id": best.get("kb_id"), "steps": best.get("steps", [])}
-            if best is not None and best_score >= 2 else None)
+    return ({"kb_id": best.get("kb_id"), "steps": best.get("steps", []),
+             "device_type": best.get("device_type")} if best is not None and best_score >= 2 else None)

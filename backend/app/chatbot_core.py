@@ -216,6 +216,11 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             session["resolving"] = True
             session["symptom_buf"] = buf
             save_session(user_id, session)
+            # ให้ Gemini ร่างคำตอบอธิบายจาก KB steps (เหมือน path ของ handle_message)
+            from app.gemini_service import explain_steps
+            explained = explain_steps(buf, m["steps"], m.get("device_type") or "")
+            if explained:
+                return explained
             steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(m["steps"][:6]))
             return (f"ได้เลยค่ะ อยากให้ลองทำตามขั้นตอนนี้ก่อนนะคะ หวังว่าจะช่วยได้ 🔧\n{steps}\n\n"
                     "ถ้าลองแล้ว **หาย** ก็บอก 'หายแล้ว' ได้เลย หรือถ้า**ยังไม่หาย** พิมพ์ 'ยังไม่หาย' เดี๋ยวให้ช่างไปช่วยตรวจถึงที่นะคะ")
@@ -376,6 +381,12 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             session["symptom_buf"] = text
             session["initial_symptom"] = text
             save_session(user_id, session)
+            # ให้ Gemini ร่างคำตอบอธิบายจาก KB steps (ฟังภาษาพูด/กำกวม + อธิบายให้เข้าใจง่าย)
+            from app.gemini_service import explain_steps
+            explained = explain_steps(text, m["steps"], m.get("device_type") or "")
+            if explained:
+                return explained
+            # fallback: เรียง list เดิมเมื่อ Gemini ล่ม
             steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(m["steps"][:6]))
             return (f"ได้เลยค่ะ อยากให้ลองทำตามขั้นตอนนี้ก่อนนะคะ หวังว่าจะช่วยได้ 🔧\n{steps}\n\n"
                     "ถ้าลองแล้ว **หาย** ก็บอก 'หายแล้ว' ได้เลย หรือถ้า**ยังไม่หาย** พิมพ์ 'ยังไม่หาย' เดี๋ยวให้ช่างไปช่วยตรวจถึงที่นะคะ")
