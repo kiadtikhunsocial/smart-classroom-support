@@ -3213,6 +3213,29 @@ def report_top_devices(organization_id: Optional[int] = Query(None), limit: int 
     return [{"device_id": r.device_id, "device_type": r.device_type, "room_name": r.room_name,
              "failure_count": r.failure_count, "last_failure_at": r.last_fail} for r in rows]
 
+
+@app.get("/api/reports/chatbot-analytics")
+def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
+                             user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+    """Analytics จาก chatbot_logs: self-service success rate, การกระจาย intent,
+    คำถามที่บอทตอบไม่ได้/พลาด (intent=other + empty reply) เพื่อปรับปรุง"""
+    params = {"days": days}
+    total = db.execute(text("SELECT COUNT(*) FROM chatbot_logs WHERE created_at >= now() - make_interval(days => :days)"), params).scalar_one()
+    resolved = db.execute(text("SELECT COUNT(*) FROM chatbot_logs WHERE resolved=TRUE AND created_at >= now() - make_interval(days => :days)"), params).scalar_one()
+    intents = {r[0]: r[1] for r in db.execute(text(
+        "SELECT intent, COUNT(*) FROM chatbot_logs WHERE created_at >= now() - make_interval(days => :days) GROUP BY intent ORDER BY COUNT(*) DESC"), params).fetchall()}
+    missed = db.execute(text(
+        "SELECT message FROM chatbot_logs WHERE (intent='other' OR ai_response='' OR ai_response IS NULL) "
+        "AND created_at >= now() - make_interval(days => :days) ORDER BY created_at DESC LIMIT 50"), params).fetchall()
+    return {
+        "total_conversations": total,
+        "self_service_resolved": resolved,
+        "self_service_rate": round(resolved * 100.0 / total, 1) if total else 0.0,
+        "intent_distribution": intents,
+        "missed_queries": [r[0] for r in missed],
+    }
+
+
 # ─── LINE Webhook (TOR 5.11) — รับ event จริง แล้วส่งต่อ chatbot ───────
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 
