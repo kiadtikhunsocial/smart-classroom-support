@@ -116,12 +116,13 @@ def _extract_field_from_text(field: str, text: str) -> str | None:
             return None
         # ตัดคำสุภาพ/คำลงท้ายที่อาจปนท้ายชื่อ (ครับ/ค่ะ/นะคะ...) 
         clean = re.sub(r"(ครับ|ค่ะ|คะ|นะคะ|นะครับ|ฮะ|จ้า|ขอรับ)$", "", t.strip()).strip(" ,")
-        # ตัดคำอาการออกถ้าอยู่ในประโยค (กันเก็บประโยคอาการเป็นชื่อ)
+        # ตัดคำอาการออกถ้าอยู่ในประโยค (กันเก็บประโยคอาการเป็นชื่อ) — เช็คกับ clean (ตัดคำสุภาพแล้ว)
+        # อย่าเช็คกับ m ข้อความดิบ และอย่าให้ "ครับ/ค่ะ" อยู่ใน hint ไม่งั้นชื่อที่ลงท้ายสุภาพถูกปฏิเสธ
         _SYMPTOM_HINT = ["วันนี้", "เมื่อวาน", "เริ่ม", "ไฟติด", "จอดำ", "ไม่มีภาพ", "ไม่มีเสียง",
                          "หน้าจอ", "ห้อง", "เครื่อง", "ค้าง", "ไม่ขึ้น", "ไม่เข้า", "ช้า", "ร้อน",
-                         "ครับ", "ค่ะ", "เครื่องพิมพ์", "โปรเจก", "กล้อง", "ลำโพง", "ไมค์",
+                         "เครื่องพิมพ์", "โปรเจก", "กล้อง", "ลำโพง", "ไมค์",
                          "กดไม่ได้", "เปิดไม่"]
-        if any(w in m for w in _SYMPTOM_HINT):
+        if any(w in clean.lower() for w in _SYMPTOM_HINT):
             return None
         # ถ้ามีตัวเลขเบอร์โทร / รหัสอุปกรณ์ปนมา ให้เก็บเฉพาะส่วนที่เป็นชื่อ
         if re.search(r"\b0[0-9]{8,9}\b", clean):
@@ -230,8 +231,14 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         if rnd < 3 and not (dv and has_detail):
             session["diagnose_round"] = rnd + 1
             save_session(user_id, session)
-            return (f"รับทราบค่ะ 🙏 ช่วยเล่าเพิ่มอีกหน่อยได้ไหมคะ ว่าเริ่มเป็นตอนไหน มีเสียง/ภาพ/ไฟยังไงบ้าง "
-                    f"หรือลองทำอะไรไปแล้วบ้าง? เราจะได้วิเคราะห์ให้ตรงจุดขึ้นนะคะ")
+            # หมุนข้อความถามต่อตามรอบ (ลดความรู้สึกเป็นแม่พิมพ์/บอทซ้ำ)
+            _ask_more = [
+                "รับทราบค่ะ 🙏 ช่วยเล่าเพิ่มอีกหน่อยได้ไหมคะ ว่าเริ่มเป็นตอนไหน มีเสียง/ภาพ/ไฟยังไงบ้าง "
+                "หรือลองทำอะไรไปแล้วบ้าง? เราจะได้วิเคราะห์ให้ตรงจุดขึ้นนะคะ",
+                "ขอบคุณที่แจ้งรายละเอียดนะคะ 😊 อยากรู้เพิ่มอีกนิดว่าตอนนี้ไฟ/เสียง/ภาพเป็นยังไงบ้างคะ "
+                "หรือลองแก้ไขอะไรไปแล้ว? จะได้ช่วยตรงจุดที่สุดค่ะ",
+            ]
+            return _ask_more[(rnd - 1) % len(_ask_more)]
         # ยังไม่เจอ KB + ครบ/พอแล้ว → ส่งลิงก์ฟอร์มแจ้งซ่อม (ไม่บังคับกรอกอุปกรณ์ทีละ field)
         session["phase"] = "new"
         if dv:
@@ -247,24 +254,35 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         if fields.get("urgency") == "safety_critical":
             by_key = {key: (key, question) for key, question in REQUIRED_FIELDS}
             field_order = [by_key[k] for k in ("name", "phone", "device_id", "symptom")]
-        # เก็บทุก field ที่ยังขาดจากข้อความนี้ (อาจได้หลาย field ในข้อความเดียว เช่น ชื่อ+เบอร์)
+        # Gemini สกัดข้อมูลจากข้อความก่อน (แม่นกว่า regex กับข้อความธรรมชาติ/หลายข้อมูลในประโยค)
+        from app.gemini_service import extract_fields_ai, phrase_slot_question
+        missing = [k for k, _q in field_order if not fields.get(k)]
+        ai_extracted = extract_fields_ai(text, fields, missing)
+        for k, v in ai_extracted.items():
+            fields[k] = v
+        # fallback regex เฉพาะ field ที่ Gemini ยังไม่ได้ (กัน Gemini ล่ม/ไม่มี key)
         for key, _q in field_order:
             if not fields.get(key):
                 val = _extract_field_from_text(key, text)
                 if val:
                     fields[key] = val
-        # ถาม field ที่ขาดถัดไป
+        # ถาม field ที่ขาดถัดไป — ให้ Gemini ถามธรรมชาติ (มี fallback template เดิม)
         for key, question in field_order:
             if not fields.get(key):
                 session["fields"] = fields
                 save_session(user_id, session)
-                return f"ขอบคุณนะคะ 🙏 ถ้าอย่างนั้น {question}"
+                natural = phrase_slot_question(fields, key, text)
+                return natural or f"ขอบคุณนะคะ 🙏 ถ้าอย่างนั้น {question}"
         # ครบทุก field → ยืนยัน
         session["phase"] = "confirm"
         session["fields"] = fields
         save_session(user_id, session)
         summary = "\n".join(f"• {k}: {v}" for k, v in fields.items())
-        return f"ขอเช็คข้อมูลให้ครบอีกครั้งนะคะ 🙏\n{summary}\n\nข้อมูลถูกต้องครบถ้วนไหมคะ? พิมพ์ **ยืนยัน** เพื่อส่งเรื่องให้ช่าง หรือ **แก้ไข** ถ้าอยากแก้อะไรค่ะ"
+        _confirm_texts = [
+            f"ขอเช็คข้อมูลให้ครบอีกครั้งนะคะ 🙏\n{summary}\n\nข้อมูลถูกต้องครบถ้วนไหมคะ? พิมพ์ **ยืนยัน** เพื่อส่งเรื่องให้ช่าง หรือ **แก้ไข** ถ้าอยากแก้อะไรค่ะ",
+            f"ได้ข้อมูลมาครบแล้วนะคะ 🎯\n{summary}\n\nช่วยยืนยันให้อีกครั้งว่า**ถูกต้อง**ไหมคะ? พิมพ์ 'ยืนยัน' เพื่อส่งให้ช่าง หรือบอก 'แก้ไข' ได้เลยค่ะ",
+        ]
+        return _confirm_texts[int(fields.get("_confirm_round", 0)) % len(_confirm_texts)]
 
     # ── ยืนยันสร้าง ticket ──
     if phase == "confirm":

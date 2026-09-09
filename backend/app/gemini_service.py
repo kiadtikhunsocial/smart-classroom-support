@@ -148,6 +148,67 @@ def classify_intent(text: str) -> dict | None:
         return None
 
 
+def extract_fields_ai(text: str, known: dict, missing_keys: list[str]) -> dict:
+    """ให้ Gemini ดึงข้อมูล (ชื่อ/เบอร์/อุปกรณ์/อาการ) จากข้อความอิสระของผู้ใช้
+    รับข้อความภาษาพูด/กำกวม/หลายข้อมูลในประโยคเดียวได้ดีกว่า regex เดิม
+    คืน dict เฉพาะ key ที่สกัดได้ใหม่ หรือ {} ถ้า Gemini ล่ม/ไม่มี key (caller ใช้ regex fallback ต่อ)"""
+    if not API_KEY or not missing_keys:
+        return {}
+    prompt = (
+        f'ข้อความจากลูกค้า: "{text}"\n'
+        f"ข้อมูลที่มีอยู่แล้ว: {json.dumps(known, ensure_ascii=False)}\n"
+        f"ข้อมูลที่ยังขาดและต้องพยายามดึงจากข้อความนี้: {missing_keys}\n\n"
+        "จงดึงเฉพาะข้อมูลที่ปรากฏชัดเจนในข้อความ ห้ามเดา/แต่งข้อมูลที่ไม่มี\n"
+        "field ที่เป็นไปได้: name (ชื่อคนเท่านั้น ไม่ใช่ประโยคอาการ/คำอุทาน), "
+        "phone (เบอร์โทร), device_id (ชื่ออุปกรณ์/ห้อง/รหัส), symptom (คำอธิบายอาการ)\n"
+        'ตอบเป็น JSON เท่านั้น: {"name": "...หรือ null", "phone": "...หรือ null", '
+        '"device_id": "...หรือ null", "symptom": "...หรือ null"}'
+    )
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 200},
+    }
+    try:
+        resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=5.0)
+        if resp.status_code != 200:
+            return {}
+        raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`").lstrip("json").strip()
+        parsed = json.loads(raw)
+        return {k: v for k, v in parsed.items() if v and k in missing_keys}
+    except Exception:
+        return {}
+
+
+def phrase_slot_question(known: dict, next_field: str, last_user_msg: str) -> str | None:
+    """ให้ Gemini ถามข้อมูลที่ขาดต่อไปแบบธรรมชาติ อ้างอิงสิ่งที่ลูกค้าเพิ่งพูด
+    แทนการดึง template คงที่ซ้ำทุกครั้ง — ลดความรู้สึก 'เป็นบอท'
+    คืน None ถ้า Gemini ล่ม (caller ใช้ template เดิมเป็น fallback)"""
+    if not API_KEY:
+        return None
+    field_labels = {
+        "name": "ชื่อผู้แจ้ง", "phone": "เบอร์โทรติดต่อกลับ",
+        "device_id": "อุปกรณ์หรือห้องที่ใช้งาน", "symptom": "อาการที่พบ",
+    }
+    prompt = (
+        f'ลูกค้าเพิ่งพิมพ์ว่า: "{last_user_msg}"\n'
+        f"ข้อมูลที่เก็บได้แล้ว: {json.dumps(known, ensure_ascii=False)}\n"
+        f"ข้อมูลที่ยังขาดและต้องถามต่อไป: {field_labels.get(next_field, next_field)}\n\n"
+        "จงถามข้อมูลที่ขาดนี้ต่อ 1 ประโยคสั้นๆ ภาษาไทยสุภาพ เป็นธรรมชาติ ไม่ต้องใช้รูปแบบเดิมซ้ำทุกครั้ง "
+        "ถ้าเหมาะสมให้ตอบรับสิ่งที่ลูกค้าเพิ่งพูดสั้นๆ ก่อนถามต่อ ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย"
+    )
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 100}}
+    try:
+        resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=5.0)
+        if resp.status_code != 200:
+            return None
+        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception:
+        return None
+
+
 def match_article(symptom_text: str, device_type: Optional[str], candidates: list) -> Optional[dict]:
     """ให้ Gemini เลือกบทความ KB ที่ตรงกับอาการจาก candidates ที่ keyword คัดมาแล้ว
     ตอบจาก candidates ที่ให้เท่านั้น — เลือก kb_id ที่ตรงที่สุด ไม่ให้สร้างขั้นตอนใหม่เอง (กัน hallucination)
