@@ -8,7 +8,7 @@ import os
 import urllib.request
 import urllib.error
 
-BACKEND = "https://backend-production-728f.up.railway.app/api/line/bot"
+BACKEND = os.environ.get("BACKEND_URL", "https://backend-production-728f.up.railway.app/api/line/bot")
 
 # (ข้อความ, รายการคำ/เครื่องหมายที่ควรปรากฏในคำตอบ) — ตรวจว่าเข้า flow ถูก
 CASES = [
