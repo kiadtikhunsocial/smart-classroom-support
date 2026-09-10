@@ -38,3 +38,4 @@ training_data/
 # ── Local tooling ──
 *.tmp
 .DS_Store
+backend/uploads/
