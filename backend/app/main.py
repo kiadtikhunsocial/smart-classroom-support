@@ -2089,19 +2089,13 @@ async def upload_file(
     file: UploadFile = File(...),
     user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """อัปโหลดรูปภาพ (สูงสุด 10MB) — ใช้กับฟอร์มแจ้งซ่อม + PM"""
-    import uuid as _uuid
+    """อัปโหลดรูปภาพ (สูงสุด 10MB) — ใช้กับฟอร์มแจ้งซ่อม + PM
+    โหมด local: เขียน disk + mount /uploads  |  โหมด cloud (S3): upload + คืน URL เต็ม"""
+    from app.storage import save_upload
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="ไฟล์เกิน 10 MB")
-    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
-    if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"):
-        raise HTTPException(status_code=415, detail="ชนิดไฟล์ไม่รองรับ (ใช้ jpg/png/webp)")
-    fname = f"{_uuid.uuid4().hex}{ext}"
-    path = os.path.join(UPLOAD_DIR, fname)
-    with open(path, "wb") as f:
-        f.write(content)
-    return {"url": f"/uploads/{fname}", "filename": file.filename, "size": len(content)}
+    return save_upload(content, file.filename or "image.jpg")
 
 
 # ─── Knowledge Base (KB — TOR 1.5.5 / 5.6) ────────────────────────────

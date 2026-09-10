@@ -8,3 +8,5 @@ qrcode[pil]==8.0
 Pillow==10.2.0
 psycopg2-binary==2.9.9
 httpx==0.27.0
+boto3==1.34.69
+
