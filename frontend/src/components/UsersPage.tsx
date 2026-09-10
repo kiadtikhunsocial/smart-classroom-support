@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 
-const ROLES = ['super_admin', 'admin', 'it_support', 'teacher', 'student'];
+const ROLES = ['super_admin', 'admin', 'admin_school', 'it_support', 'teacher', 'student'];
 const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'ผู้ดูแลบริษัท', admin: 'ผู้ดูแลโรงเรียน', it_support: 'เจ้าหน้าที่ IT',
+  super_admin: 'ผู้ดูแลบริษัท', admin: 'ผู้ดูแลบริษัท (Admin)', admin_school: 'ผู้ดูแลโรงเรียน', it_support: 'เจ้าหน้าที่ IT',
   teacher: 'ครู', student: 'นักเรียน',
 };
 
-export default function UsersPage({ onBack, currentUserId }: { onBack: () => void; currentUserId?: number }) {
+// บทบาทที่ผู้ใช้ปัจจุบันเลือกได้เมื่อสร้าง/แก้ไข user (จำกัดตามสิทธิ์)
+function creatableRoles(myRole?: string): string[] {
+  if (myRole === 'admin_school') return ['teacher', 'student', 'it_support']; // ผู้ดูแลรร: สร้างได้แค่ ครู/นักเรียน/เจ้าหน้าที่ IT
+  return ROLES; // super_admin / admin: สร้างได้ทุกบทบาท
+}
+
+export default function UsersPage({ onBack, currentUserId, currentUserRole }: { onBack: () => void; currentUserId?: number; currentUserRole?: string }) {
   const [users, setUsers] = useState<any[]>([]);
   const [orgs, setOrgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +23,9 @@ export default function UsersPage({ onBack, currentUserId }: { onBack: () => voi
   const [form, setForm] = useState({ line_user_id: '', line_display_name: '', line_email: '', organization_id: 0, role: 'teacher', is_active: true, password: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+
+  const isSchoolAdmin = currentUserRole === 'admin_school';
+  const allowedRoles = creatableRoles(currentUserRole);
 
   const load = () => {
     setLoading(true);
@@ -29,9 +38,16 @@ export default function UsersPage({ onBack, currentUserId }: { onBack: () => voi
   useEffect(() => { load(); }, []);
 
   const openAdd = () => {
-    setForm({ line_user_id: '', line_display_name: '', line_email: '', organization_id: 0, role: 'teacher', is_active: true, password: '' });
+    // admin_school: ตั้ง org เป็นของตัวเองเสมอ + default role teacher
+    const myOrg = isSchoolAdmin ? (orgs.find((o) => o.id === myOrgId())?.id || 0) : 0;
+    setForm({ line_user_id: '', line_display_name: '', line_email: '', organization_id: myOrg, role: 'teacher', is_active: true, password: '' });
     setEditingId(null);
     setShowForm(true);
+  };
+
+  const myOrgId = () => {
+    const u = users.find((x) => x.id === currentUserId);
+    return u?.organization_id || 0;
   };
 
   const openEdit = (u: any) => {
@@ -185,8 +201,8 @@ export default function UsersPage({ onBack, currentUserId }: { onBack: () => voi
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">โรงเรียน</label>
-                    <select className="form-select" value={form.organization_id} onChange={(e) => setForm({ ...form, organization_id: Number(e.target.value) })}>
+                    <label className="form-label">โรงเรียน {isSchoolAdmin ? '(อัตโนมัติ — รรตัวเอง)' : ''}</label>
+                    <select className="form-select" value={form.organization_id} onChange={(e) => setForm({ ...form, organization_id: Number(e.target.value) })} disabled={isSchoolAdmin}>
                       <option value={0}>— (ไม่สังกัด / super_admin) —</option>
                       {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
@@ -194,7 +210,7 @@ export default function UsersPage({ onBack, currentUserId }: { onBack: () => voi
                   <div className="form-group">
                     <label className="form-label">บทบาท</label>
                     <select className="form-select" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                      {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                     </select>
                   </div>
                 </div>
@@ -245,15 +261,19 @@ export default function UsersPage({ onBack, currentUserId }: { onBack: () => voi
                       <td style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>{u.line_user_id}</td>
                       <td>{orgName(u.organization_id)}</td>
                       <td>
-                        <select
-                          className="form-select"
-                          style={{ width: 170, padding: '5px 8px', fontSize: '0.8rem' }}
-                          value={u.role}
-                          disabled={busy === u.id}
-                          onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                        >
-                          {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                        </select>
+                        {isSchoolAdmin && !allowedRoles.includes(u.role) ? (
+                          <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>{ROLE_LABELS[u.role] || u.role}</span>
+                        ) : (
+                          <select
+                            className="form-select"
+                            style={{ width: 170, padding: '5px 8px', fontSize: '0.8rem' }}
+                            value={u.role}
+                            disabled={busy === u.id}
+                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                          >
+                            {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                          </select>
+                        )}
                       </td>
                       <td>
                         <button

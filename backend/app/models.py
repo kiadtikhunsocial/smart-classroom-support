@@ -353,9 +353,10 @@ class ScanLog(Base):
 
 class UserRole(str):
     """บทบาทผู้ใช้ในระบบ"""
-    ADMIN = "admin"           # ผู้ดูแลระบบโรงเรียน — เห็นทุกอย่างในโรงเรียนตัวเอง
+    ADMIN_SCHOOL = "admin_school"  # ผู้ดูแลโรงเรียน — เห็นเฉพาะข้อมูลในโรงเรียนตัวเอง + จัดการ user ในรรตัวเอง
+    ADMIN = "admin"           # ผู้ดูแลบริษัท — เห็นทุกโรงเรียน + จัดการทุกอย่างได้
     TEACHER = "teacher"       # ครู — เห็นเฉพาะ ticket ที่ตัวเองสร้าง + อุปกรณ์ในโรงเรียน
-    IT_SUPPORT = "it_support" # เจ้าหน้าที่ IT — เห็น ticket ทั้งหมดในโรงเรียน + จัดการได้
+    IT_SUPPORT = "it_support" # เจ้าหน้าที่ IT — สร้างโดย super_admin=เห็นทุกรร, สร้างโดย admin_school=เห็นเฉพาะรร
     STUDENT = "student"       # นักเรียน — เห็นอุปกรณ์ + สร้าง ticket + ดู ticket ที่ตัวเองสร้าง
     SUPER_ADMIN = "super_admin"  # เจ้าของบริษัท — เห็นทุกโรงเรียน + จัดการทุกอย่างได้
 
@@ -377,7 +378,7 @@ class User(Base):
     )
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(
-        SAEnum("admin", "teacher", "it_support", "student", "super_admin",
+        SAEnum("admin", "admin_school", "teacher", "it_support", "student", "super_admin",
                name="user_role_enum", create_type=False),
         default=UserRole.TEACHER, nullable=False, index=True
     )

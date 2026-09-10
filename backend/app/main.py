@@ -140,6 +140,53 @@ def require_roles(*roles: str):
     return checker
 
 
+# ─── Scope ตามบทบาท (RBAC แยกตามโรงเรียน) ──────────────────────────────────
+# ผลลัพธ์: None = เห็นทุกโรงเรียน (global)  |  set[int] = เห็นเฉพาะ org ใน set
+# admin_school / it_support(มีสังกัด) / teacher / student → เห็นเฉพาะรรตัวเอง
+# super_admin / admin / it_support(ไม่มีสังกัด, สร้างโดย superadmin) → เห็นทุกรร
+def visible_org_ids(user: User) -> Optional[set[int]]:
+    """คืนชุด organization_id ที่ user นี้เห็นได้; None = เห็นทุกโรงเรียน"""
+    if user.role in ("super_admin", "admin"):
+        return None
+    if user.role == "it_support":
+        # it_support ที่ไม่มีสังกัด = สร้างโดย superadmin → เห็นทุกรร
+        # it_support ที่มีสังกัด = สร้างโดย admin_school → เห็นเฉพาะรรนั้น
+        return None if not user.organization_id else {user.organization_id}
+    # admin_school / teacher / student → เห็นเฉพาะรรตัวเอง
+    return {user.organization_id} if user.organization_id else set()
+
+
+def check_org_access(user: User, org_id: Optional[int], raise_http: bool = True) -> bool:
+    """ตรวจว่า user เห็น org_id ได้หรือไม่ (None org = อนุญาตถ้า global scope)"""
+    scope = visible_org_ids(user)
+    if scope is None:
+        return True  # global
+    if org_id is None:
+        ok = True
+    else:
+        ok = org_id in scope
+    if not ok and raise_http:
+        raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์เข้าถึงข้อมูลของโรงเรียนนี้")
+    return ok
+
+
+def check_ticket_access(db: Session, user: User, ticket) -> None:
+    """ตรวจว่า user เห็น ticket นี้ได้หรือไม่ (ผ่าน device.organization_id) — 403 ถ้าไม่อยู่ใน scope"""
+    scope = visible_org_ids(user)
+    if scope is None:
+        return
+    if not ticket.device_id:
+        return  # device ไม่อยู่แล้ว (deleted) — ปล่อยผ่าน ไม่ block
+    org_id = db.execute(
+        select(Device.organization_id).where(Device.device_id == ticket.device_id)
+    ).scalar_one_or_none()
+    if org_id is None:
+        return
+    if org_id not in scope:
+        raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์เข้าถึงข้อมูลของโรงเรียนนี้")
+
+
+
 def get_current_user_optional(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
@@ -1036,6 +1083,7 @@ def list_devices(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user_optional),
 ):
     stmt = (
         select(Device, Room, Organization)
@@ -1043,6 +1091,13 @@ def list_devices(
         .join(Organization, Organization.id == Device.organization_id)
         .order_by(Device.device_id)
     )
+    # ── จำกัดตาม scope ของบทบาท ──
+    if user is not None:
+        scope = visible_org_ids(user)
+        if scope is not None:
+            if not scope:
+                return []  # scope ว่าง → ไม่เห็นข้อมูล
+            stmt = stmt.where(Device.organization_id.in_(scope))
     if status:
         stmt = stmt.where(Device.status == status)
     if device_type:
@@ -1080,8 +1135,9 @@ def list_devices(
 
 
 @app.post("/api/devices", response_model=DeviceInfo, status_code=201)
-def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
-    """เพิ่มอุปกรณ์ใหม่"""
+def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+    """เพิ่มอุปกรณ์ใหม่ — บังคับ org ตาม scope ของบทบาท"""
+    check_org_access(user, payload.organization_id)
     org = db.execute(select(Organization).where(Organization.id == payload.organization_id)).scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -1152,11 +1208,12 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
 
 
 @app.patch("/api/devices/{device_id}", response_model=DeviceInfo)
-def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
-    """แก้ไขข้อมูลอุปกรณ์"""
+def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+    """แก้ไขข้อมูลอุปกรณ์ — ตรวจว่า device อยู่ใน scope"""
     device = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+    check_org_access(user, device.organization_id)
 
     data = payload.model_dump(exclude_unset=True)
     # จัดการ room_code -> room_id
@@ -1199,11 +1256,12 @@ def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(g
 
 
 @app.delete("/api/devices/{device_id}")
-def delete_device(device_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
-    """ลบอุปกรณ์ (ต้องไม่มี ticket ผูกอยู่)"""
+def delete_device(device_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+    """ลบอุปกรณ์ (ต้องไม่มี ticket ผูกอยู่) — ตรวจว่า device อยู่ใน scope"""
     device = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+    check_org_access(user, device.organization_id)
 
     ticket_count = db.execute(
         text("SELECT COUNT(*) FROM repair_tickets WHERE device_id=:d"), {"d": device_id}
@@ -1219,8 +1277,15 @@ def delete_device(device_id: str, db: Session = Depends(get_db), user: User = De
 
 # ─── Users ─────────────────────────────────────────────────────────
 @app.get("/api/users", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db)):
-    rows = db.execute(select(User).order_by(User.created_at.desc())).scalars().all()
+def list_users(db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+    """รายชื่อผู้ใช้ — จำกัดตามบทบาท: admin_school เห็นเฉพาะ user ในรรตัวเอง"""
+    scope = visible_org_ids(user)
+    stmt = select(User).order_by(User.created_at.desc())
+    if scope is not None:
+        if not scope:
+            return []  # scope ว่าง → ไม่เห็นข้อมูล
+        stmt = stmt.where(User.organization_id.in_(scope))
+    rows = db.execute(stmt).scalars().all()
     return [UserOut(
         id=u.id,
         line_user_id=u.line_user_id,
@@ -1235,11 +1300,23 @@ def list_users(db: Session = Depends(get_db)):
 
 
 @app.post("/api/users", response_model=UserOut, status_code=201)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
     exists = db.execute(select(User).where(User.line_user_id == payload.line_user_id)).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=400, detail="line_user_id ซ้ำ")
-    user = User(
+
+    # ── จำกัดสิทธิ์การสร้าง user ตามบทบาท ──
+    if user.role == "admin_school":
+        # admin_school: สร้างได้เฉพาะ teacher / student / it_support และในรรตัวเองเท่านั้น
+        if payload.role not in ("teacher", "student", "it_support"):
+            raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนไม่สามารถสร้างบทบาทนี้ได้ (ได้แค่ ครู/นักเรียน/เจ้าหน้าที่ IT)")
+        if payload.organization_id != user.organization_id:
+            raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนสร้างผู้ใช้ได้เฉพาะในโรงเรียนของตนเองเท่านั้น")
+    else:
+        # super_admin / admin — บังคับว่าอย่างน้อยคน global ควรกำหนด org ให้ user ทั่วไป
+        pass
+
+    new_user = User(
         line_user_id=payload.line_user_id,
         line_display_name=payload.line_display_name,
         line_email=payload.line_email,
@@ -1248,56 +1325,67 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User =
         is_active=payload.is_active,
         password_hash=hash_password(payload.password) if payload.password else None,
     )
-    db.add(user)
+    db.add(new_user)
     db.commit()
-    db.refresh(user)
+    db.refresh(new_user)
     return UserOut(
-        id=user.id,
-        line_user_id=user.line_user_id,
-        line_display_name=user.line_display_name,
-        line_picture_url=user.line_picture_url,
-        line_email=user.line_email,
-        organization_id=user.organization_id,
-        role=user.role,
-        is_active=user.is_active,
-        created_at=user.created_at,
+        id=new_user.id,
+        line_user_id=new_user.line_user_id,
+        line_display_name=new_user.line_display_name,
+        line_picture_url=new_user.line_picture_url,
+        line_email=new_user.line_email,
+        organization_id=new_user.organization_id,
+        role=new_user.role,
+        is_active=new_user.is_active,
+        created_at=new_user.created_at,
     )
 
 
 @app.delete("/api/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
-    """ลบผู้ใช้ (super_admin / admin)"""
-    user = db.get(User, user_id)
-    if not user:
+def delete_user(user_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+    """ลบผู้ใช้ — admin_school ลบได้เฉพาะ user ในรรตัวเอง"""
+    target = db.get(User, user_id)
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    db.delete(user)
+    check_org_access(user, target.organization_id)
+    db.delete(target)
     db.commit()
     return {"message": "User deleted", "user_id": user_id}
 
 
 @app.patch("/api/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
-    user = db.get(User, user_id)
-    if not user:
+def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+    target = db.get(User, user_id)
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    check_org_access(user, target.organization_id)
     data = payload.model_dump(exclude_unset=True)
+
+    # admin_school ไม่สามารถเปลี่ยนบทบาทตัวเอง/ผู้อื่นเป็นบทบาทระดับบริษัท และไม่สามารถย้ายคนข้ามรร
+    if user.role == "admin_school":
+        new_role = data.get("role", target.role)
+        if new_role not in ("teacher", "student", "it_support"):
+            raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนไม่สามารถกำหนดบทบาทนี้ได้ (ได้แค่ ครู/นักเรียน/เจ้าหน้าที่ IT)")
+        if "organization_id" in data and data["organization_id"] not in (user.organization_id, None):
+            raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนไม่สามารถย้ายผู้ใช้ข้ามโรงเรียนได้")
+
     password = data.pop("password", None)
     if password:
-        user.password_hash = hash_password(password)
+        target.password_hash = hash_password(password)
     for k, v in data.items():
-        setattr(user, k, v)
+        setattr(target, k, v)
     db.commit()
-    db.refresh(user)
+    db.refresh(target)
     return UserOut(
-        id=user.id,
-        line_user_id=user.line_user_id,
-        line_display_name=user.line_display_name,
-        line_picture_url=user.line_picture_url,
-        line_email=user.line_email,
-        organization_id=user.organization_id,
-        role=user.role,
-        is_active=user.is_active,
-        created_at=user.created_at,
+        id=target.id,
+        line_user_id=target.line_user_id,
+        line_display_name=target.line_display_name,
+        line_picture_url=target.line_picture_url,
+        line_email=target.line_email,
+        organization_id=target.organization_id,
+        role=target.role,
+        is_active=target.is_active,
+        created_at=target.created_at,
     )
 
 
@@ -1414,35 +1502,52 @@ def update_my_profile(
 
 
 @app.get("/api/stats/devices")
-def get_device_stats(db: Session = Depends(get_db)):
+def get_device_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
     """Dashboard stats: นับ ticket ตามประเภทอุปกรณ์, สถานะ, ความเร่งด่วน"""
-    by_type = db.execute(text("""
+    scope = visible_org_ids(user) if user else None
+    if scope is not None and not scope:
+        return {"by_type": [], "by_status": [], "by_priority": [], "devices_by_status": []}
+    params: dict = {}
+    scope_where = ""
+    dev_scope_where = ""
+    if scope is not None:
+        params["oids"] = tuple(scope)
+        scope_where = " AND d.organization_id IN :oids"
+        dev_scope_where = " AND d.organization_id IN :oids"
+    by_type = db.execute(text(f"""
         SELECT d.device_type, COUNT(rt.id) as count
         FROM repair_tickets rt
         JOIN devices d ON rt.device_id = d.device_id
+        WHERE 1=1 {scope_where}
         GROUP BY d.device_type
         ORDER BY count DESC
-    """)).fetchall()
+    """), params).fetchall()
 
-    by_status = db.execute(text("""
-        SELECT status, COUNT(*) as count
-        FROM repair_tickets
-        GROUP BY status
+    by_status = db.execute(text(f"""
+        SELECT rt.status, COUNT(*) as count
+        FROM repair_tickets rt
+        JOIN devices d ON d.device_id = rt.device_id
+        WHERE 1=1 {scope_where}
+        GROUP BY rt.status
         ORDER BY count DESC
-    """)).fetchall()
+    """), params).fetchall()
 
-    by_priority = db.execute(text("""
-        SELECT priority, COUNT(*) as count
-        FROM repair_tickets
-        GROUP BY priority
+    by_priority = db.execute(text(f"""
+        SELECT rt.priority, COUNT(*) as count
+        FROM repair_tickets rt
+        JOIN devices d ON d.device_id = rt.device_id
+        WHERE 1=1 {scope_where}
+        GROUP BY rt.priority
         ORDER BY count DESC
-    """)).fetchall()
+    """), params).fetchall()
 
-    devices_by_status = db.execute(text("""
-        SELECT status, COUNT(*) as count
-        FROM devices
-        GROUP BY status
-    """)).fetchall()
+    devices_by_status = db.execute(text(f"""
+        SELECT d.status, COUNT(*) as count
+        FROM devices d
+        WHERE 1=1 {dev_scope_where}
+        GROUP BY d.status
+        ORDER BY count DESC
+    """), params).fetchall()
 
     return {
         "by_type": [{"device_type": r.device_type, "count": r.count} for r in by_type],
@@ -1452,9 +1557,10 @@ def get_device_stats(db: Session = Depends(get_db)):
     }
 
 @app.get("/api/organizations")
-def list_organizations(db: Session = Depends(get_db)):
-    """รายการโรงเรียนทั้งหมด (สำหรับ super_admin ดูทุกโรงเรียน)"""
-    rows = db.execute(
+def list_organizations(db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
+    """รายการโรงเรียน — admin_school เห็นเฉพาะรรตัวเอง"""
+    scope = visible_org_ids(user) if user else None
+    stmt = (
         select(
             Organization.id,
             Organization.code,
@@ -1468,7 +1574,12 @@ def list_organizations(db: Session = Depends(get_db)):
         .outerjoin(RepairTicket, RepairTicket.device_id == Device.device_id)
         .group_by(Organization.id)
         .order_by(Organization.name)
-    ).fetchall()
+    )
+    if scope is not None:
+        if not scope:
+            return []  # scope ว่าง → ไม่เห็นข้อมูล
+        stmt = stmt.where(Organization.id.in_(scope))
+    rows = db.execute(stmt).fetchall()
     return [
         {
             "id": r.id,
@@ -1515,8 +1626,9 @@ def create_organization(payload: OrgCreate, db: Session = Depends(get_db), user:
 
 
 @app.post("/api/organizations/{org_id}/rooms", status_code=201)
-def create_room(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def create_room(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
     """เพิ่มห้องใหม่ในโรงเรียน"""
+    check_org_access(user, org_id)
     org = db.execute(select(Organization).where(Organization.id == org_id)).scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -1565,8 +1677,10 @@ def delete_organization(org_id: int, db: Session = Depends(get_db), user: User =
 
 
 @app.get("/api/organizations/{org_id}/stats")
-def get_org_stats(org_id: int, db: Session = Depends(get_db)):
+def get_org_stats(org_id: int, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
     """สถิติของโรงเรียนเดียว (สำหรับหน้า admin ดูรายโรงเรียน)"""
+    if user:
+        check_org_access(user, org_id)
     org = db.execute(select(Organization).where(Organization.id == org_id)).scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -1625,9 +1739,13 @@ def list_tickets(
         stmt = stmt.where(RepairTicket.device_id == device_id)
     if organization_id:
         stmt = stmt.where(Device.organization_id == organization_id)
-    # ─── Role-based visibility (TOR 5.7): teacher/student/it_support เห็นเฉพาะโรงเรียนตัวเอง
-    if user and user.role not in ("super_admin", "admin"):
-        stmt = stmt.where(Device.organization_id == user.organization_id)
+    # ─── Role-based visibility: admin_school/it_support(มีสังกัด)/teacher/student เห็นเฉพาะรรตัวเอง ──
+    if user:
+        scope = visible_org_ids(user)
+        if scope is not None:
+            if not scope:
+                return []  # scope ว่าง → ไม่เห็นข้อมูล
+            stmt = stmt.where(Device.organization_id.in_(scope))
     stmt = stmt.offset(offset).limit(limit)
 
     rows = db.execute(stmt).scalars().all()
@@ -1744,13 +1862,14 @@ def update_ticket_status(
     ticket_id: str,
     payload: StatusUpdateRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin", "it_support")),
+    user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support")),
 ):
     ticket = db.execute(
         select(RepairTicket).where(RepairTicket.ticket_id == ticket_id)
     ).scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    check_ticket_access(db, user, ticket)
 
     current = ticket.status
     target = payload.status
@@ -1797,13 +1916,14 @@ def update_ticket_status(
 
 
 @app.delete("/api/tickets/{ticket_id}")
-def delete_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
-    """ลบ ticket + ประวัติทั้งหมด (admin / IT support)"""
+def delete_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+    """ลบ ticket + ประวัติทั้งหมด (admin / admin_school / IT support)"""
     ticket = db.execute(
         select(RepairTicket).where(RepairTicket.ticket_id == ticket_id)
     ).scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    check_ticket_access(db, user, ticket)
 
     # ลบ updates ก่อน (กัน FK constraint)
     db.execute(
@@ -1852,16 +1972,43 @@ def ticket_history(ticket_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/stats")
-def get_stats(db: Session = Depends(get_db)):
-    total = db.execute(text("SELECT COUNT(*) FROM repair_tickets")).scalar_one()
-    total_devices = db.execute(text("SELECT COUNT(*) FROM devices")).scalar_one()
+def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
+    scope = visible_org_ids(user) if user else None
+    # scope ว่าง (เช่น admin_school ยังไม่มีสังกัด) → ไม่ให้เห็นข้อมูลบริษัท
+    if scope is not None and not scope:
+        return {
+            "total_tickets": 0, "total_devices": 0, "open": 0, "assigned": 0, "in_progress": 0,
+            "pending": 0, "resolved": 0, "closed": 0, "cancelled": 0, "new": 0,
+            "low": 0, "normal": 0, "medium": 0, "high": 0, "critical": 0,
+            "by_type": {}, "by_status": {}, "by_priority": {}, "devices_by_status": {},
+            "self_service_total": 0, "recent_tickets": [],
+        }
+    params: dict = {}
+    if scope is not None:
+        params["oids"] = tuple(scope)
+    total = db.execute(text("SELECT COUNT(*) FROM repair_tickets t LEFT JOIN devices d ON d.device_id=t.device_id" + (" WHERE d.organization_id IN :oids" if scope is not None else "")), params).scalar_one()
+    total_devices = db.execute(text("SELECT COUNT(*) FROM devices d" + (" WHERE d.organization_id IN :oids" if scope is not None else "")), params).scalar_one()
 
     def count_by(col, table, where=None):
         q = f"SELECT {col}, COUNT(*) FROM {table}"
+        joins = ""
+        if scope is not None:
+            if table == "repair_tickets":
+                joins = " LEFT JOIN devices d ON d.device_id = repair_tickets.device_id"
+                w = " WHERE d.organization_id IN :oids"
+            elif table == "devices":
+                joins = ""
+                w = " WHERE devices.organization_id IN :oids"
+            else:
+                joins = ""
+                w = ""
+        else:
+            w = ""
         if where:
-            q += f" WHERE {where}"
-        q += " GROUP BY {col}".format(col=col)
-        return {r[0]: r[1] for r in db.execute(text(q)).fetchall()}
+            w = (w + " AND " + where) if w else (" WHERE " + where)
+        q += joins + w
+        q += " GROUP BY " + col
+        return {r[0]: r[1] for r in db.execute(text(q), params).fetchall()}
 
     by_status = count_by("status", "repair_tickets")
     by_priority = count_by("priority", "repair_tickets")
@@ -1871,8 +2018,15 @@ def get_stats(db: Session = Depends(get_db)):
     def st(s):
         return by_status.get(s, 0)
 
-    self_service_total = db.execute(text("SELECT COUNT(*) FROM self_service_cases")).scalar_one()
+    # self_service_cases ไม่มี organization_id — นับผ่าน device
+    if scope is not None:
+        self_service_total = db.execute(text(
+            "SELECT COUNT(*) FROM self_service_cases s JOIN devices d ON d.device_id = s.device_id "
+            "WHERE d.organization_id IN :oids"), params).scalar_one()
+    else:
+        self_service_total = db.execute(text("SELECT COUNT(*) FROM self_service_cases")).scalar_one()
 
+    recent_where = (" WHERE d.organization_id IN :oids" if scope is not None else "")
     recent = db.execute(text("""
         SELECT t.ticket_id, t.title, t.status, t.priority, t.created_at,
                d.device_type, r.name AS room_name, o.name AS organization_name
@@ -1880,9 +2034,10 @@ def get_stats(db: Session = Depends(get_db)):
         LEFT JOIN devices d ON d.device_id = t.device_id
         LEFT JOIN rooms r ON r.id = d.room_id
         LEFT JOIN organizations o ON o.id = d.organization_id
+    """ + recent_where + """
         ORDER BY t.created_at DESC
         LIMIT 10
-    """)).fetchall()
+    """), params).fetchall()
 
     return {
         "total_tickets": total,
@@ -2651,8 +2806,15 @@ def list_pm_tasks(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
 ):
     stmt = select(PMTask).order_by(PMTask.due_date)
+    # admin_school/it_support(มีสังกัด)/teacher/student เห็นเฉพาะงานในรรตัวเอง
+    scope = visible_org_ids(user) if user else None
+    if scope is not None:
+        if not scope:
+            return []  # scope ว่าง → ไม่เห็นข้อมูล
+        stmt = stmt.where(PMTask.organization_id.in_(scope))
     if status:
         stmt = stmt.where(PMTask.status == status)
     if device_id:
@@ -2959,21 +3121,25 @@ def ticket_track(ticket_no: str, db: Session = Depends(get_db)):
 
 # ─── Room / Building endpoints ─────────────────────────────────────────
 @app.get("/api/organizations/{org_id}/buildings")
-def list_buildings(org_id: int, db: Session = Depends(get_db)):
+def list_buildings(org_id: int, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
+    check_org_access(user, org_id) if user else None
     rows = db.execute(
         select(Building).where(Building.organization_id == org_id).order_by(Building.code)
     ).scalars().all()
     return [{"id": b.id, "code": b.code, "name": b.name} for b in rows]
 
 @app.post("/api/organizations/{org_id}/buildings", status_code=201)
-def create_building(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def create_building(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+    check_org_access(user, org_id)
     b = Building(organization_id=org_id, code=payload.get("code", ""), name=payload.get("name", ""))
     db.add(b); db.commit(); db.refresh(b)
     return {"id": b.id, "code": b.code, "name": b.name}
 
 @app.get("/api/organizations/{org_id}/rooms")
-def list_rooms(org_id: int, db: Session = Depends(get_db)):
+def list_rooms(org_id: int, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
     """รายการห้องในโรงเรียน (ใช้ในหน้าเพิ่มอุปกรณ์/จัดการห้อง)"""
+    if user:
+        check_org_access(user, org_id)
     rows = db.execute(
         select(Room).where(Room.organization_id == org_id).order_by(Room.code)
     ).scalars().all()
@@ -3011,9 +3177,10 @@ def ticket_assign(ticket_id: str, payload: TicketAssignReq, db: Session = Depend
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 @app.post("/api/tickets/{ticket_id}/accept", status_code=200)
-def ticket_accept(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+def ticket_accept(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """ช่างรับงาน — assigned/new → in_progress"""
     t = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, t)
     if t.status not in ("assigned", "new"):
         raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": f"สถานะปัจจุบันคือ {t.status} — ไม่สามารถรับงานได้"})
     old = t.status
@@ -3024,9 +3191,10 @@ def ticket_accept(ticket_id: str, db: Session = Depends(get_db), user: User = De
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 @app.post("/api/tickets/{ticket_id}/resolve", status_code=200)
-def ticket_resolve(ticket_id: str, payload: TicketResolveReq, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+def ticket_resolve(ticket_id: str, payload: TicketResolveReq, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """บันทึกผลการซ่อม — resolved + บันทึกสาเหตุ/วิธีแก้/รูปหลังซ่อม"""
     t = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, t)
     if not payload.solution.strip():
         raise HTTPException(status_code=400, detail="ต้องกรอกวิธีแก้ไข (solution)")
     old = t.status
@@ -3075,9 +3243,10 @@ def ticket_reopen(ticket_id: str, payload: TicketCommentReq, db: Session = Depen
     return {"ticket_id": t.ticket_id, "status": t.status}
 
 @app.post("/api/tickets/{ticket_id}/cancel", status_code=200)
-def ticket_cancel(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+def ticket_cancel(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """ยกเลิกงานพร้อมเหตุผล"""
     t = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, t)
     if t.status in ("closed", "cancelled"):
         raise HTTPException(status_code=409, detail={"code": "INVALID_STATUS_TRANSITION", "message": f"สถานะ {t.status} ไม่สามารถยกเลิกได้"})
     old = t.status
@@ -3160,8 +3329,17 @@ def update_settings(payload: dict, db: Session = Depends(get_db), user: User = D
 
 # ─── Reports (TOR 5.10) ────────────────────────────────────────────────
 @app.get("/api/reports/summary")
-def report_summary(organization_id: Optional[int] = Query(None), db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def report_summary(organization_id: Optional[int] = Query(None), db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """สรุปสถิติภาพรวม — สำหรับ Dashboard / รายงาน"""
+    scope = visible_org_ids(user)
+    # admin_school/it_support(มีสังกัด): บังคับให้ดูเฉพาะรรตัวเอง (กันส่ง org คนอื่น)
+    if scope is not None:
+        if organization_id is not None and organization_id not in scope:
+            raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์เข้าถึงข้อมูลของโรงเรียนนี้")
+        # ถ้า scope ว่าง (admin_school ไม่มีสังกัด) → ดูได้แค่ 0 รายการ ไม่ให้เห็นข้อมูลบริษัท
+        if not scope:
+            return {"total_tickets": 0, "total_devices": 0, "by_status": {}, "by_priority": {}, "open_total": 0}
+        organization_id = organization_id or next(iter(scope))
     org_cond = ""
     params: dict = {}
     if organization_id:
@@ -3186,8 +3364,15 @@ def report_summary(organization_id: Optional[int] = Query(None), db: Session = D
 
 @app.get("/api/reports/top-issues")
 def report_top_issues(organization_id: Optional[int] = Query(None), limit: int = Query(10, ge=1, le=50),
-                      db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+                      db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """10 อันดับปัญหาที่พบบ่อย (จัดกลุ่มด้วย device_type)"""
+    scope = visible_org_ids(user)
+    if scope is not None:
+        if organization_id is not None and organization_id not in scope:
+            raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์เข้าถึงข้อมูลของโรงเรียนนี้")
+        if not scope:
+            return []  # admin_school ไม่มีสังกัด → ไม่เห็นข้อมูลบริษัท
+        organization_id = organization_id or next(iter(scope))
     org_cond = ""
     params = {"lim": limit}
     if organization_id:
@@ -3202,8 +3387,15 @@ def report_top_issues(organization_id: Optional[int] = Query(None), limit: int =
 
 @app.get("/api/reports/top-devices")
 def report_top_devices(organization_id: Optional[int] = Query(None), limit: int = Query(10, ge=1, le=50),
-                       db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+                       db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """อุปกรณ์ที่เสียบ่อย (Repeat failure — TOR 1.5.8)"""
+    scope = visible_org_ids(user)
+    if scope is not None:
+        if organization_id is not None and organization_id not in scope:
+            raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์เข้าถึงข้อมูลของโรงเรียนนี้")
+        if not scope:
+            return []  # admin_school ไม่มีสังกัด → ไม่เห็นข้อมูลบริษัท
+        organization_id = organization_id or next(iter(scope))
     org_cond = ""
     params = {"lim": limit}
     if organization_id:
@@ -3219,7 +3411,7 @@ def report_top_devices(organization_id: Optional[int] = Query(None), limit: int 
 
 @app.get("/api/reports/chatbot-analytics")
 def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
-                             user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+                             user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """Analytics จาก chatbot_logs: self-service success rate, การกระจาย intent,
     คำถามที่บอทตอบไม่ได้/พลาด (intent=other + empty reply) เพื่อปรับปรุง"""
     params = {"days": days}
@@ -3242,8 +3434,15 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
 @app.get("/api/reports/avg-resolution")
 def report_avg_resolution(organization_id: Optional[int] = Query(None, description="กรองตามองค์กร"),
                           db: Session = Depends(get_db),
-                          user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+                          user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
     """เวลาเฉลี่ยในการแก้ไข ticket ที่ status=resolved/closed (ชั่วโมง)"""
+    scope = visible_org_ids(user)
+    if scope is not None:
+        if organization_id is not None and organization_id not in scope:
+            raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์เข้าถึงข้อมูลของโรงเรียนนี้")
+        if not scope:
+            return {"total_resolved": 0, "avg_hours": None, "min_hours": None, "max_hours": None, "organization_id": organization_id}
+        organization_id = organization_id or next(iter(scope))
     where = "WHERE t.status IN ('resolved', 'closed')"
     params: dict = {}
     if organization_id:

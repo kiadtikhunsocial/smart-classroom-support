@@ -158,6 +158,7 @@ const adminMenuItems = menuItems.filter((i) => i.id === 'schools');
 const ROLE_MENUS: Record<string, string[]> = {
   super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
   admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'users', 'reports', 'settings', 'profile'],
+  admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'users', 'reports', 'settings', 'profile'],
   it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'reports', 'settings', 'profile'],
   teacher: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
   student: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],

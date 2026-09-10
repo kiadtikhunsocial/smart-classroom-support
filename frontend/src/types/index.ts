@@ -116,10 +116,11 @@ export interface DeviceCreate {
   status?: string;
 }
 
-export type DevicePageRole = 'admin' | 'teacher' | 'it_support' | 'student' | 'super_admin' | 'none';
+export type DevicePageRole = 'admin' | 'admin_school' | 'teacher' | 'it_support' | 'student' | 'super_admin' | 'none';
 
 export const DEVICE_PAGE_ROLES: Record<DevicePageRole | string, string> = {
   admin: 'admin',
+  admin_school: 'School Admin',
   teacher: 'teacher',
   it_support: 'IT Support',
   student: 'Student',
@@ -130,6 +131,7 @@ export const DEVICE_PAGE_ROLES: Record<DevicePageRole | string, string> = {
 
 export const DEVICE_PAGE_ROLE_BADGE: Record<DevicePageRole | string, string> = {
   admin: 'admin',
+  admin_school: 'admin_school',
   teacher: 'teacher',
   it_support: 'it_support',
   student: 'student',

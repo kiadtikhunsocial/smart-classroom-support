@@ -2461,7 +2461,7 @@ function AppInner() {
                 />
               )}
               {menu === 'users' && (
-                <UsersPage onBack={() => handleMenuChange('dashboard')} currentUserId={auth.user?.id} />
+                <UsersPage onBack={() => handleMenuChange('dashboard')} currentUserId={auth.user?.id} currentUserRole={auth.user?.role} />
               )}
               {menu === 'reports' && (
                 <ReportsPage onBack={() => handleMenuChange('dashboard')} />

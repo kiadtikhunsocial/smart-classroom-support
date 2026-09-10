@@ -14,6 +14,8 @@ try:
     for v in ['new', 'pending', 'resolved']:
         db.execute(text("ALTER TYPE ticket_status_enum ADD VALUE IF NOT EXISTS :v"), {'v': v})
     db.execute(text("ALTER TYPE priority_enum ADD VALUE IF NOT EXISTS 'normal'"))
+    # enum: add admin_school role (ต้อง hardcode ค่า — PG ไม่รองรับ parameter ใน DDL)
+    db.execute(text("ALTER TYPE user_role_enum ADD VALUE IF NOT EXISTS 'admin_school'"))
 
     # devices: qr_token
     db.execute(text("ALTER TABLE devices ADD COLUMN IF NOT EXISTS qr_token VARCHAR(64)"))
