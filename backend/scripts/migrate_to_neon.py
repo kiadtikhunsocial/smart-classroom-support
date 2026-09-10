@@ -29,7 +29,10 @@ def common_cols(cur, table):
         SELECT column_name FROM information_schema.columns WHERE table_name=%s
         ORDER BY ordinal_position
     """, (table,))
-    return [r[0] for r in cur.fetchall()]
+    rows = cur.fetchall()
+    if rows and isinstance(rows[0], dict):
+        return [r["column_name"] for r in rows]
+    return [r[0] for r in rows]
 
 
 def copy_table(cur_src, cur_dst, table, truncate=True):
@@ -41,16 +44,30 @@ def copy_table(cur_src, cur_dst, table, truncate=True):
         return 0
     cols_sql = ", ".join(f'"{c}"' for c in cols)
     cur_src.execute(f'SELECT {cols_sql} FROM "{table}"')
-    rows = cur_src.fetchall()
-    if not rows:
+    raw_rows = cur_src.fetchall()
+    if not raw_rows:
         print(f"  ~ {table}: ไม่มีข้อมูล")
         return 0
+    # แปลง tuple/dict → list values ตามลำดับ cols (RealDictCursor คืน dict)
+    if isinstance(raw_rows[0], dict):
+        import json as _json
+        rows = []
+        for r in raw_rows:
+            row = []
+            for c in cols:
+                v = r[c]
+                if isinstance(v, (dict, list)):
+                    v = _json.dumps(v, ensure_ascii=False)
+                row.append(v)
+            rows.append(row)
+    else:
+        rows = raw_rows
     if truncate:
         try:
             cur_dst.execute(f'TRUNCATE "{table}" RESTART IDENTITY CASCADE')
         except Exception:
             pass
-    cur_dst.executemany(f'INSERT INTO "{table}" ({cols_sql}) VALUES ({", ".join(["%s"]*len(cols))})', rows)
+    cur_dst.executemany(f'INSERT INTO "{table}" ({cols_sql}) VALUES ({" ,".join(["%s"]*len(cols))})', rows)
     print(f"  ✓ {table}: {len(rows)} แถว")
     return len(rows)
 
@@ -77,7 +94,9 @@ def main():
         try:
             total += copy_table(cur_src, cur_dst, t)
         except Exception as e:
-            print(f"  ✗ {t}: {e} (ข้าม)")
+            import traceback
+            print(f"  ✗ {t}: {e}\n{traceback.format_exc()}")
+            break  # หยุดที่ error แรก เพื่อดูสาเหตุจริง
 
     print(f"\nเสร็จสิ้น — ย้าย {total} แถว")
     cur_src.close(); cur_dst.close()
