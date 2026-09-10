@@ -31,7 +31,7 @@
     },
     {
       "parameters": {
-        "url": "http://backend:8000/api/ai/diagnose",
+        "url": "https://smart-classroom-backend-3tv7.onrender.com/api/ai/diagnose",
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
@@ -76,7 +76,7 @@
     },
     {
       "parameters": {
-        "url": "http://backend:8000/api/tickets",
+        "url": "https://smart-classroom-backend-3tv7.onrender.com/api/tickets",
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
