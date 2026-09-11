@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, selectinload
 
+from app.kb_loader import invalidate_kb_cache
 from app.models import (
     Base,
     Building,
@@ -617,7 +618,7 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 _cors_origins = [o.strip() for o in os.environ.get(
     "CORS_ORIGINS",
-    "http://localhost:5173,https://unnoticed-simplify-disclose.ngrok-free.dev",
+    "http://localhost:5173",
 ).split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -626,6 +627,50 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Logging (ข้อ 7: logging เพียงพอ + ไม่ leak sensitive data) ───────────────
+import logging
+import time as _time
+
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger("smart_classroom")
+
+# path ที่ไม่ต้อง log (health check / docs — ลด noise)
+_SILENT_PATHS = ("/health", "/api/health", "/docs", "/openapi.json", "/favicon.ico")
+
+
+@app.middleware("http")
+async def _access_log_middleware(request: Request, call_next):
+    """log request แบบไม่เก็บ body/query ที่อาจมีข้อมูลอ่อนไหว (ไม่ log Authorization/รหัส)"""
+    started = _time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        # log stack trace ฝั่ง server เท่านั้น (ไม่ส่งกลับ client)
+        logger.exception("UNHANDLED %s %s", request.method, request.url.path)
+        raise
+    elapsed_ms = (_time.perf_counter() - started) * 1000
+    if request.url.path not in _SILENT_PATHS:
+        # log เฉพาะ path (ไม่ใส่ query string — กัน leak token/ข้อมูลส่วนตัว)
+        logger.info(
+            "%s %s -> %s (%.0f ms) ip=%s",
+            request.method, request.url.path, response.status_code, elapsed_ms,
+            request.client.host if request.client else "-",
+        )
+    if response.status_code >= 500:
+        logger.error("SERVER ERROR %s %s -> %s", request.method, request.url.path, response.status_code)
+    return response
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """คืนข้อความ generic — ไม่ leak stack trace / schema / path ให้ client"""
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่หรือแจ้งผู้ดูแล"})
+
 
 
 # ---------------------------------------------------------------------------
@@ -860,6 +905,7 @@ def public_options(db: Session = Depends(get_db)):
 
 
 @app.post("/api/public/report", status_code=201)
+@limiter.limit("10/minute")
 def public_report(
     payload: PublicReportIn,
     request: Request,
@@ -2180,6 +2226,7 @@ def create_kb_article(payload: KBArticleCreate, db: Session = Depends(get_db), u
         is_published=payload.is_published,
     )
     db.add(a); db.commit(); db.refresh(a)
+    invalidate_kb_cache()
     return _kb_to_out(a)
 
 
@@ -2202,6 +2249,7 @@ def update_kb_article(kb_id: str, payload: KBArticleUpdate, db: Session = Depend
     for k, v in data.items():
         setattr(a, k, v)
     db.commit(); db.refresh(a)
+    invalidate_kb_cache()
     return _kb_to_out(a)
 
 
@@ -2216,6 +2264,7 @@ def delete_kb_article(kb_id: str, db: Session = Depends(get_db), user: User = De
     elif a.organization_id is not None:
         raise HTTPException(status_code=403, detail="บทความนี้เป็นของโรงเรียนเฉพาะ — ผู้ดูแลบริษัทลบได้เฉพาะบทความหลัก")
     db.delete(a); db.commit()
+    invalidate_kb_cache()
     return {"message": "KB article deleted", "kb_id": kb_id}
 
 
@@ -2479,7 +2528,8 @@ class DiagnoseResult(BaseModel):
 
 
 @app.post("/api/ai/diagnose", response_model=DiagnoseResult)
-def ai_diagnose(payload: DiagnoseRequest, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def ai_diagnose(request: Request, payload: DiagnoseRequest, db: Session = Depends(get_db)):
     """วิเคราะห์อาการ:
     1) keyword match คัดบทความ KB ที่เกี่ยวข้อง (top-N)
     2) ส่งให้ Gemini เลือกบทความที่ตรงที่สุด (ตอบจาก list ที่ให้เท่านั้น กัน hallucination ตาม R4)
@@ -3268,6 +3318,7 @@ def report_avg_resolution(organization_id: Optional[int] = Query(None, descripti
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 
 @app.post("/api/line/webhook")
+@limiter.limit("120/minute")
 async def line_webhook(request: Request, x_line_signature: Optional[str] = Header(None)):
     """รับ event จาก LINE OA โดยตรง → ตรวจ signature → เรียก LINE chatbot (คุยหลายรอบ)
 

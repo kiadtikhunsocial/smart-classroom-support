@@ -17,6 +17,7 @@ import ProfilePage from './components/ProfilePage';
 import KBPage from './components/KBPage';
 import QRBatchPage from './components/QRBatchPage';
 import SalesPage from './components/SalesPage';
+import PrivacyPage from './components/PrivacyPage';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend
@@ -152,7 +153,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // ─── Login Page (จริง: username + password) ─────────────────────────────────
-function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
+function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPrivacy?: () => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -279,6 +280,16 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
             style={{ color: 'var(--color-primary)', fontWeight: 600 }}
           >
             แจ้งซ่อม โดยไม่ต้องมีบัญชี
+          </a>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 6, fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--color-text-tertiary)' }}>การใช้งานเว็บไซต์นี้อยู่ภายใต้ </span>
+          <a
+            href="#"
+            style={{ color: 'var(--color-primary)' }}
+            onClick={(e) => { e.preventDefault(); onPrivacy?.(); }}
+          >
+            นโยบายความเป็นส่วนตัว
           </a>
         </div>
 
@@ -2372,7 +2383,11 @@ function AppInner() {
   }
 
   if (!auth.isAuthenticated) {
-    return <LoginPage onLogin={auth.login} />;
+    // เปิดหน้า นโยบายความเป็นส่วนตัว ได้โดยไม่ต้อง login
+    if (menu === 'privacy') {
+      return <PrivacyPage onBack={() => setMenu('dashboard')} />;
+    }
+    return <LoginPage onLogin={auth.login} onPrivacy={() => setMenu('privacy')} />;
   }
 
   const role = auth.user?.role ?? 'super_admin';
@@ -2482,6 +2497,9 @@ function AppInner() {
                   onUpdateUser={auth.updateUser}
                   onBack={() => handleMenuChange('dashboard')}
                 />
+              )}
+              {menu === 'privacy' && (
+                <PrivacyPage onBack={() => handleMenuChange('dashboard')} />
               )}
             </div>
           </div>

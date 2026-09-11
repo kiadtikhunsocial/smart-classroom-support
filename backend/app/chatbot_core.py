@@ -200,15 +200,10 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         if dv:
             session["saved_device"] = dv
         # วินิจฉัยจาก KB ด้วยข้อความรวม (พยายามแนะนำวิธีแก้ก่อนเสมอ — ตามที่ต้องการ)
-        from app.models import KBArticle
+        from app.kb_loader import load_kb_candidates
         db = SessionLocal()
         try:
-            articles = db.execute(
-                __import__("sqlalchemy").select(KBArticle).where(KBArticle.is_published == True)
-            ).scalars().all()
-            cand = [{"kb_id": a.kb_id, "device_type": a.device_type, "title": a.title,
-                     "steps": [s["text"] for s in (json.loads(a.steps) if a.steps else [])]}
-                    for a in articles]
+            cand = load_kb_candidates(db)
         finally:
             db.close()
         m = match_article(buf, None, cand)
@@ -417,15 +412,10 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
 
     # อาการ → วินิจฉัยจาก KB (ผ่าน Gemini + KB)
     if _is_symptom(text):
-        from app.models import KBArticle
+        from app.kb_loader import load_kb_candidates
         db = SessionLocal()
         try:
-            articles = db.execute(
-                __import__("sqlalchemy").select(KBArticle).where(KBArticle.is_published == True)
-            ).scalars().all()
-            cand = [{"kb_id": a.kb_id, "device_type": a.device_type, "title": a.title,
-                     "steps": [s["text"] for s in (json.loads(a.steps) if a.steps else [])]}
-                    for a in articles]
+            cand = load_kb_candidates(db)
         finally:
             db.close()
         m = match_article(text, None, cand)  # ลอง Gemini เลือกบทความ
@@ -780,15 +770,10 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                 if action == "search_kb":
                     # ให้ค้น KB + แนะนำขั้นตอนจริง (แทนการตอบเฉยๆ) — fallback ไป rule FSM
                     from app.gemini_service import match_article, explain_steps
-                    from app.models import KBArticle
+                    from app.kb_loader import load_kb_candidates
                     _db = SessionLocal()
                     try:
-                        _arts = _db.execute(
-                            __import__("sqlalchemy").select(KBArticle).where(KBArticle.is_published == True)
-                        ).scalars().all()
-                        _cand = [{"kb_id": a.kb_id, "device_type": a.device_type, "title": a.title,
-                                  "steps": [s["text"] for s in (json.loads(a.steps) if a.steps else [])]}
-                                 for a in _arts]
+                        _cand = load_kb_candidates(_db)
                     finally:
                         _db.close()
                     _m = match_article(text, None, _cand)
