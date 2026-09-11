@@ -10,6 +10,21 @@ gemini_service.py — Google Gemini API (REST) สำหรับ AI Troubleshoo
 import os
 import json
 import re
+
+
+def mask_pii(text: str) -> str:
+    """mask ข้อมูลส่วนบุคคลก่อนส่ง Gemini — ลดความเสี่ยง data privacy กับ 3rd-party AI
+    - เบอร์โทร (ไทย 10 หลัก) → 08X-XXX-XXXX
+    - email → a***@domain
+    """
+    if not text:
+        return text
+    # เบอร์ไทย: 08xxxxxxxx / 0-xxxx-xxxx / +66...
+    text = re.sub(r'(?<!\d)(\+?66)?0\d{1,2}[- ]?\d{3}[- ]?\d{3,4}', '08X-XXX-XXXX', text)
+    # email
+    text = re.sub(r'[\w.+-]+@[\w-]+\.[\w.]+', lambda m: m.group(0)[:2] + '***@' + m.group(0).split('@')[1], text)
+    return text
+
 import time
 from typing import Optional
 import httpx
@@ -155,8 +170,8 @@ def extract_fields_ai(text: str, known: dict, missing_keys: list[str]) -> dict:
     if not API_KEY or not missing_keys:
         return {}
     prompt = (
-        f'ข้อความจากลูกค้า: "{text}"\n'
-        f"ข้อมูลที่มีอยู่แล้ว: {json.dumps(known, ensure_ascii=False)}\n"
+        f'ข้อความจากลูกค้า: "{mask_pii(text)}"\n'
+        f"ข้อมูลที่มีอยู่แล้ว: {json.dumps({k: mask_pii(str(v)) for k, v in (known or {}).items()}, ensure_ascii=False)}\n"
         f"ข้อมูลที่ยังขาดและต้องพยายามดึงจากข้อความนี้: {missing_keys}\n\n"
         "จงดึงเฉพาะข้อมูลที่ปรากฏชัดเจนในข้อความ ห้ามเดา/แต่งข้อมูลที่ไม่มี\n"
         "field ที่เป็นไปได้: name (ชื่อคนเท่านั้น ไม่ใช่ประโยคอาการ/คำอุทาน), "
@@ -192,8 +207,8 @@ def phrase_slot_question(known: dict, next_field: str, last_user_msg: str) -> st
         "device_id": "อุปกรณ์หรือห้องที่ใช้งาน", "symptom": "อาการที่พบ",
     }
     prompt = (
-        f'ลูกค้าเพิ่งพิมพ์ว่า: "{last_user_msg}"\n'
-        f"ข้อมูลที่เก็บได้แล้ว: {json.dumps(known, ensure_ascii=False)}\n"
+        f'ลูกค้าเพิ่งพิมพ์ว่า: "{mask_pii(last_user_msg)}"\n'
+        f"ข้อมูลที่เก็บได้แล้ว: {json.dumps({k: mask_pii(str(v)) for k, v in (known or {}).items()}, ensure_ascii=False)}\n"
         f"ข้อมูลที่ยังขาดและต้องถามต่อไป: {field_labels.get(next_field, next_field)}\n\n"
         "จงถามข้อมูลที่ขาดนี้ต่อ 1 ประโยคสั้นๆ ภาษาไทยสุภาพ เป็นธรรมชาติ ไม่ต้องใช้รูปแบบเดิมซ้ำทุกครั้ง "
         "ถ้าเหมาะสมให้ตอบรับสิ่งที่ลูกค้าเพิ่งพูดสั้นๆ ก่อนถามต่อ ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย"

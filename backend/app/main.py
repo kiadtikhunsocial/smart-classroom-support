@@ -12,6 +12,10 @@ import os
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, text
@@ -602,6 +606,14 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# ─── Rate limiting (ป้องกัน brute-force login / spam) ───
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(status_code=429, content={"detail": "มีการร้องขอมากเกินไป กรุณารอสักครู่ก่อนลองใหม่"})
 
 _cors_origins = [o.strip() for o in os.environ.get(
     "CORS_ORIGINS",
@@ -1369,7 +1381,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
 
 # ─── Auth (Login จริง) ──────────────────────────────────────────────
 @app.post("/api/auth/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     """Login ด้วย username (line_user_id) + password"""
     user = db.execute(
         select(User).where(User.line_user_id == payload.username)
