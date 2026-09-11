@@ -353,12 +353,13 @@ class ScanLog(Base):
 
 class UserRole(str):
     """บทบาทผู้ใช้ในระบบ"""
+    OWNER = "owner"           # เจ้าของบริษัทสูงสุด (iwasuperadmin) — เห็น/จัดการทุกอย่าง + ห้าม role อื่นแก้
     ADMIN_SCHOOL = "admin_school"  # ผู้ดูแลโรงเรียน — เห็นเฉพาะข้อมูลในโรงเรียนตัวเอง + จัดการ user ในรรตัวเอง
     ADMIN = "admin"           # ผู้ดูแลบริษัท — เห็นทุกโรงเรียน + จัดการทุกอย่างได้
     TEACHER = "teacher"       # ครู — เห็นเฉพาะ ticket ที่ตัวเองสร้าง + อุปกรณ์ในโรงเรียน
-    IT_SUPPORT = "it_support" # เจ้าหน้าที่ IT — สร้างโดย super_admin=เห็นทุกรร, สร้างโดย admin_school=เห็นเฉพาะรร
+    IT_SUPPORT = "it_support" # เจ้าหน้าที่ IT — สร้างโดย owner/admin=เห็นทุกรร, สร้างโดย admin_school=เห็นเฉพาะรร
     STUDENT = "student"       # นักเรียน — เห็นอุปกรณ์ + สร้าง ticket + ดู ticket ที่ตัวเองสร้าง
-    SUPER_ADMIN = "super_admin"  # เจ้าของบริษัท — เห็นทุกโรงเรียน + จัดการทุกอย่างได้
+    SUPER_ADMIN = "super_admin"  # ผู้ดูแลบริษัท — เห็นทุกโรงเรียน + จัดการทุกอย่างได้ (ยกเว้น owner)
 
 
 class User(Base):
@@ -378,7 +379,7 @@ class User(Base):
     )
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(
-        SAEnum("admin", "admin_school", "teacher", "it_support", "student", "super_admin",
+        SAEnum("owner", "admin", "admin_school", "teacher", "it_support", "student", "super_admin",
                name="user_role_enum", create_type=False),
         default=UserRole.TEACHER, nullable=False, index=True
     )
@@ -405,6 +406,9 @@ class KBArticle(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     kb_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # None = บทความหลัก/ส่วนกลาง ทุกคนเห็น; มีค่า = เฉพาะรรนั้น
     device_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     symptom_tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list

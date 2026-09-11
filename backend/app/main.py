@@ -144,10 +144,10 @@ def require_roles(*roles: str):
 # super_admin / admin / it_support(ไม่มีสังกัด, สร้างโดย superadmin) → เห็นทุกรร
 def visible_org_ids(user: User) -> Optional[set[int]]:
     """คืนชุด organization_id ที่ user นี้เห็นได้; None = เห็นทุกโรงเรียน"""
-    if user.role in ("super_admin", "admin"):
+    if user.role in ("owner", "super_admin", "admin"):
         return None
     if user.role == "it_support":
-        # it_support ที่ไม่มีสังกัด = สร้างโดย superadmin → เห็นทุกรร
+        # it_support ที่ไม่มีสังกัด = สร้างโดย owner/admin → เห็นทุกรร
         # it_support ที่มีสังกัด = สร้างโดย admin_school → เห็นเฉพาะรรนั้น
         return None if not user.organization_id else {user.organization_id}
     # admin_school / teacher / student → เห็นเฉพาะรรตัวเอง
@@ -1100,7 +1100,7 @@ def list_devices(
 
 
 @app.post("/api/devices", response_model=DeviceInfo, status_code=201)
-def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """เพิ่มอุปกรณ์ใหม่ — บังคับ org ตาม scope ของบทบาท"""
     check_org_access(user, payload.organization_id)
     org = db.execute(select(Organization).where(Organization.id == payload.organization_id)).scalar_one_or_none()
@@ -1173,7 +1173,7 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
 
 
 @app.patch("/api/devices/{device_id}", response_model=DeviceInfo)
-def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """แก้ไขข้อมูลอุปกรณ์ — ตรวจว่า device อยู่ใน scope"""
     device = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if not device:
@@ -1221,7 +1221,7 @@ def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(g
 
 
 @app.delete("/api/devices/{device_id}")
-def delete_device(device_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def delete_device(device_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ลบอุปกรณ์ (ต้องไม่มี ticket ผูกอยู่) — ตรวจว่า device อยู่ใน scope"""
     device = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if not device:
@@ -1242,7 +1242,7 @@ def delete_device(device_id: str, db: Session = Depends(get_db), user: User = De
 
 # ─── Users ─────────────────────────────────────────────────────────
 @app.get("/api/users", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+def list_users(db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     """รายชื่อผู้ใช้ — จำกัดตามบทบาท: admin_school เห็นเฉพาะ user ในรรตัวเอง"""
     scope = visible_org_ids(user)
     stmt = select(User).order_by(User.created_at.desc())
@@ -1265,12 +1265,14 @@ def list_users(db: Session = Depends(get_db), user: User = Depends(require_roles
 
 
 @app.post("/api/users", response_model=UserOut, status_code=201)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     exists = db.execute(select(User).where(User.line_user_id == payload.line_user_id)).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=400, detail="line_user_id ซ้ำ")
 
     # ── จำกัดสิทธิ์การสร้าง user ตามบทบาท ──
+    if payload.role == "owner" and user.role != "owner":
+        raise HTTPException(status_code=403, detail="มีเพียง Owner เท่านั้นที่กำหนดบทบาท Owner ได้")
     if user.role == "admin_school":
         # admin_school: สร้างได้เฉพาะ teacher / student / it_support และในรรตัวเองเท่านั้น
         if payload.role not in ("teacher", "student", "it_support"):
@@ -1307,24 +1309,35 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User =
 
 
 @app.delete("/api/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+def delete_user(user_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     """ลบผู้ใช้ — admin_school ลบได้เฉพาะ user ในรรตัวเอง"""
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     check_org_access(user, target.organization_id)
+    # owner ห้ามถูกลบโดยใครนอกจากตัวเอง (และไม่ควรลบตัวเอง)
+    if target.role == "owner" and user.role != "owner":
+        raise HTTPException(status_code=403, detail="ไม่สามารถลบผู้ใช้ Owner ได้")
+    if target.role == "owner" and target.id == user.id:
+        raise HTTPException(status_code=403, detail="ไม่สามารถลบบัญชี Owner เองได้")
     db.delete(target)
     db.commit()
     return {"message": "User deleted", "user_id": user_id}
 
 
 @app.patch("/api/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     check_org_access(user, target.organization_id)
     data = payload.model_dump(exclude_unset=True)
+
+    # ── Owner protection: มีแค่ owner เท่านั้นที่แก้/เปลี่ยนบทบาทของ owner ได้ ──
+    if target.role == "owner" and user.role != "owner":
+        raise HTTPException(status_code=403, detail="ไม่สามารถแก้ไขบัญชีเจ้าของระบบ (Owner) ได้")
+    if user.role != "owner" and data.get("role") == "owner":
+        raise HTTPException(status_code=403, detail="ไม่สามารถกำหนดบทบาท Owner ให้ผู้อื่นได้")
 
     # admin_school ไม่สามารถเปลี่ยนบทบาทตัวเอง/ผู้อื่นเป็นบทบาทระดับบริษัท และไม่สามารถย้ายคนข้ามรร
     if user.role == "admin_school":
@@ -1560,7 +1573,7 @@ def list_organizations(db: Session = Depends(get_db), user: Optional[User] = Dep
 
 
 @app.post("/api/organizations", status_code=201)
-def create_organization(payload: OrgCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin"))):
+def create_organization(payload: OrgCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin"))):
     """เพิ่มโรงเรียนใหม่ (super_admin)"""
     exists = db.execute(
         select(Organization).where(
@@ -1591,7 +1604,7 @@ def create_organization(payload: OrgCreate, db: Session = Depends(get_db), user:
 
 
 @app.post("/api/organizations/{org_id}/rooms", status_code=201)
-def create_room(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+def create_room(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     """เพิ่มห้องใหม่ในโรงเรียน"""
     check_org_access(user, org_id)
     org = db.execute(select(Organization).where(Organization.id == org_id)).scalar_one_or_none()
@@ -1611,7 +1624,7 @@ def create_room(org_id: int, payload: dict, db: Session = Depends(get_db), user:
 
 
 @app.delete("/api/organizations/{org_id}")
-def delete_organization(org_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin"))):
+def delete_organization(org_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin"))):
     """ลบโรงเรียนทั้งหมด: tickets → updates → scanlogs → devices → rooms → org"""
     org = db.execute(select(Organization).where(Organization.id == org_id)).scalar_one_or_none()
     if not org:
@@ -1689,7 +1702,7 @@ def list_tickets(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user),
 ):
     stmt = (
         select(RepairTicket)
@@ -1757,7 +1770,7 @@ def list_tickets(
 
 
 @app.get("/api/tickets/{ticket_id}", response_model=TicketOut)
-def get_ticket(ticket_id: str, db: Session = Depends(get_db)):
+def get_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ticket = db.execute(
         select(RepairTicket)
         .options(selectinload(RepairTicket.device), selectinload(RepairTicket.updates))
@@ -1765,6 +1778,7 @@ def get_ticket(ticket_id: str, db: Session = Depends(get_db)):
     ).scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    check_ticket_access(db, user, ticket)
 
     out = TicketOut(
         id=ticket.id,
@@ -1827,7 +1841,7 @@ def update_ticket_status(
     ticket_id: str,
     payload: StatusUpdateRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support")),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support")),
 ):
     ticket = db.execute(
         select(RepairTicket).where(RepairTicket.ticket_id == ticket_id)
@@ -1881,7 +1895,7 @@ def update_ticket_status(
 
 
 @app.delete("/api/tickets/{ticket_id}")
-def delete_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def delete_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ลบ ticket + ประวัติทั้งหมด (admin / admin_school / IT support)"""
     ticket = db.execute(
         select(RepairTicket).where(RepairTicket.ticket_id == ticket_id)
@@ -2111,8 +2125,15 @@ def list_kb_articles(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional),
 ):
     stmt = select(KBArticle).order_by(KBArticle.title)
+    # เห็นบทความหลัก (org None) + บทความของรรตัวเอง (ถ้ามีสังกัด)
+    scope = visible_org_ids(user) if user else None
+    if scope is not None:
+        stmt = stmt.where(
+            (KBArticle.organization_id.is_(None)) | (KBArticle.organization_id.in_(scope))
+        )
     if device_type:
         stmt = stmt.where(KBArticle.device_type == device_type)
     if is_published is not None:
@@ -2132,10 +2153,13 @@ def get_kb_article(kb_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/kb/articles", response_model=KBArticleOut, status_code=201)
-def create_kb_article(payload: KBArticleCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def create_kb_article(payload: KBArticleCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     count = db.execute(select(func.count()).select_from(KBArticle)).scalar_one() + 1
+    # admin_school สร้างบทความเฉพาะรรตัวเอง; owner/admin/super_admin สร้างบทความส่วนกลาง (None)
+    org_id = user.organization_id if user.role == "admin_school" else None
     a = KBArticle(
         kb_id=f"kb-{count:04d}",
+        organization_id=org_id,
         device_type=payload.device_type,
         title=payload.title,
         symptom_tags=json.dumps(payload.symptom_tags or [], ensure_ascii=False),
@@ -2147,10 +2171,16 @@ def create_kb_article(payload: KBArticleCreate, db: Session = Depends(get_db), u
 
 
 @app.patch("/api/kb/articles/{kb_id}", response_model=KBArticleOut)
-def update_kb_article(kb_id: str, payload: KBArticleUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def update_kb_article(kb_id: str, payload: KBArticleUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     a = db.execute(select(KBArticle).where(KBArticle.kb_id == kb_id)).scalar_one_or_none()
     if not a:
         raise HTTPException(status_code=404, detail="KB article not found")
+    # admin_school แก้ได้เฉพาะบทความของรรตัวเอง; owner/admin/super_admin แก้บทความส่วนกลาง
+    if user.role == "admin_school":
+        if a.organization_id != user.organization_id:
+            raise HTTPException(status_code=403, detail="คุณแก้ไขได้เฉพาะบทความของโรงเรียนตนเองเท่านั้น")
+    elif a.organization_id is not None:
+        raise HTTPException(status_code=403, detail="บทความนี้เป็นของโรงเรียนเฉพาะ — ผู้ดูแลบริษัทแก้ไขเฉพาะบทความหลัก")
     data = payload.model_dump(exclude_unset=True)
     if "symptom_tags" in data and data["symptom_tags"] is not None:
         data["symptom_tags"] = json.dumps(data["symptom_tags"], ensure_ascii=False)
@@ -2163,10 +2193,15 @@ def update_kb_article(kb_id: str, payload: KBArticleUpdate, db: Session = Depend
 
 
 @app.delete("/api/kb/articles/{kb_id}")
-def delete_kb_article(kb_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def delete_kb_article(kb_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     a = db.execute(select(KBArticle).where(KBArticle.kb_id == kb_id)).scalar_one_or_none()
     if not a:
         raise HTTPException(status_code=404, detail="KB article not found")
+    if user.role == "admin_school":
+        if a.organization_id != user.organization_id:
+            raise HTTPException(status_code=403, detail="คุณลบได้เฉพาะบทความของโรงเรียนตนเองเท่านั้น")
+    elif a.organization_id is not None:
+        raise HTTPException(status_code=403, detail="บทความนี้เป็นของโรงเรียนเฉพาะ — ผู้ดูแลบริษัทลบได้เฉพาะบทความหลัก")
     db.delete(a); db.commit()
     return {"message": "KB article deleted", "kb_id": kb_id}
 
@@ -2569,7 +2604,7 @@ def list_self_service(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support")),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support")),
 ):
     """รายการ self-service — จำกัดตามบทบาท: admin_school/it_support(มีสังกัด) เห็นเฉพาะรรตัวเอง"""
     scope = visible_org_ids(user)
@@ -2687,12 +2722,14 @@ def qr_resolve(token: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/qr/rotate/{device_id}")
-def qr_rotate(device_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "it_support"))):
+def qr_rotate(device_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support"))):
     """ออก QR token ใหม่ (สติกเกอร์หาย/ถูกนำไปใช้ผิด) — device_id เดิม ไม่ต้องพิมพ์ใหม่ทั้งเครื่อง"""
     import secrets
     device = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+    # it_support ที่มีสังกัดเห็น/จัดการได้เฉพาะอุปกรณ์ในรรตัวเอง
+    check_org_access(user, device.organization_id)
     device.qr_token = secrets.token_urlsafe(24)
     db.commit()
     return {"device_id": device.device_id, "qr_token": device.qr_token,
@@ -2748,10 +2785,17 @@ def room_devices(room_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/qr/batch")
-def qr_batch(organization_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
-    """รายการ QR ทั้งหมด (สำหรับหน้าพิมพ์ batch — TOR 1.5.4)"""
+def qr_batch(organization_id: Optional[int] = Query(None), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """รายการ QR ทั้งหมด (สำหรับหน้าพิมพ์ batch — TOR 1.5.4) — จำกัดตามบทบาท"""
+    scope = visible_org_ids(user)
     stmt = select(Device).order_by(Device.device_id)
+    if scope is not None:
+        if not scope:
+            return []  # scope ว่าง → ไม่เห็นข้อมูล
+        stmt = stmt.where(Device.organization_id.in_(scope))
     if organization_id:
+        if scope is not None and organization_id not in scope:
+            raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์เข้าถึงข้อมูลของโรงเรียนนี้")
         stmt = stmt.where(Device.organization_id == organization_id)
     rows = db.execute(stmt).scalars().all()
     return [
@@ -2872,7 +2916,7 @@ def list_buildings(org_id: int, db: Session = Depends(get_db), user: Optional[Us
     return [{"id": b.id, "code": b.code, "name": b.name} for b in rows]
 
 @app.post("/api/organizations/{org_id}/buildings", status_code=201)
-def create_building(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school"))):
+def create_building(org_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     check_org_access(user, org_id)
     b = Building(organization_id=org_id, code=payload.get("code", ""), name=payload.get("name", ""))
     db.add(b); db.commit(); db.refresh(b)
@@ -2908,7 +2952,7 @@ def _add_update(db: Session, t: RepairTicket, from_s: Optional[str], to_s: Optio
     db.add(TicketUpdate(ticket=t, from_status=from_s, to_status=to_s, note=note, author_name=author, author_role=role))
 
 @app.post("/api/tickets/{ticket_id}/assign", status_code=200)
-def ticket_assign(ticket_id: str, payload: TicketAssignReq, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def ticket_assign(ticket_id: str, payload: TicketAssignReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
     """มอบหมายงานให้ช่าง (admin/super_admin)"""
     t = _get_ticket_or_404(db, ticket_id)
     old = t.status
@@ -2920,7 +2964,7 @@ def ticket_assign(ticket_id: str, payload: TicketAssignReq, db: Session = Depend
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 @app.post("/api/tickets/{ticket_id}/accept", status_code=200)
-def ticket_accept(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def ticket_accept(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ช่างรับงาน — assigned/new → in_progress"""
     t = _get_ticket_or_404(db, ticket_id)
     check_ticket_access(db, user, t)
@@ -2934,7 +2978,7 @@ def ticket_accept(ticket_id: str, db: Session = Depends(get_db), user: User = De
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 @app.post("/api/tickets/{ticket_id}/resolve", status_code=200)
-def ticket_resolve(ticket_id: str, payload: TicketResolveReq, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def ticket_resolve(ticket_id: str, payload: TicketResolveReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """บันทึกผลการซ่อม — resolved + บันทึกสาเหตุ/วิธีแก้/รูปหลังซ่อม"""
     t = _get_ticket_or_404(db, ticket_id)
     check_ticket_access(db, user, t)
@@ -2986,7 +3030,7 @@ def ticket_reopen(ticket_id: str, payload: TicketCommentReq, db: Session = Depen
     return {"ticket_id": t.ticket_id, "status": t.status}
 
 @app.post("/api/tickets/{ticket_id}/cancel", status_code=200)
-def ticket_cancel(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def ticket_cancel(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ยกเลิกงานพร้อมเหตุผล"""
     t = _get_ticket_or_404(db, ticket_id)
     check_ticket_access(db, user, t)
@@ -3045,7 +3089,7 @@ def _read_setting(db: Session, key: str, default):
         return default
 
 @app.get("/api/settings")
-def get_settings(db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def get_settings(db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
     return {
         "sla_hours": _read_setting(db, "sla_hours", {"critical": 2, "high": 8, "normal": 24, "low": 72}),
         "working_hours": _read_setting(db, "working_hours", {"start": "08:00", "end": "16:30", "days": [1, 2, 3, 4, 5]}),
@@ -3054,7 +3098,7 @@ def get_settings(db: Session = Depends(get_db), user: User = Depends(require_rol
     }
 
 @app.patch("/api/settings")
-def update_settings(payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin"))):
+def update_settings(payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
     """ปรับค่า SLA / working hours / auto-close / AI threshold — ไม่ต้อง deploy ใหม่"""
     allowed = {"sla_hours", "working_hours", "auto_close_days", "ai_confidence_threshold"}
     updated = []
@@ -3072,7 +3116,7 @@ def update_settings(payload: dict, db: Session = Depends(get_db), user: User = D
 
 # ─── Reports (TOR 5.10) ────────────────────────────────────────────────
 @app.get("/api/reports/summary")
-def report_summary(organization_id: Optional[int] = Query(None), db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+def report_summary(organization_id: Optional[int] = Query(None), db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """สรุปสถิติภาพรวม — สำหรับ Dashboard / รายงาน"""
     scope = visible_org_ids(user)
     # admin_school/it_support(มีสังกัด): บังคับให้ดูเฉพาะรรตัวเอง (กันส่ง org คนอื่น)
@@ -3107,7 +3151,7 @@ def report_summary(organization_id: Optional[int] = Query(None), db: Session = D
 
 @app.get("/api/reports/top-issues")
 def report_top_issues(organization_id: Optional[int] = Query(None), limit: int = Query(10, ge=1, le=50),
-                      db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+                      db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """10 อันดับปัญหาที่พบบ่อย (จัดกลุ่มด้วย device_type)"""
     scope = visible_org_ids(user)
     if scope is not None:
@@ -3130,7 +3174,7 @@ def report_top_issues(organization_id: Optional[int] = Query(None), limit: int =
 
 @app.get("/api/reports/top-devices")
 def report_top_devices(organization_id: Optional[int] = Query(None), limit: int = Query(10, ge=1, le=50),
-                       db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+                       db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """อุปกรณ์ที่เสียบ่อย (Repeat failure — TOR 1.5.8)"""
     scope = visible_org_ids(user)
     if scope is not None:
@@ -3154,7 +3198,7 @@ def report_top_devices(organization_id: Optional[int] = Query(None), limit: int 
 
 @app.get("/api/reports/chatbot-analytics")
 def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
-                             user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+                             user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """Analytics จาก chatbot_logs: self-service success rate, การกระจาย intent,
     คำถามที่บอทตอบไม่ได้/พลาด (intent=other + empty reply) เพื่อปรับปรุง"""
     params = {"days": days}
@@ -3177,7 +3221,7 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
 @app.get("/api/reports/avg-resolution")
 def report_avg_resolution(organization_id: Optional[int] = Query(None, description="กรองตามองค์กร"),
                           db: Session = Depends(get_db),
-                          user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support"))):
+                          user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """เวลาเฉลี่ยในการแก้ไข ticket ที่ status=resolved/closed (ชั่วโมง)"""
     scope = visible_org_ids(user)
     if scope is not None:
@@ -3452,7 +3496,7 @@ def _row_to_iso(v):
 def list_sales_leads(
     limit: int = Query(200, ge=1, le=500),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin", "it_support")),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
 ):
     """รายการ lead การขาย (จาก LINE) เรียงล่าสุดก่อน"""
     rows = db.execute(
@@ -3486,7 +3530,7 @@ def update_sales_lead_status(
     lead_id: int,
     payload: LeadStatusUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin", "it_support")),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
 ):
     """ทำเครื่องหมาย lead ว่าติดต่อแล้ว (status = contacted)"""
     row = db.execute(
@@ -3507,7 +3551,7 @@ def update_sales_lead_status(
 def delete_sales_lead(
     lead_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin")),
+    user: User = Depends(require_roles("owner", "super_admin", "admin")),
 ):
     """ลบ lead การขาย (ข้อมูลเทส/ซ้ำ) — super_admin/admin เท่านั้น"""
     row = db.execute(
@@ -3525,7 +3569,7 @@ def delete_sales_lead(
 def list_chatbot_logs(
     limit: int = Query(200, ge=1, le=500),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin", "it_support")),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
 ):
     """บทสนทนา chatbot ล่าสุด (ข้อความ/คำตอบ/เจตนา)"""
     rows = db.execute(

@@ -148,6 +148,7 @@ const adminMenuItems = menuItems.filter((i) => i.id === 'schools');
 // it_support    : ทำงานซ่อม (อุปกรณ์/สแกน/ticket/รายงาน) — ไม่จัดการ user/ตั้งค่า
 // teacher/student: แจ้งซ่อม + ติดตาม — เห็นแค่ Dashboard/สแกน/Tickets ของตัวเอง
 const ROLE_MENUS: Record<string, string[]> = {
+  owner: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
   super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
   admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'users', 'reports', 'settings', 'profile'],
   admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'users', 'reports', 'settings', 'profile'],

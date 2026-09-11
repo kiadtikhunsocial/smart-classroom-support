@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 
-const ROLES = ['super_admin', 'admin', 'admin_school', 'it_support', 'teacher', 'student'];
+const ROLES = ['owner', 'super_admin', 'admin', 'admin_school', 'it_support', 'teacher', 'student'];
 const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'ผู้ดูแลบริษัท', admin: 'ผู้ดูแลบริษัท (Admin)', admin_school: 'ผู้ดูแลโรงเรียน', it_support: 'เจ้าหน้าที่ IT',
+  owner: 'เจ้าของระบบ (Owner)', super_admin: 'ผู้ดูแลบริษัท', admin: 'ผู้ดูแลบริษัท (Admin)', admin_school: 'ผู้ดูแลโรงเรียน', it_support: 'เจ้าหน้าที่ IT',
   teacher: 'ครู', student: 'นักเรียน',
 };
 
 // บทบาทที่ผู้ใช้ปัจจุบันเลือกได้เมื่อสร้าง/แก้ไข user (จำกัดตามสิทธิ์)
 function creatableRoles(myRole?: string): string[] {
   if (myRole === 'admin_school') return ['teacher', 'student', 'it_support']; // ผู้ดูแลรร: สร้างได้แค่ ครู/นักเรียน/เจ้าหน้าที่ IT
-  return ROLES; // super_admin / admin: สร้างได้ทุกบทบาท
+  if (myRole === 'owner') return ROLES; // Owner: สร้างได้ทุกบทบาท
+  return ROLES.filter((r) => r !== 'owner'); // super_admin/admin: สร้างได้ทุกบทบาทยกเว้น owner
 }
 
 export default function UsersPage({ onBack, currentUserId, currentUserRole }: { onBack: () => void; currentUserId?: number; currentUserRole?: string }) {
