@@ -342,6 +342,24 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             base = natural or "รับทราบค่ะ เสียใจด้วยนะคะที่ยังไม่หาย 😔 เดี๋ยวจะส่งลิงก์ฟอร์มแจ้งซ่อมให้ทีมช่างได้เลยค่ะ"
             return base + "\n\n" + _form_fallback_text()
         if resolved:
+            # ── บันทึก self-service จริง (ตาราง self_service_cases) ──
+            try:
+                from app.models import SessionLocal, SelfServiceCase
+                _db = SessionLocal()
+                try:
+                    _device = (session.get("saved_device") or session.get("symptom_buf") or "")[:64]
+                    _sym = (session.get("symptom_buf") or text or "")[:300]
+                    _db.add(SelfServiceCase(
+                        device_id=_device or None,
+                        symptom=_sym,
+                        resolved=True,
+                        time_saved_minutes=10,
+                    ))
+                    _db.commit()
+                finally:
+                    _db.close()
+            except Exception as _e:
+                print(f"[chatbot] save self-service failed: {_e}")
             clear_session(user_id)
             from app.gemini_service import phrase_repair_reply as _pr
             return _pr("resolve_success", "") or "ดีใจด้วยนะคะ 🎉 ที่แก้ได้ด้วยตัวเอง! บันทึกเป็นการแก้ไขเบื้องต้นไว้แล้วค่ะ 😊"
