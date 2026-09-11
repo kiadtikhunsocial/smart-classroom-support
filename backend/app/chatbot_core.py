@@ -72,9 +72,59 @@ REQUIRED_FIELDS = [
 RESOLVED_WORDS = ["หาย", "ได้แล้ว", "ok", "ใช้ได้", "เรียบร้อย", "สำเร็จ", "แก้ได้", "หายแล้ว"]
 NOT_RESOLVED_WORDS = ["ไม่หาย", "ยังไม่", "ไม่ได้", "ไม่ใช่", "ไม่ได้ผล", "ไม่ได้เรื่อง", "ไม่ได้เลย", "ยัง"]
 HELP_WORDS = ["ช่วย", "แจ้งซ่อม", "ซ่อม", "ช่าง", "แจ้งหน่อย", "ไม่รู้", "ทำไง", "ทำยังไง", "พัง", "เสีย", "มีปัญหา", "ไม่ทำงาน", "ไม่ติด"]
+_ADMIN_CONTACT_TERMS = [
+    "ติดต่อ", "ติดต่อเรา", "ติดต่อแอดมิน", "หาแอดมิน", "แอดมิน", "admin",
+    "เจ้าหน้าที่", "พนักงาน", "คุยกับคน", "คุยกับพนักงาน", "คุยกับเจ้าหน้าที่",
+    "คนจริง", "ติดต่อทีมงาน", "ทีมงาน", "ขอเบอร์", "เบอร์ติดต่อ", "line id",
+    "ขอไลน์", "ไลน์ออฟฟิเชียล", "ช่องทางติดต่อ", "contact", "human", "talk to human",
+]
+_OUT_OF_SCOPE_TERMS = [
+    "อากาศ", "พยากรณ์", "ฝนตก", "หวย", "การเมือง", "ข่าว", "สูตรอาหาร", "ทำอาหาร",
+    "เพลง", "หนัง", "ภาพยนตร์", "เกม", "ท่องเที่ยว", "แปลภาษา", "คำนวณ", "การบ้าน",
+    "ความรัก", "ดูดวง", "หุ้น", "คริปโต",
+]
 
 # ลิงก์ฟอร์มแจ้งซ่อมสาธารณะ (หน้า ?publicreport=1) — ตั้ง env REPORT_FORM_URL เป็น URL จริงใน production
 REPORT_FORM_URL = os.environ.get("REPORT_FORM_URL", "http://localhost:5173/?publicreport=1")
+ENABLE_GEMINI_CLASSIFIER = os.environ.get("ENABLE_GEMINI_CLASSIFIER", "0").lower() in {"1", "true", "yes", "on"}
+ENABLE_GEMINI_ORCHESTRATION = os.environ.get("ENABLE_GEMINI_ORCHESTRATION", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def _normalized_reply(text: str) -> str:
+    return " ".join((text or "").strip().lower().split())
+
+
+def _is_affirmative(text: str) -> bool:
+    value = _normalized_reply(text)
+    return value in {"ยืนยัน", "ยืนยันค่ะ", "ยืนยันครับ", "ถูก", "ถูกต้อง", "ใช่", "ตกลง", "โอเค", "ok", "ได้เลย"}
+
+
+def _is_negative(text: str) -> bool:
+    value = _normalized_reply(text)
+    return (value in {"ไม่", "ไม่ใช่", "ไม่ถูก", "ไม่ถูกต้อง", "ผิด", "แก้", "แก้ไข", "ยกเลิก"}
+            or value.startswith(("ไม่ใช่", "ไม่ถูก", "ไม่เอา", "ไม่ยืนยัน")))
+
+
+def _has_reply_phrase(text: str, phrases: list[str]) -> bool:
+    value = _normalized_reply(text)
+    for phrase in phrases:
+        candidate = _normalized_reply(phrase)
+        if candidate in {"ok", "ยัง"}:
+            if value == candidate:
+                return True
+        elif candidate in value:
+            return True
+    return False
+
+
+def _is_admin_contact_request(text: str) -> bool:
+    value = _normalized_reply(text)
+    return any(_normalized_reply(term) in value for term in _ADMIN_CONTACT_TERMS)
+
+
+def _is_out_of_scope(text: str) -> bool:
+    value = _normalized_reply(text)
+    return any(_normalized_reply(term) in value for term in _OUT_OF_SCOPE_TERMS)
 
 
 def _form_fallback_text() -> str:
@@ -282,7 +332,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     # ── ยืนยันสร้าง ticket ──
     if phase == "confirm":
         fields = session.get("fields", {})
-        if "ยืนยัน" in text or "ใช่" in text or "ถูกต้อง" in text:
+        if _is_affirmative(text):
             ticket_no, err = _create_ticket_from_fields(fields)
             if err:
                 # ไม่เปิดเผยรายละเอียด DB/exception ให้ผู้ใช้เห็น
@@ -296,7 +346,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             natural = phrase_repair_reply("ticket_created", f"เลข ticket: {ticket_no}")
             return natural or (f"✅ สร้าง Ticket ให้แล้วนะคะ: **{ticket_no}**\n"
                     "เจ้าหน้าที่จะรีบดำเนินการให้เร็วที่สุดเลยค่ะ ขอบคุณมากนะคะ 🙏 ถ้ามีอะไรเพิ่มเติม พิมพ์บอกได้เสมอค่ะ")
-        if "แก้ไข" in text or "ไม่" in text or "ผิด" in text:
+        if _is_negative(text):
             session["phase"] = "collecting"
             # reset ให้ถามใหม่
             session["fields"] = {}
@@ -306,7 +356,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
 
     # ── phase=new / เริ่มคุย / หลังทำเสร็จ ──
     # ตรวจว่าแก้ได้แล้ว (จากขั้นตอนก่อนหน้า)
-    if phase == "done" and any(w in text for w in RESOLVED_WORDS):
+    if phase == "done" and _has_reply_phrase(text, RESOLVED_WORDS):
         clear_session(user_id)
         return "ดีใจด้วยนะคะ 🎉 ที่แก้ได้ด้วยตัวเอง! บันทึกไว้แล้วนะคะ ถ้ามีปัญหาอื่นอีก พิมพ์บอกเราได้เสมอเลยค่ะ 😊"
 
@@ -314,8 +364,8 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     # และคำตอบ 'หายแล้ว/ยังไม่หาย' จะถูกตีความเป็นข้อความใหม่
     if phase == "new" and session.get("resolving"):
         # ต้องตรวจคำปฏิเสธก่อน เพราะ "ยังไม่หาย" มี substring "หาย"
-        not_resolved = any(w in text for w in NOT_RESOLVED_WORDS)
-        resolved = any(w in text for w in RESOLVED_WORDS) and not not_resolved
+        not_resolved = _has_reply_phrase(text, NOT_RESOLVED_WORDS)
+        resolved = _has_reply_phrase(text, RESOLVED_WORDS) and not not_resolved
         if not_resolved:
             session["phase"] = "new"
             session["resolving"] = False
@@ -339,7 +389,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         if resolved:
             # ── บันทึก self-service จริง (ตาราง self_service_cases) ──
             try:
-                from app.models import SessionLocal, SelfServiceCase
+                from app.models import SelfServiceCase
                 _db = SessionLocal()
                 try:
                     _device = (session.get("saved_device") or session.get("symptom_buf") or "")[:64]
@@ -379,7 +429,13 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     from app.company_catalog import classify, search_products, find_product, ALL_PRODUCTS, \
         SERVICES, COMPANY, PRODUCT_CATEGORIES, contact_text
     _biz = classify(text)
-    if _biz == "business":
+    if _biz == "business" and not (_is_product_followup(text) and session.get("last_product")):
+        # A business question explicitly changes the subject. Park any active
+        # repair/lead/tracking state so the next message starts cleanly.
+        if phase not in ("new", "done") or session.get("resolving"):
+            keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+            session = {"phase": "new", "fields": {}, **keep}
+            save_session(user_id, session)
         _reply = _answer_business(text)
         # จำ context สินค้าล่าสุดไว้ใช้ตอบคำถามติดตาม (เช่น 'มีขนาดอื่นไหม')
         _prod = _take_pending_product()
@@ -404,7 +460,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                     "img": _prod.get("img")}})
             except Exception as _e:
                 print(f"[last_product save err] {_e}")
-        return _reply
+        return _reply  # wrapper handle_message() จะ log/จัดรูปแบบให้เอง
 
     # ── คำถามติดตามสินค้า (ขนาด/รุ่น/สเปก/เทียบ) — อิงจากสินค้าที่เพิ่งคุย ชนะ flow แจ้งซ่อม ──
     if _is_product_followup(text) and _biz != "repair" and session.get("last_product"):
@@ -463,7 +519,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                 "แล้วตอนนี้มีอาการอย่างไรบ้างคะ?")
 
     # กรณี resolving อยู่ แล้วบอกไม่หาย
-    if session.get("resolving") and any(w in text for w in NOT_RESOLVED_WORDS):
+    if session.get("resolving") and _has_reply_phrase(text, NOT_RESOLVED_WORDS):
         session["phase"] = "collecting"
         session["fields"] = {"symptom": session.get("initial_symptom", text)}
         save_session(user_id, session)
@@ -474,10 +530,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         clear_session(user_id)
         return handle_message(user_id, text, reply_token, group)
 
-    return ("พร้อมช่วยเหลือคุณเสมอค่ะ 😊\n"
-            "🛍️ อยากดูสินค้า/บริการ พิมพ์ชื่อได้เลย เช่น 'Iwa AiBoard' 'หลักสูตรภาษาอังกฤษ' 'สื่อปฐมวัย'\n"
-            "🏢 สนใจข้อมูลบริษัท พิมพ์ 'เกี่ยวกับบริษัท' หรือ 'ติดต่อ'\n"
-            "🔧 เจอปัญหาอุปกรณ์ พิมพ์ 'แจ้งซ่อม' หรือบอกอาการ เช่น 'จอไม่ติด' — เราจะช่วยหาวิธีแก้เบื้องต้นให้ก่อนนะคะ")
+    return _answer_out_of_scope()
 
 
 def _create_ticket_from_fields(fields: dict):
@@ -536,34 +589,46 @@ def _create_ticket_from_fields(fields: dict):
 
 def _notify_ticket_created(fields: dict, ticket_no: str):
     """แจ้งเตือนหลังสร้าง ticket: กลุ่ม LINE + push ส่วนตัวเจ้าหน้าที่ (จากตาราง users/line_staff)"""
-    global LINE_GROUP_ID
-    from app.line_bot import send_line_push, LINE_GROUP_ID as GID
-    msg = (f"🆕 **Ticket ใหม่: {ticket_no}**\n"
-           f"ผู้แจ้ง: {fields.get('name','-')}\n"
-           f"เบอร์: {fields.get('phone','-')}\n"
-           f"อุปกรณ์/ห้อง: {fields.get('device_id','-')}\n"
-           f"อาการ: {fields.get('symptom','-')}\n"
-           f"ช่องทาง: LINE")
-    # กลุ่ม LINE เจ้าหน้าที่
-    group_id = GID
-    if group_id:
-        send_line_push(group_id, msg)
-    # push ส่วนตัวเจ้าหน้าที่จากตาราง users (role it_support/admin) + line_staff_contacts
-    db = SessionLocal()
     try:
-        staff = db.execute(text(
-            "SELECT line_user_id FROM users WHERE role IN ('it_support','admin') AND line_user_id IS NOT NULL AND is_active=TRUE"
-        )).fetchall()
-        extra = db.execute(text("SELECT user_id FROM line_staff_contacts")).fetchall()
-    finally:
-        db.close()
-    seen = set()
-    for (uid,) in staff + extra:
-        if uid and uid not in seen and uid != fields.get("_line_user"):
-            seen.add(uid)
-            send_line_push(uid, msg)
-    # email แจ้ง (ย่อ: ผูกกับ SMTP ทีหลัง — ตอนนี้ log)
-    print(f"[notify] ticket {ticket_no} -> group/IT staff + email (placeholder)")
+        from app.line_bot import send_line_push, LINE_GROUP_ID as GID
+        msg = (f"🆕 **Ticket ใหม่: {ticket_no}**\n"
+               f"ผู้แจ้ง: {fields.get('name','-')}\n"
+               f"เบอร์: {fields.get('phone','-')}\n"
+               f"อุปกรณ์/ห้อง: {fields.get('device_id','-')}\n"
+               f"อาการ: {fields.get('symptom','-')}\n"
+               f"ช่องทาง: LINE")
+        # กลุ่ม LINE เจ้าหน้าที่
+        if GID:
+            send_line_push(GID, msg)
+        # push ส่วนตัวเจ้าหน้าที่จากตาราง users + line_staff_contacts
+        # ดึงรายชื่อเจ้าหน้าที่ — แยก try ต่อ query เพราะตารางเสริม (line_staff_contacts)
+        # อาจไม่มีในบางสภาพแวดล้อม และไม่ควรทำให้การแจ้งเตือนทั้งหมดล้ม
+        staff, extra = [], []
+        db = SessionLocal()
+        try:
+            try:
+                staff = db.execute(text(
+                    "SELECT line_user_id FROM users WHERE role IN ('it_support','admin','owner') "
+                    "AND line_user_id IS NOT NULL AND is_active=TRUE"
+                )).fetchall()
+            except Exception:
+                db.rollback()
+            try:
+                extra = db.execute(text("SELECT user_id FROM line_staff_contacts")).fetchall()
+            except Exception:
+                db.rollback()
+        finally:
+            db.close()
+        seen = set()
+        for (uid,) in staff + extra:
+            if uid and uid not in seen and uid != fields.get("_line_user"):
+                seen.add(uid)
+                send_line_push(uid, msg)
+        # email แจ้ง (ย่อ: ผูกกับ SMTP ทีหลัง — ตอนนี้ log)
+        print(f"[notify] ticket {ticket_no} -> group/IT staff + email (placeholder)")
+    except Exception:
+        # Notification failure must not hide a ticket that was already created.
+        print(f"[notify] failed for ticket {ticket_no}")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -578,6 +643,48 @@ def _answer_business(text: str) -> str:
     if "ติดต่อ" in body and "LINE:" in body:
         return body + "\n\nยังมีเรื่องอื่นให้ช่วยไหมคะ? พิมพ์ 'สินค้า' หรือ 'แจ้งซ่อม' ได้เลย"
     return body + "\n\n🙂 ยังมีเรื่องอื่นให้ช่วยไหมคะ? พิมพ์ชื่อสินค้า/บริการที่สนใจ หรือ 'เมนู' เพื่อดูตัวเลือก"
+
+
+def _answer_admin_contact() -> str:
+    """ตอบช่องทางติดต่อทันที แม้ผู้ใช้อยู่กลาง flow แจ้งซ่อมหรือขาย"""
+    from app.company_catalog import contact_text
+    return (
+        "ได้เลยค่ะ 😊 หากต้องการคุยกับแอดมินหรือเจ้าหน้าที่ สามารถติดต่อได้ทันทีตามช่องทางนี้ค่ะ\n\n"
+        f"📞 ช่องทางติดต่อ:\n{contact_text()}\n\n"
+        "หากกำลังรอแอดมินตอบกลับ รบกวนรอประมาณ 5–10 นาทีในเวลาทำการนะคะ "
+        "ทีมงานจะรีบดูแลให้ค่ะ"
+    )
+
+
+def _answer_out_of_scope() -> str:
+    """ตอบอย่างสุภาพเมื่อคำถามอยู่นอกขอบเขตของระบบ"""
+    from app.company_catalog import contact_text
+    return (
+        "ขออภัยค่ะ ระบบนี้ให้บริการข้อมูลสินค้า/บริการของบริษัท รับแจ้งซ่อมอุปกรณ์ "
+        "และช่วยติดตาม Ticket เป็นหลักนะคะ\n\n"
+        "หากต้องการสอบถามเรื่องอื่นหรือขอให้แอดมินช่วยดูแลต่อ ติดต่อได้ที่:\n"
+        f"{contact_text()}\n\n"
+        "กรุณารอประมาณ 5–10 นาทีในเวลาทำการสำหรับการติดต่อกลับนะคะ 🙏"
+    )
+
+
+def _format_product_reply(prod: dict, extra: str = "") -> str:
+    """ตอบสินค้าโดยใช้เฉพาะข้อมูลใน company_catalog และปิดคำถามให้ครบ"""
+    price = prod.get("price")
+    price_line = f"💰 ราคา: {price}" if price not in (None, "") else "💰 ราคา/โปรโมชั่น: กรุณาติดต่อทีมงานเพื่อขอใบเสนอราคาตามรุ่นและจำนวนค่ะ"
+    link_line = f"🔗 รายละเอียดเพิ่มเติม: {prod['link']}" if prod.get("link") else ""
+    parts = [
+        f"📦 **{prod.get('name', 'สินค้า')}**",
+        f"หมวด: {prod.get('category', '-')}",
+        f"รายละเอียด: {prod.get('summary', '-')}",
+    ]
+    if extra:
+        parts.append(extra.strip())
+    parts.append(price_line)
+    if link_line:
+        parts.append(link_line)
+    parts.append("หากต้องการสอบถามราคา ขอใบเสนอราคา หรือให้ทีมงานแนะนำรุ่นที่เหมาะสม พิมพ์ **ติดต่อเรา** ได้เลยนะคะ")
+    return "\n".join(parts)
 
 
 def _ab_inner(text: str) -> str:
@@ -652,10 +759,7 @@ def _ab_inner(text: str) -> str:
             extra = f"\n\n✨ {cat['common']}" if cat else ""
         _set_pending_image(prod.get("img") or "")
         _set_pending_product(prod)
-        return (f"📦 **{prod['name']}**\n"
-                f"หมวด: {prod['category']}\n"
-                f"รายละเอียด: {prod['summary']}{extra}\n\n"
-                "สนใจสั่งซื้อ/สอบถามราคา ติดต่อทีมงานได้เลยค่ะ (พิมพ์ 'ติดต่อ')")
+        return _format_product_reply(prod, extra)
     # 5) เจอสินค้าหลายตัว → ขึ้นรายการ
     res = search_products(text)
     if res:
@@ -718,29 +822,17 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     _clear_pending_image()  # เริ่มตอบใหม่ทุกครั้ง ไม่ให้ภาพเก่าติดไปกับคำตอบอื่น
     from app.chatbot_helpers import (detect_intent, detect_ambiguous, log_conversation,
                                      get_profile, save_profile, get_product_hint,
-                                     save_lead, notify_sales_group)
+                                     save_lead, notify_sales_group, get_cached_faq_reply,
+                                     record_faq_interaction, format_chatbot_reply)
     session = get_session(user_id)
     phase = session.get("phase", "new")
     intent = detect_intent(text)
-    # Gemini ช่วยจำแนกเจตนา (เฉพาะเมื่อ quota มี) — ใช้แทน keyword ถ้าเจตนาไม่ชัดหรือพลาด
-    # กัน spam quota + กันทำลาย follow-up/product: ใช้เฉพาะ phase ใหม่ + ข้อความไม่เกี่ยวกับสินค้า
-    from app.company_catalog import _fuzzy_product_names
-    _has_product = bool(_fuzzy_product_names(text))
-    if (phase in ("new",) and intent in ("other", "service", "buy")
-            and not _is_product_followup(text) and not _has_product):
-        try:
-            from app.gemini_service import classify_intent
-            _gi = classify_intent(text)
-            if _gi and _gi.get("confidence", 0) >= 0.6:
-                _gintent = _gi.get("intent")
-                if _gintent in ("repair", "buy", "product", "service", "company", "contact", "track", "human"):
-                    intent = _gintent
-        except Exception:
-            pass
     profile = get_profile(user_id)
     name_known = profile.get("name")
 
-    def _finish(reply: str, resolved: bool = None, intent_used: str = intent, qr: list | None = None):
+    def _finish(reply: str, resolved: bool = None, intent_used: str = intent,
+                qr: list | None = None, faq_cacheable: bool | None = None):
+        reply = format_chatbot_reply(reply)
         # ฝาก quick-reply suggestions ลง session ให้ main ดึงไป attach กับ reply (G)
         if qr:
             try:
@@ -753,12 +845,63 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
             log_conversation(user_id, text, reply, intent_used, resolved)
         except Exception:
             pass
+        try:
+            record_faq_interaction(text, reply, intent, cacheable=faq_cacheable)
+        except Exception:
+            pass
         return reply
+
+    from app.assistant_policy import contains_prompt_injection, classify_urgency, INJECTION_REPLY, SAFETY_REPLY
+    # Security and safety gates must run before any optional Gemini call.
+    if contains_prompt_injection(text):
+        return _finish(INJECTION_REPLY, intent_used="security_refusal")
+    if classify_urgency(text) == "safety_critical":
+        save_session(user_id, {"phase": "collecting", "fields": {"symptom": text, "urgency": "safety_critical"}})
+        return _finish(SAFETY_REPLY, intent_used="safety_critical")
+
+    # Contact/admin requests are a high-priority interrupt. Do this before
+    # collecting fields so phrases such as "แอดมิน", "ติดต่อเรา", or a Rich
+    # Menu contact action never get mistaken for a name/device/symptom.
+    if _is_admin_contact_request(text):
+        keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+        save_session(user_id, {"phase": "new", "fields": {}, **keep})
+        return _finish(_answer_admin_contact(), intent_used="admin_contact")
+
+    # Clearly unrelated questions should receive a graceful hand-off even if
+    # the user is currently midway through a repair or sales flow.
+    if _is_out_of_scope(text):
+        keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+        save_session(user_id, {"phase": "new", "fields": {}, **keep})
+        return _finish(_answer_out_of_scope(), intent_used="out_of_scope")
+
+    # Reuse only stable product/service knowledge. Repair, lead, tracking, and
+    # confirmation flows must always use the current user's session state.
+    if (phase in ("new", "done") and not session.get("resolving")
+            and not _is_product_followup(text)):
+        cached = get_cached_faq_reply(text, intent)
+        if cached:
+            return _finish(cached, intent_used=f"faq_cached_{intent}")
+
+    # Gemini classifier is opt-in. Keyword routing remains the stable default.
+    from app.company_catalog import _fuzzy_product_names
+    _has_product = bool(_fuzzy_product_names(text))
+    if (ENABLE_GEMINI_CLASSIFIER and phase in ("new",) and intent in ("other", "service", "buy")
+            and not _is_product_followup(text) and not _has_product):
+        try:
+            from app.gemini_service import classify_intent
+            _gi = classify_intent(text)
+            if _gi and _gi.get("confidence", 0) >= 0.6:
+                _gintent = _gi.get("intent")
+                if _gintent in ("repair", "buy", "product", "service", "company", "contact", "track", "human"):
+                    intent = _gintent
+        except Exception:
+            pass
 
     # ── Gemini orchestration layer (opt-in): ให้ Gemini ตัดสินใจ+ร่างคำตอบธรรมชาติ
     # เฉพาะ phase ใหม่ + ข้อความปกติ (ไม่ใช่ flow เจาะจงที่ rule จัดการได้ดีอยู่แล้ว)
     # ถ้า Gemini ล่ม/429 → fallback ไป rule FSM เดิม (ปลอดภัย ไม่พัง)
-    if (phase in ("new", "done") and intent in ("product", "service", "company", "greeting", "thanks", "other")
+    if (ENABLE_GEMINI_ORCHESTRATION and phase in ("new", "done")
+            and intent in ("product", "service", "company", "greeting", "thanks", "other")
             and not _is_product_followup(text)):
         try:
             from app.gemini_service import gemini_orchestrate
@@ -793,14 +936,6 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                     return _finish(_go["reply"], intent_used=f"orchestrate_{action}")
         except Exception:
             pass
-
-    from app.assistant_policy import contains_prompt_injection, classify_urgency, INJECTION_REPLY, SAFETY_REPLY
-    # Security and safety gates run before normal intent/session routing.
-    if contains_prompt_injection(text):
-        return _finish(INJECTION_REPLY, intent_used="security_refusal")
-    if classify_urgency(text) == "safety_critical":
-        save_session(user_id, {"phase": "collecting", "fields": {"symptom": text, "urgency": "safety_critical"}})
-        return _finish(SAFETY_REPLY, intent_used="safety_critical")
 
     # ── TRACK_PENDING: อยู่ระหว่างรอเลข ticket — ข้อความถัดไปเป็นเลข/รหัส → ตอบสถานะ ──
     if phase == "track_pending":
@@ -871,7 +1006,7 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                 return _finish("ขอบคุณนะคะ ขอ **เบอร์โทร** ไว้ติดต่อกลับด้วยนะคะ 😊")
         # ครบชื่อ+เบอร์ → ถามยืนยัน
         elif not lead.get("confirm"):
-            if any(k in t for k in ["ยืนยัน", "ใช่", "ถูกต้อง", "ถูก", "ok", "ตกลง", "โอเค"]):
+            if _is_affirmative(t):
                 lead["confirm"] = True
         # else: ครบแล้วแต่ยังตอบซ้ำ → ถามยืนยันต่อไป
 
@@ -884,6 +1019,11 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                                intent_used="lead_dup")
             lid = save_lead(user_id, lead.get("name"), lead.get("phone"),
                             lead.get("interest"), lead.get("products", []))
+            if lid is None:
+                save_session(user_id, {**session, "phase": "lead_collect", "lead": lead})
+                return _finish("ขออภัยค่ะ ระบบยังบันทึกข้อมูลติดต่อไม่ได้ชั่วคราว 🙏 "
+                               "กรุณาพิมพ์ **ยืนยัน** อีกครั้ง หรือติดต่อทีมงานโดยตรงนะคะ",
+                               intent_used="lead_save_failed")
             notify_sales_group(lid, lead.get("name"), lead.get("phone"),
                                lead.get("interest"), ", ".join(lead.get("products", [])),
                                human=bool(lead.get("human")))

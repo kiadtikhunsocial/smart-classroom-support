@@ -5,13 +5,30 @@ chatbot_helpers.py — ฟังก์ชันช่วยเสริม LINE 
   E. บันทึก lead + แจ้งทีมขาย (sales_leads)
   F. profile/ความจำลูกค้า (จำชื่อ/สินค้าที่เคยกดดู จาก userId)
 """
+import hashlib
 import json
+import logging
+import os
 import re
-from datetime import datetime
+import unicodedata
+from datetime import datetime, timezone
 
 from sqlalchemy import text
-from app.models import SessionLocal
+from sqlalchemy.exc import IntegrityError
+from app.models import ChatbotFAQ, ChatbotProfile, SessionLocal
 from app.company_catalog import ALL_PRODUCTS
+
+
+logger = logging.getLogger(__name__)
+
+try:
+    FAQ_CACHE_TTL_SECONDS = max(0, int(os.environ.get("FAQ_CACHE_TTL_SECONDS", "604800")))
+except (TypeError, ValueError):
+    FAQ_CACHE_TTL_SECONDS = 604800
+
+# Only stable knowledge answers are replayed from this table. Repair, lead,
+# tracking, and confirmation replies contain user/session-specific data.
+FAQ_CACHEABLE_INTENTS = {"product", "buy", "service", "company", "catalog"}
 
 # ── เจตนา (finer than business/repair) ──
 INTENTS = {
@@ -66,6 +83,121 @@ def detect_intent(text: str) -> str:
     if prod_hit:
         return "product"
     return "other"
+
+
+def normalize_question(message: str) -> str:
+    """สร้างรูปแบบกลางของคำถาม เพื่อรวมคำถามซ้ำที่ต่างกันแค่คำสุภาพ/วรรคตอน"""
+    value = unicodedata.normalize("NFKC", str(message or "")).casefold()
+    value = value.translate(str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789"))
+    value = value.replace("เท่าไร", "เท่าไหร่")
+    value = re.sub(r"[^\wก-๙\s]", " ", value, flags=re.UNICODE)
+    value = re.sub(r"\s+", " ", value).strip()
+    value = re.sub(r"^(ขอสอบถาม|รบกวนสอบถาม|ขอทราบ|อยากทราบ)\s+", "", value)
+    for _ in range(2):
+        value = re.sub(r"(?:นะคะ|นะครับ|ครับ|ค่ะ|คะ|นะ|หน่อย|ด้วย|ที)$", "", value).strip()
+    return value
+
+
+def _question_key(normalized_question: str) -> str:
+    return hashlib.sha256(normalized_question.encode("utf-8")).hexdigest()
+
+
+def format_chatbot_reply(reply: str) -> str:
+    """จัดรูปแบบคำตอบกลางให้ทุกช่องทางส่งข้อความที่อ่านง่ายสม่ำเสมอ
+
+    LINE text messages do not render Markdown, so emphasis markers are
+    removed and list/spacing conventions are normalized here.
+    """
+    value = str(reply or "").replace("\r\n", "\n").replace("\r", "\n")
+    value = re.sub(r"\*\*(.*?)\*\*", r"\1", value, flags=re.DOTALL)
+    value = re.sub(r"(?m)^[ \t]*[-*]\s+", "• ", value)
+    value = re.sub(r"(?m)^(\s*)(\d+)[)]\s+", r"\1\2. ", value)
+    value = re.sub(r"[ \t]+([,،.!?])", r"\1", value)
+    value = re.sub(r"[ \t]+\n", "\n", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    value = re.sub(r"[ \t]{2,}", " ", value)
+    return value.strip()[:5000]
+
+
+def get_cached_faq_reply(message: str, intent: str | None = None) -> str | None:
+    """คืนคำตอบมาตรฐานของคำถามซ้ำ ถ้าเป็น intent ที่ปลอดภัยและยังไม่หมดอายุ"""
+    if intent not in FAQ_CACHEABLE_INTENTS:
+        return None
+    normalized = normalize_question(message)
+    if not normalized:
+        return None
+    db = SessionLocal()
+    try:
+        row = db.get(ChatbotFAQ, _question_key(normalized))
+        if not row or not row.answer:
+            return None
+        if FAQ_CACHE_TTL_SECONDS:
+            last_seen = row.last_seen
+            if last_seen and last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=timezone.utc)
+            if last_seen and (datetime.now(timezone.utc) - last_seen).total_seconds() > FAQ_CACHE_TTL_SECONDS:
+                return None
+        return format_chatbot_reply(row.answer)
+    except Exception:
+        logger.exception("Could not read chatbot FAQ cache")
+        return None
+    finally:
+        db.close()
+
+
+def record_faq_interaction(message: str, reply: str, intent: str,
+                           cacheable: bool | None = None) -> None:
+    """บันทึกคำถามทุกประเภทและเพิ่ม hit_count เมื่อเจอคำถามซ้ำ"""
+    normalized = normalize_question(message)
+    if not normalized:
+        return
+    now = datetime.now(timezone.utc)
+    answer = format_chatbot_reply(reply)
+    should_cache = cacheable if cacheable is not None else intent in FAQ_CACHEABLE_INTENTS
+    key = _question_key(normalized)
+    db = SessionLocal()
+    try:
+        row = db.get(ChatbotFAQ, key)
+        if row:
+            row.hit_count = int(row.hit_count or 0) + 1
+            row.last_seen = now
+            # Keep the latest deterministic answer for stable knowledge intents.
+            if should_cache and answer:
+                row.answer = answer
+                row.intent = intent
+        else:
+            db.add(ChatbotFAQ(
+                question_key=key,
+                normalized_question=normalized[:2000],
+                sample_question=str(message or "")[:500],
+                answer=answer[:5000] if should_cache and answer else None,
+                intent=intent,
+                hit_count=1,
+                created_at=now,
+                last_seen=now,
+            ))
+        db.commit()
+    except IntegrityError:
+        # Two different users may ask the same question at the same time.
+        # Recover the insert race and count the interaction instead of losing it.
+        db.rollback()
+        try:
+            row = db.get(ChatbotFAQ, key)
+            if row:
+                row.hit_count = int(row.hit_count or 0) + 1
+                row.last_seen = now
+                if should_cache and answer:
+                    row.answer = answer
+                    row.intent = intent
+                db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Could not recover chatbot FAQ insert race")
+    except Exception:
+        db.rollback()
+        logger.exception("Could not record chatbot FAQ interaction")
+    finally:
+        db.close()
 
 
 # ═══════════════════ B. Log สนทนา ═══════════════════
@@ -129,19 +261,27 @@ def get_profile(user_id: str) -> dict:
     """ดึง profile ลูกค้าจากตาราง chatbot_profiles (สร้างให้ถ้าไม่เคย)"""
     db = SessionLocal()
     try:
-        row = db.execute(
-            text("SELECT profile FROM chatbot_profiles WHERE user_id=:u"), {"u": user_id}
-        ).fetchone()
-        if row and row[0]:
-            val = row[0]
-            return val if isinstance(val, dict) else json.loads(val)
-        # ไม่มี → สร้างแถวเปล่า
-        db.execute(text("INSERT INTO chatbot_profiles (user_id, profile, updated_at) "
-                        "VALUES (:u,'{}'::jsonb,:t) ON CONFLICT (user_id) DO NOTHING"),
-                   {"u": user_id, "t": datetime.now()})
-        db.commit()
+        row = db.get(ChatbotProfile, user_id)
+        if row:
+            # แถวมีอยู่แล้ว — profile อาจว่าง ({}) ได้ ห้าม INSERT ซ้ำ (ชน primary key)
+            val = row.profile
+            if isinstance(val, dict):
+                return dict(val)
+            parsed = json.loads(val) if val else {}
+            return parsed if isinstance(parsed, dict) else {}
+        # ยังไม่มีแถว → สร้างแถวเปล่า; ถ้าชนกันเพราะ request พร้อมกัน ให้ถือว่าสำเร็จ
+        try:
+            db.add(ChatbotProfile(
+                user_id=user_id,
+                profile={},
+                updated_at=datetime.now(timezone.utc),
+            ))
+            db.commit()
+        except IntegrityError:
+            db.rollback()
     except Exception:
         db.rollback()
+        logger.exception("Could not read/create chatbot profile for user %s", user_id)
     finally:
         db.close()
     return {}
@@ -151,16 +291,25 @@ def save_profile(user_id: str, patch: dict):
     """อัปเดต/merge profile ของ user"""
     db = SessionLocal()
     try:
-        cur = get_profile(user_id)
+        row = db.get(ChatbotProfile, user_id)
+        current = row.profile if row and row.profile else {}
+        if not isinstance(current, dict):
+            current = json.loads(current)
+        cur = dict(current) if isinstance(current, dict) else {}
         cur.update({k: v for k, v in patch.items() if v})
-        db.execute(
-            text("INSERT INTO chatbot_profiles (user_id, profile, updated_at) VALUES (:u,:p,:t) "
-                 "ON CONFLICT (user_id) DO UPDATE SET profile=:p, updated_at=:t"),
-            {"u": user_id, "p": json.dumps(cur, ensure_ascii=False), "t": datetime.now()},
-        )
+        if row:
+            row.profile = cur
+            row.updated_at = datetime.now(timezone.utc)
+        else:
+            db.add(ChatbotProfile(
+                user_id=user_id,
+                profile=cur,
+                updated_at=datetime.now(timezone.utc),
+            ))
         db.commit()
     except Exception:
         db.rollback()
+        logger.exception("Could not save chatbot profile for user %s", user_id)
     finally:
         db.close()
 

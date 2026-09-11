@@ -10,28 +10,27 @@ gemini_service.py — Google Gemini API (REST) สำหรับ AI Troubleshoo
 import os
 import json
 import re
+from typing import Optional
+
+from app.ai_client import is_available as _ai_available
+from app.ai_client import request_json, request_text
 
 
 def mask_pii(text: str) -> str:
     """mask ข้อมูลส่วนบุคคลก่อนส่ง Gemini — ลดความเสี่ยง data privacy กับ 3rd-party AI
-    - เบอร์โทร (ไทย 10 หลัก) → 08X-XXX-XXXX
-    - email → a***@domain
-    """
+    - เบอร์โทร (ไทย) → 08X-XXX-XXXX   - email → a***@domain"""
     if not text:
         return text
-    # เบอร์ไทย: 08xxxxxxxx / 0-xxxx-xxxx / +66...
     text = re.sub(r'(?<!\d)(\+?66)?0\d{1,2}[- ]?\d{3}[- ]?\d{3,4}', '08X-XXX-XXXX', text)
-    # email
-    text = re.sub(r'[\w.+-]+@[\w-]+\.[\w.]+', lambda m: m.group(0)[:2] + '***@' + m.group(0).split('@')[1], text)
+    text = re.sub(r'[\w.+-]+@[\w-]+\.[\w.]+',
+                  lambda m: m.group(0).split('@')[0][:2] + '***@' + m.group(0).split('@')[1], text)
     return text
 
-import time
-from typing import Optional
-import httpx
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 _ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+ENABLE_NATURAL_REPLIES = os.environ.get("ENABLE_GEMINI_NATURAL_REPLIES", "0").lower() in {"1", "true", "yes", "on"}
 
 # Prompt ที่บังคับตอบจาก KB เท่านั้น (ตาม spec 4.6 หลักการออกแบบ Prompt)
 try:
@@ -70,7 +69,7 @@ def explain_steps(symptom_text: str, kb_steps: list, device_type: str = "") -> s
     รับมือกับคำกำกวม/ภาษาพูดที่ลูกค้าพิมพ์หลากหลาย แล้วอธิบายขั้นตอนให้เข้าใจง่าย
     ยังอิงจาก kb_steps ที่ให้เท่านั้น (ห้ามสร้างขั้นตอนใหม่) — กัน hallucination
     คืนข้อความไทย หรือ None ถ้า Gemini ล่ม (caller ใช้ list เปล่าแทน)"""
-    if not kb_steps:
+    if not ENABLE_NATURAL_REPLIES or not kb_steps:
         return None
     if not API_KEY:
         return None
@@ -86,32 +85,16 @@ def explain_steps(symptom_text: str, kb_steps: list, device_type: str = "") -> s
         "ปิดท้ายด้วยคำแนะนำว่า ถ้าทำแล้วไม่หาย ให้บอก 'ยังไม่หาย' เพื่อให้ช่างช่วยต่อ\n"
         "ห้ามประดิษฐ์ขั้นตอนที่ไม่ใช่ในรายการ ห้ามแนะนำการถอด/เปิดฝาอุปกรณ์ ห้ามใช้คำว่า 'ฉัน' ใช้ 'คะ/ค่ะ'"
     )
-    body = {
-        "contents": [{"parts": [{"text": _BASE_POLICY}, {"text": prompt}]}],
-        "generationConfig": {"temperature": 0.6, "maxOutputTokens": 500},
-    }
-    try:
-        resp = None
-        for attempt in range(2):
-            try:
-                resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=12.0)
-            except Exception:
-                resp = None
-            if resp is not None and resp.status_code == 200:
-                break
-            if attempt < 1:
-                time.sleep(0.8)
-        if resp is None or resp.status_code != 200:
-            return None
-        data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        return text if text else None
-    except Exception:
-        return None
+    return request_text(
+        [_BASE_POLICY, prompt],
+        generation_config={"temperature": 0.2, "maxOutputTokens": 500},
+        timeout=12.0,
+        retries=1,
+    )
 
 
 def is_available() -> bool:
-    return bool(API_KEY)
+    return _ai_available()
 
 
 def classify_intent(text: str) -> dict | None:
@@ -132,35 +115,29 @@ def classify_intent(text: str) -> dict | None:
         "ตอบ JSON เท่านั้น รูปแบบ: "
         '{"intent":"...","product":"ชื่อสินค้า(ถ้าเจอ ไม่มี=ว่าง)","service":"ชื่อบริการ(ถ้าเจอ ไม่มี=ว่าง)","confidence":0.0-1.0}'
     )
-    body = {
-        "contents": [{"parts": [{"text": _BASE_POLICY}, {"text": prompt}]}],
-        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 120},
-    }
-    try:
-        resp = None
-        for attempt in range(2):
-            try:
-                resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=8.0)
-            except Exception:
-                resp = None
-            if resp is not None and resp.status_code == 200:
-                break
-            if attempt < 1:
-                time.sleep(0.5)
-        if resp is None or resp.status_code != 200:
-            return None
-        t = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        if t.startswith("```"):
-            t = t.strip("`").lstrip("json").strip()
-        parsed = json.loads(t)
-        return {
-            "intent": parsed.get("intent", "other"),
-            "product": parsed.get("product", ""),
-            "service": parsed.get("service", ""),
-            "confidence": float(parsed.get("confidence", 0)),
-        }
-    except Exception:
+    parsed = request_json(
+        [_BASE_POLICY, prompt],
+        generation_config={"temperature": 0.0, "maxOutputTokens": 120},
+        timeout=8.0,
+        retries=1,
+    )
+    if not parsed:
         return None
+    valid_intents = {"repair", "buy", "product", "service", "company", "contact",
+                     "track", "human", "greeting", "thanks", "other"}
+    intent = parsed.get("intent", "other")
+    if intent not in valid_intents:
+        intent = "other"
+    try:
+        confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0))))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return {
+        "intent": intent,
+        "product": str(parsed.get("product", "") or ""),
+        "service": str(parsed.get("service", "") or ""),
+        "confidence": confidence,
+    }
 
 
 def extract_fields_ai(text: str, known: dict, missing_keys: list[str]) -> dict:
@@ -179,28 +156,26 @@ def extract_fields_ai(text: str, known: dict, missing_keys: list[str]) -> dict:
         'ตอบเป็น JSON เท่านั้น: {"name": "...หรือ null", "phone": "...หรือ null", '
         '"device_id": "...หรือ null", "symptom": "...หรือ null"}'
     )
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 200},
-    }
-    try:
-        resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=5.0)
-        if resp.status_code != 200:
-            return {}
-        raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        if raw.startswith("```"):
-            raw = raw.strip("`").lstrip("json").strip()
-        parsed = json.loads(raw)
-        return {k: v for k, v in parsed.items() if v and k in missing_keys}
-    except Exception:
+    parsed = request_json(
+        [prompt],
+        generation_config={"temperature": 0.0, "maxOutputTokens": 200},
+        timeout=5.0,
+        retries=1,
+    )
+    if not parsed:
         return {}
+    return {
+        k: parsed.get(k)
+        for k in missing_keys
+        if parsed.get(k) not in (None, "")
+    }
 
 
 def phrase_slot_question(known: dict, next_field: str, last_user_msg: str) -> str | None:
     """ให้ Gemini ถามข้อมูลที่ขาดต่อไปแบบธรรมชาติ อ้างอิงสิ่งที่ลูกค้าเพิ่งพูด
     แทนการดึง template คงที่ซ้ำทุกครั้ง — ลดความรู้สึก 'เป็นบอท'
     คืน None ถ้า Gemini ล่ม (caller ใช้ template เดิมเป็น fallback)"""
-    if not API_KEY:
+    if not ENABLE_NATURAL_REPLIES or not API_KEY:
         return None
     field_labels = {
         "name": "ชื่อผู้แจ้ง", "phone": "เบอร์โทรติดต่อกลับ",
@@ -213,15 +188,12 @@ def phrase_slot_question(known: dict, next_field: str, last_user_msg: str) -> st
         "จงถามข้อมูลที่ขาดนี้ต่อ 1 ประโยคสั้นๆ ภาษาไทยสุภาพ เป็นธรรมชาติ ไม่ต้องใช้รูปแบบเดิมซ้ำทุกครั้ง "
         "ถ้าเหมาะสมให้ตอบรับสิ่งที่ลูกค้าเพิ่งพูดสั้นๆ ก่อนถามต่อ ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย"
     )
-    body = {"contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 100}}
-    try:
-        resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=5.0)
-        if resp.status_code != 200:
-            return None
-        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception:
-        return None
+    return request_text(
+        [prompt],
+        generation_config={"temperature": 0.2, "maxOutputTokens": 100},
+        timeout=5.0,
+        retries=1,
+    )
 
 
 # context ที่ใช้ในการ orchestration: เรียกแล้วถ้าล่มคืน None → caller fallback ไป rule FSM เดิม
@@ -264,34 +236,29 @@ def gemini_orchestrate(text: str, user_context: dict) -> dict | None:
         'ตอบ JSON เท่านั้น: {"reply":"...", "action":"answer|ask_info|search_kb|create_ticket|escalate", '
         '"product":"ชื่อสินค้าถ้าเจอ หรือว่าง", "service":"ชื่อบริการถ้าเจอ หรือว่าง", "confidence":0.0-1.0}'
     )
-    body = {"contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.6, "maxOutputTokens": 250}}
-    try:
-        resp = None
-        for attempt in range(2):
-            try:
-                resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=7.0)
-            except Exception:
-                resp = None
-            if resp is not None and resp.status_code == 200:
-                break
-            if attempt < 1:
-                time.sleep(0.5)
-        if resp is None or resp.status_code != 200:
-            return None
-        raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        if raw.startswith("```"):
-            raw = raw.strip("`").lstrip("json").strip()
-        parsed = json.loads(raw)
-        return {
-            "reply": parsed.get("reply", ""),
-            "action": parsed.get("action", "answer"),
-            "product": parsed.get("product", ""),
-            "service": parsed.get("service", ""),
-            "confidence": float(parsed.get("confidence", 0)),
-        }
-    except Exception:
+    parsed = request_json(
+        [prompt],
+        generation_config={"temperature": 0.2, "maxOutputTokens": 250},
+        timeout=7.0,
+        retries=1,
+    )
+    if not parsed:
         return None
+    valid_actions = {"answer", "ask_info", "search_kb", "create_ticket", "escalate"}
+    action = parsed.get("action", "answer")
+    if action not in valid_actions:
+        action = "answer"
+    try:
+        confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0))))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return {
+        "reply": str(parsed.get("reply", "") or ""),
+        "action": action,
+        "product": str(parsed.get("product", "") or ""),
+        "service": str(parsed.get("service", "") or ""),
+        "confidence": confidence,
+    }
 
 
 def phrase_repair_reply(context: str, detail: str) -> str | None:
@@ -300,7 +267,7 @@ def phrase_repair_reply(context: str, detail: str) -> str | None:
     context: สถานการณ์ (เช่น 'begin_diagnose' / 'not_resolved' / 'ticket_created')
     detail: ข้อมูลประกอบ (อาการที่พูด / ข้อมูลที่เก็บ / เลข ticket)
     คืน None ถ้า Gemini ล่ม → caller ใช้ template เดิมเป็น fallback"""
-    if not API_KEY:
+    if not ENABLE_NATURAL_REPLIES or not API_KEY:
         return None
     scenario = {
         "begin_diagnose": "เพิ่งเริ่มวินิจฉัยปัญหา ยังไม่รู้สาเหตุชัดเจน ต้องการขอรายละเอียดเพิ่มจากลูกค้า",
@@ -314,15 +281,12 @@ def phrase_repair_reply(context: str, detail: str) -> str | None:
         "จงเขียนคำตอบถึงลูกค้า 1-2 ประโยค ภาษาไทยสุภาพ อบอุ่น เป็นธรรมชาติ เหมือนพนักงานไทย "
         "ไม่ใช้รูปแบบเดิมซ้ำทุกครั้ง ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย ถ้าเป็น ticket_created ให้ระบุเลข ticket"
     )
-    body = {"contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 120}}
-    try:
-        resp = httpx.post(_ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=6.0)
-        if resp.status_code != 200:
-            return None
-        return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception:
-        return None
+    return request_text(
+        [prompt],
+        generation_config={"temperature": 0.2, "maxOutputTokens": 120},
+        timeout=6.0,
+        retries=1,
+    )
 
 
 def match_article(symptom_text: str, device_type: Optional[str], candidates: list) -> Optional[dict]:
@@ -348,41 +312,19 @@ def match_article(symptom_text: str, device_type: Optional[str], candidates: lis
         "จงเลือกบทความที่ตรงกับอาการผู้ใช้มากที่สุด โดย: ถ้าอาการกำกวม/กว้าง (เช่น 'จอเสีย' 'พัง' ไม่บอกอาการเฉพาะ) แต่รู้ประเภทอุปกรณ์ ให้เลือกบทความที่ใกล้เคียงที่สุดในประเภทเดียวกัน (เช่น จอ → 'จอไม่มีภาพ') เพื่อแนะนำเบื้องต้นก่อน; ตอบว่างเฉพาะเมื่อไม่มีบทความในประเภทที่เกี่ยวข้องเลย\n"
         'ตอบเป็น JSON เท่านั้น รูปแบบ {"kb_id": "รหัสบทความที่เลือก หรือ ว่างถ้าไม่มีในประเภทที่เกี่ยวข้อง"}'
     )
-    body = {
-        "contents": [{"parts": [{"text": _SYSTEM_PROMPT}, {"text": instruction}]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 300},
-    }
-    try:
-        if not API_KEY:
-            raise RuntimeError("Gemini key unavailable")
-        resp = None
-        for attempt in range(2):  # retry สั้น ทน 503/429 ชั่วคราว (ไม่ให้ response ช้าเกิน)
-            try:
-                resp = httpx.post(
-                    _ENDPOINT, headers={"X-goog-api-key": API_KEY}, json=body, timeout=5.0
-                )
-            except Exception:
-                resp = None
-            if resp is not None and resp.status_code == 200:
-                break
-            if attempt < 1:
-                time.sleep(0.8)
-        if resp is None or resp.status_code != 200:
-            raise RuntimeError("Gemini unavailable")
-        data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        if text.startswith("```"):
-            text = text.strip("`").lstrip("json").strip()
-        parsed = json.loads(text)
+    parsed = request_json(
+        [_SYSTEM_PROMPT, instruction],
+        generation_config={"temperature": 0.0, "maxOutputTokens": 300},
+        timeout=5.0,
+        retries=1,
+    )
+    if parsed:
         chosen_id = str(parsed.get("kb_id", "") or "").strip()
         # หาบทความที่เลือกใน candidates (ต้องอยู่ใน list เท่านั้น)
         for a in candidates:
             if a.get("kb_id") == chosen_id:
                 return {"kb_id": chosen_id, "steps": a.get("steps", []),
                         "device_type": a.get("device_type", "")}
-        return None  # เลือกบทความที่ไม่อยู่ใน list / ไม่มี → ไม่ match
-    except Exception:
-        pass
 
     # Safe fallback เมื่อ Gemini timeout/ตอบ JSON ไม่ถูกต้อง:
     # เลือกได้เฉพาะบทความที่มีอยู่ใน candidates และคืน steps เดิมจาก KB เท่านั้น

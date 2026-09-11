@@ -593,3 +593,31 @@ class ChatbotProfile(Base):
     )
 
 
+class ChatbotFAQ(Base):
+    """คำถามที่เคยพบ เพื่อเก็บสถิติและยึดคำตอบมาตรฐานสำหรับคำถามซ้ำ"""
+
+    __tablename__ = "chatbot_faqs"
+
+    question_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    normalized_question: Mapped[str] = mapped_column(Text, nullable=False)
+    sample_question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    intent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    hit_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
+class LineWebhookEvent(Base):
+    """Idempotency record for LINE webhook retries."""
+
+    __tablename__ = "line_webhook_events"
+
+    event_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

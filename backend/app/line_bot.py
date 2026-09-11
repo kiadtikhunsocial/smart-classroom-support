@@ -13,8 +13,14 @@ Flow:
 """
 import os
 import json
+import logging
 import httpx
 from datetime import datetime
+
+from app.ai_client import request_text
+
+
+logger = logging.getLogger(__name__)
 
 LINE_TOKEN = os.environ.get("LINE_CHANNEL_TOKEN", "")
 LINE_GROUP_ID = os.environ.get("LINE_GROUP_ID", "")
@@ -29,7 +35,8 @@ def send_line_reply(reply_token: str, text: str, quick_replies: list | None = No
     ส่ง text และ image ใน reply เดียวกันเสมอ (LINE ใช้ replyToken ได้ครั้งเดียว)
     ภาพต้องเป็น URL HTTPS ที่ LINE server ดึงได้"""
     if not LINE_TOKEN or not reply_token:
-        return
+        return False
+    text = (text or "ขออภัยค่ะ ระบบยังไม่สามารถตอบข้อความนี้ได้ กรุณาลองใหม่อีกครั้งนะคะ")[:5000]
     msgs = []
     msg = {"type": "text", "text": text}
     if quick_replies:
@@ -40,21 +47,39 @@ def send_line_reply(reply_token: str, text: str, quick_replies: list | None = No
         msgs.append({"type": "image", "originalContentUrl": image_url,
                      "previewImageUrl": image_url})
     try:
-        httpx.post(f"{LINE_API}/message/reply", headers={"Authorization": f"Bearer {LINE_TOKEN}"},
-                   json={"replyToken": reply_token, "messages": msgs}, timeout=5)
-    except Exception:
-        pass
+        response = httpx.post(
+            f"{LINE_API}/message/reply",
+            headers={"Authorization": f"Bearer {LINE_TOKEN}"},
+            json={"replyToken": reply_token, "messages": msgs},
+            timeout=5,
+        )
+        if response.status_code >= 300:
+            logger.warning("LINE reply failed with HTTP %s: %s", response.status_code, response.text[:300])
+            return False
+        return True
+    except httpx.HTTPError as exc:
+        logger.warning("LINE reply request failed: %s", exc)
+        return False
 
 
 def send_line_push(to: str, text: str):
     """Push ข้อความหา user/group (ใช้ตอนแจ้งเตือน ไม่ใช่ตอบกลับ)"""
     if not LINE_TOKEN or not to:
-        return
+        return False
     try:
-        httpx.post(f"{LINE_API}/message/push", headers={"Authorization": f"Bearer {LINE_TOKEN}"},
-                   json={"to": to, "messages": [{"type": "text", "text": text}]}, timeout=5)
-    except Exception:
-        pass
+        response = httpx.post(
+            f"{LINE_API}/message/push",
+            headers={"Authorization": f"Bearer {LINE_TOKEN}"},
+            json={"to": to, "messages": [{"type": "text", "text": (text or "")[:5000]}]},
+            timeout=5,
+        )
+        if response.status_code >= 300:
+            logger.warning("LINE push failed with HTTP %s: %s", response.status_code, response.text[:300])
+            return False
+        return True
+    except httpx.HTTPError as exc:
+        logger.warning("LINE push request failed: %s", exc)
+        return False
 
 
 def _gemini_text(prompt: str, system: str | None = None) -> str:
@@ -67,13 +92,9 @@ def _gemini_text(prompt: str, system: str | None = None) -> str:
             system = "คุณคือผู้ช่วยบริการลูกค้า Smart Classroom ตอบจากข้อมูลอ้างอิงเท่านั้น"
     if not GEMINI_KEY:
         return ""
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-        r = httpx.post(url, headers={"X-goog-api-key": GEMINI_KEY},
-                       json={"contents": [{"parts": [{"text": system}, {"text": prompt}]}],
-                             "generationConfig": {"temperature": 0.5, "maxOutputTokens": 500}}, timeout=15)
-        if r.status_code != 200:
-            return ""
-        return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception:
-        return ""
+    return request_text(
+        [system, prompt],
+        generation_config={"temperature": 0.2, "maxOutputTokens": 500},
+        timeout=15.0,
+        retries=1,
+    ) or ""

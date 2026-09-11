@@ -39,3 +39,6 @@ training_data/
 *.tmp
 .DS_Store
 backend/uploads/
+
+# backup ก่อน merge ไฟล์ทีมบอท
+_backup_app_*/

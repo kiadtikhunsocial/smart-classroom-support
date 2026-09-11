@@ -6,9 +6,13 @@ Run: uvicorn app.main:app --reload --port 8000
 """
 
 from contextlib import asynccontextmanager
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 import hashlib
+import logging
 import os
+import threading
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -35,6 +39,7 @@ from app.models import (
     Room,
     ScanLog,
     SelfServiceCase,
+    SessionLocal,
     Setting,
     TicketAttachment,
     TicketComment,
@@ -3344,7 +3349,53 @@ def report_avg_resolution(organization_id: Optional[int] = Query(None, descripti
 
 
 # ─── LINE Webhook (TOR 5.11) — รับ event จริง แล้วส่งต่อ chatbot ───────
+# ปรับจากเวอร์ชันทีมบอท: เพิ่ม postback (Rich Menu) + กัน event ซ้ำ (idempotency)
+# ผ่านตาราง line_webhook_events + จำกัด worker thread (ไม่สร้าง thread ไม่จำกัด)
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
+
+try:
+    _line_worker_count = max(2, min(16, int(os.environ.get("LINE_WORKERS", "8"))))
+except (TypeError, ValueError):
+    _line_worker_count = 8
+_LINE_EXECUTOR = ThreadPoolExecutor(max_workers=_line_worker_count, thread_name_prefix="line-chatbot")
+_LINE_USER_LOCKS = defaultdict(threading.Lock)
+
+
+def _claim_line_event(event_id: str) -> bool:
+    """Claim a LINE event once so webhook retries cannot answer twice."""
+    if not event_id:
+        return True
+    db = SessionLocal()
+    try:
+        result = db.execute(
+            text("INSERT INTO line_webhook_events (event_id) VALUES (:event_id) "
+                 "ON CONFLICT (event_id) DO NOTHING"),
+            {"event_id": event_id[:128]},
+        )
+        db.commit()
+        return result.rowcount == 1
+    except Exception:
+        db.rollback()
+        # If the idempotency table is temporarily unavailable, process the
+        # message rather than silently dropping a user's request.
+        logger.exception("Could not claim LINE event %s", event_id)
+        return True
+    finally:
+        db.close()
+
+
+def _line_postback_text(event: dict) -> str:
+    """แปลง postback จาก Rich Menu ให้เป็นข้อความที่ chatbot เข้าใจได้"""
+    postback = event.get("postback") or {}
+    display_text = str(postback.get("displayText") or "").strip()
+    data = str(postback.get("data") or "").strip()
+    if display_text:
+        return display_text
+    data_lower = data.lower()
+    if any(term in data_lower for term in ("contact", "admin", "human", "เจ้าหน้าที่", "แอดมิน", "ติดต่อ")):
+        return "ติดต่อแอดมิน"
+    return data
+
 
 @app.post("/api/line/webhook")
 @limiter.limit("120/minute")
@@ -3357,7 +3408,9 @@ async def line_webhook(request: Request, x_line_signature: Optional[str] = Heade
     """
     raw = await request.body()
     # ตรวจ signature (HMAC-SHA256 ของ channel secret กับ raw body) — ถ้ามี secret ตั้งไว้
-    if LINE_CHANNEL_SECRET and x_line_signature:
+    if LINE_CHANNEL_SECRET:
+        if not x_line_signature:
+            return {"status": "ignored"}
         import hmac, hashlib, base64 as _b64
         mac = hmac.new(LINE_CHANNEL_SECRET.encode(), raw, hashlib.sha256).digest()
         expected = _b64.b64encode(mac).decode()
@@ -3372,7 +3425,22 @@ async def line_webhook(request: Request, x_line_signature: Optional[str] = Heade
     processed = 0
     for ev in events:
         etype = ev.get("type")
-        if etype == "message":
+        if etype in ("message", "postback"):
+            event_id = str(ev.get("webhookEventId") or "").strip()
+            if event_id and not _claim_line_event(event_id):
+                logger.info("Skipping duplicate LINE event %s", event_id)
+                continue
+        if etype == "postback":
+            src = ev.get("source") or {}
+            user_id = src.get("userId") or ""
+            group_id = src.get("groupId") or ""
+            reply_token = ev.get("replyToken") or ""
+            is_group = src.get("type") == "group"
+            postback_text = _line_postback_text(ev)
+            if postback_text:
+                _process_line_text(user_id, postback_text, reply_token, group_id, is_group)
+                processed += 1
+        elif etype == "message":
             msg = ev.get("message") or {}
             src = ev.get("source") or {}
             if msg.get("type") == "text" and msg.get("text"):
@@ -3380,9 +3448,9 @@ async def line_webhook(request: Request, x_line_signature: Optional[str] = Heade
                 group_id = src.get("groupId") or ""
                 reply_token = ev.get("replyToken") or ""
                 is_group = (src.get("type") == "group")
-                text = msg["text"]
+                text_msg = msg["text"]
                 # เรียก chatbot (คุยหลายรอบ) — ตอบ LINE ผ่าน reply_token
-                _process_line_text(user_id, text, reply_token, group_id, is_group)
+                _process_line_text(user_id, text_msg, reply_token, group_id, is_group)
                 processed += 1
             # (ภาพ/สติกเกอร์/etc. ข้ามไปก่อน)
     return {"status": "ok", "received": len(events), "processed": processed}
@@ -3391,39 +3459,45 @@ async def line_webhook(request: Request, x_line_signature: Optional[str] = Heade
 def _process_line_text(user_id: str, text: str, reply_token: str, group_id: str, is_group: bool):
     """ประมวลผลข้อความ LINE ผ่าน chatbot แล้วตอบกลับ (ไม่บล็อก webhook)
     กลุ่ม LINE ใช้สำหรับแจ้งเตือนเท่านั้น — ไม่ตอบกลับข้อความในกลุ่ม"""
-    import threading
     # กลุ่ม = แจ้งเตือนอย่างเดียว: ข้าม reply (การแจ้งเตือนใช้ push ไป group_id แยกต่างหาก)
     if is_group:
         return
     def _run():
-        try:
-            from app.chatbot_core import handle_message
-            from app.line_bot import send_line_reply
-            from app.chat_session import get_session
-            reply = handle_message(
-                user_id=user_id, text=text,
-                reply_token=reply_token, group=False,
-            )
-            # G: ดึง quick-reply suggestions ที่ chatbot ฝากไว้ แล้วล้าง
+        # LINE can deliver two messages from the same user close together.
+        # Serialize that user's state transitions while allowing different
+        # users to be processed concurrently.
+        with _LINE_USER_LOCKS[user_id or "anonymous"]:
             qr = None
             try:
-                sess = get_session(user_id)
-                if sess.get("_pending_qr"):
-                    qr = sess.get("_pending_qr")
-                    s2 = dict(sess); s2.pop("_pending_qr", None)
-                    from app.chat_session import save_session as _ss
-                    _ss(user_id, s2)
+                from app.chatbot_core import handle_message
+                from app.chat_session import get_session
+                reply = handle_message(
+                    user_id=user_id, text=text,
+                    reply_token=reply_token, group=False,
+                )
+                # G: ดึง quick-reply suggestions ที่ chatbot ฝากไว้ แล้วล้าง
+                try:
+                    sess = get_session(user_id)
+                    if sess.get("_pending_qr"):
+                        qr = sess.get("_pending_qr")
+                        s2 = dict(sess)
+                        s2.pop("_pending_qr", None)
+                        from app.chat_session import save_session as _ss
+                        _ss(user_id, s2)
+                except Exception:
+                    logger.exception("Could not consume quick replies for LINE user %s", user_id)
+                from app.chatbot_core import get_pending_product_image
+                image = get_pending_product_image()
             except Exception:
-                pass
+                logger.exception("Chatbot processing failed for LINE user %s", user_id)
+                reply = "ขออภัยค่ะ ระบบกำลังขัดข้องชั่วคราว กรุณาลองส่งข้อความอีกครั้งนะคะ 🙏"
+                image = None
             # ตอบ LINE ด้วย reply_token (จาก LINE จริง)
             if reply_token and reply:
-                from app.chatbot_core import get_pending_product_image
-                send_line_reply(reply_token, reply, qr, get_pending_product_image())
-        except Exception:
-            pass
-    # ใช้ thread เพื่อไม่บล็อก event loop / ตอบ webhook 200 ได้ทันที
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+                from app.line_bot import send_line_reply
+                send_line_reply(reply_token, reply, qr, image)
+    # ใช้ bounded worker pool เพื่อไม่สร้าง thread ใหม่ไม่จำกัดเมื่อ LINE retry
+    _LINE_EXECUTOR.submit(_run)
 
 
 # ═══════════════════════════════════════════════════════════════════════

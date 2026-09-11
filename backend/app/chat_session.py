@@ -3,59 +3,73 @@ chat_session.py — เก็บ state การสนทนา chatbot (multi-t
 ใช้ SQLite/Postgres ตาม engine เดิม (ไม่ต้อง Redis แยกให้ยุ่ง)
 """
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 
-from app.models import SessionLocal
+from app.models import LineSession, SessionLocal
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_session(user_id: str) -> dict:
     """ดึง session ของ user — คืน dict state (หรือ default ว่าง)"""
     db = SessionLocal()
     try:
-        row = db.execute(
-            __import__("sqlalchemy").text("SELECT data FROM line_sessions WHERE user_id=:u"),
-            {"u": user_id},
-        ).fetchone()
-        if row and row[0]:
-            val = row[0]
-            # jsonb (Postgres) คืนเป็น dict แล้ว; SQLite/text เป็น str
-            if isinstance(val, dict):
-                return val
-            return json.loads(val)
+        row = db.get(LineSession, user_id)
+        if not row or not row.data:
+            return {}
+        val = row.data
+        # JSONB (Postgres) คืนเป็น dict แล้ว; legacy SQLite/text อาจเป็น str
+        if isinstance(val, dict):
+            return dict(val)
+        parsed = json.loads(val)
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning("Invalid chatbot session for user %s: %s", user_id, exc)
     except Exception:
-        pass
+        logger.exception("Could not read chatbot session for user %s", user_id)
     finally:
         db.close()
     return {}
 
 
-def save_session(user_id: str, data: dict):
+def save_session(user_id: str, data: dict) -> bool:
     """บันทึก/อัปเดต session ของ user"""
     db = SessionLocal()
     try:
-        import sqlalchemy
-        db.execute(
-            sqlalchemy.text(
-                "INSERT INTO line_sessions (user_id, data, updated_at) VALUES (:u, :d, :t) "
-                "ON CONFLICT (user_id) DO UPDATE SET data=:d, updated_at=:t"
-            ),
-            {"u": user_id, "d": json.dumps(data, ensure_ascii=False), "t": datetime.now()},
-        )
+        row = db.get(LineSession, user_id)
+        if row:
+            row.data = dict(data or {})
+            row.updated_at = datetime.now(timezone.utc)
+        else:
+            db.add(LineSession(
+                user_id=user_id,
+                data=dict(data or {}),
+                updated_at=datetime.now(timezone.utc),
+            ))
         db.commit()
     except Exception:
-        pass
+        db.rollback()
+        logger.exception("Could not save chatbot session for user %s", user_id)
+        return False
     finally:
         db.close()
+    return True
 
 
-def clear_session(user_id: str):
+def clear_session(user_id: str) -> bool:
     """ล้าง session (จบการสนทนา)"""
     db = SessionLocal()
     try:
-        import sqlalchemy
-        db.execute(sqlalchemy.text("DELETE FROM line_sessions WHERE user_id=:u"), {"u": user_id})
+        row = db.get(LineSession, user_id)
+        if row:
+            db.delete(row)
         db.commit()
     except Exception:
-        pass
+        db.rollback()
+        logger.exception("Could not clear chatbot session for user %s", user_id)
+        return False
     finally:
         db.close()
+    return True
