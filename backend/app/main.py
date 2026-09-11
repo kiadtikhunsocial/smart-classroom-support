@@ -3362,10 +3362,13 @@ N8N_SHARED_SECRET = os.environ.get("N8N_SHARED_SECRET", "")
 
 
 def _line_request_trusted(raw: bytes, x_line_signature: Optional[str],
-                          x_n8n_secret: Optional[str]) -> bool:
-    """true = คำขอนี้มาจาก LINE (signature ถูก) หรือจาก n8n (shared secret ถูก)"""
-    if N8N_SHARED_SECRET and x_n8n_secret and hmac.compare_digest(N8N_SHARED_SECRET, x_n8n_secret):
-        return True
+                          x_n8n_secret: Optional[str], n8n_key: Optional[str] = None) -> bool:
+    """true = คำขอนี้มาจาก LINE (signature ถูก) หรือจาก n8n (shared secret ถูก)
+    รับ secret ได้ 2 ทาง: header X-N8N-Secret หรือ query ?k= (เผื่อ n8n/proxy ตัด header)"""
+    if N8N_SHARED_SECRET:
+        for candidate in (x_n8n_secret, n8n_key):
+            if candidate and hmac.compare_digest(N8N_SHARED_SECRET, candidate):
+                return True
     if LINE_CHANNEL_SECRET and x_line_signature:
         mac = hmac.new(LINE_CHANNEL_SECRET.encode(), raw, hashlib.sha256).digest()
         expected = base64.b64encode(mac).decode()
@@ -3433,7 +3436,7 @@ async def line_webhook(request: Request, x_line_signature: Optional[str] = Heade
     # ── ตรวจสิทธิ์: LINE ส่ง X-Line-Signature / n8n ส่ง X-N8N-Secret ──
     # n8n รับ body แล้วส่งต่อใหม่ signature ของ LINE จึงไม่ตรง — ตั้ง N8N_SHARED_SECRET
     # เพื่อบังคับโหมดเข้ม (ต้องมี secret เท่านั้น) เมื่ออัปเดต workflow ฝั่ง n8n แล้ว
-    if not _line_request_trusted(raw, x_line_signature, x_n8n_secret):
+    if not _line_request_trusted(raw, x_line_signature, x_n8n_secret, request.query_params.get("k")):
         if N8N_SHARED_SECRET:
             # โหมดเข้ม: ไม่มีทั้ง signature ที่ถูก และ secret ที่ถูก → ปฏิเสธ
             logger.warning("LINE webhook: rejected request without valid signature/secret")
