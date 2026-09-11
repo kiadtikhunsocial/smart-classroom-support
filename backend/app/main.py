@@ -1962,6 +1962,7 @@ def update_ticket_status(
     payload_data["from_status"] = current
     payload_data["to_status"] = target
     _notify_n8n("ticket.status_changed", payload_data)
+    _notify_line_status_change(ticket, current, target, payload.note, payload.author_name)
 
     return {
         "ticket_id": ticket.ticket_id,
@@ -3529,6 +3530,39 @@ def _process_line_text(user_id: str, text: str, reply_token: str, group_id: str,
 # ═══════════════════════════════════════════════════════════════════════
 # n8n integration — ยิง event ไป n8n workflow (fire-and-forget, ไม่บล็อก)
 # ═══════════════════════════════════════════════════════════════════════
+
+LINE_GROUP_ID_ENV = os.environ.get("LINE_GROUP_ID", "")
+
+_STATUS_LABEL_TH = {
+    "new": "รอรับเรื่อง", "assigned": "มอบหมายแล้ว", "in_progress": "กำลังดำเนินการ",
+    "pending": "รออะไหล่/รอภายนอก", "waiting_parts": "รออะไหล่",
+    "waiting_user": "รอผู้ใช้ตอบกลับ", "resolved": "ซ่อมเสร็จ รอยืนยัน",
+    "closed": "ปิดงานแล้ว", "cancelled": "ยกเลิก",
+}
+
+
+def _notify_line_status_change(ticket: "RepairTicket", from_status: str, to_status: str,
+                               note: Optional[str] = None, actor: Optional[str] = None) -> None:
+    """แจ้งเตือนกลุ่ม LINE เมื่อสถานะ ticket เปลี่ยน (ส่งจาก backend โดยตรง)
+    เดิมงานนี้อยู่ที่ n8n — ย้ายมา backend เพื่อให้มีแหล่งเดียวและไม่ต้องเก็บ token ซ้ำ"""
+    if not LINE_GROUP_ID_ENV:
+        return
+    try:
+        from app.line_bot import send_line_push
+        lines = [
+            f"🔔 เปลี่ยนสถานะงาน {ticket.ticket_id}",
+            f"จาก: {_STATUS_LABEL_TH.get(from_status, from_status)} → {_STATUS_LABEL_TH.get(to_status, to_status)}",
+            f"เรื่อง: {(ticket.title or '')[:80]}",
+        ]
+        if actor:
+            lines.append(f"โดย: {actor}")
+        if note:
+            lines.append(f"หมายเหตุ: {note[:120]}")
+        send_line_push(LINE_GROUP_ID_ENV, "\n".join(lines))
+    except Exception:
+        # การแจ้งเตือนล้มต้องไม่ทำให้การเปลี่ยนสถานะที่สำเร็จแล้วล้มตาม
+        logger.exception("LINE status notification failed for %s", ticket.ticket_id)
+
 
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://n8n:5678/webhook/")
 
