@@ -15,7 +15,6 @@ import ReportsPage from './components/ReportsPage';
 import SettingsPage from './components/SettingsPage';
 import ProfilePage from './components/ProfilePage';
 import KBPage from './components/KBPage';
-import PMPage from './components/PMPage';
 import QRBatchPage from './components/QRBatchPage';
 import SalesPage from './components/SalesPage';
 import {
@@ -2315,7 +2314,6 @@ function AppInner() {
       scan: 'สแกน QR',
       tickets: 'Tickets',
       kb: 'ฐานความรู้',
-      pm: 'บำรุงรักษา',
       qrbatch: 'พิมพ์ QR',
       users: 'Users',
       reports: 'Reports',
@@ -2393,6 +2391,7 @@ function AppInner() {
           onMenuChange={handleMenuChange}
           schoolName={sidebarSchoolName}
           userRole={auth.user?.role}
+          userOrgId={auth.user?.organization_id}
           userName={auth.user?.line_display_name || auth.user?.line_user_id}
           userAvatar={auth.user?.line_picture_url}
           open={sidebarOpen}
@@ -2443,9 +2442,6 @@ function AppInner() {
               )}
               {menu === 'kb' && (
                 <KBPage onBack={() => handleMenuChange('dashboard')} />
-              )}
-              {menu === 'pm' && (
-                <PMPage onBack={() => handleMenuChange('dashboard')} />
               )}
               {menu === 'qrbatch' && (
                 <QRBatchPage onBack={() => handleMenuChange('dashboard')} />

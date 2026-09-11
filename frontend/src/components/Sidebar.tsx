@@ -5,6 +5,7 @@ interface SidebarProps {
   onMenuChange: (menu: string) => void;
   schoolName?: string;
   userRole?: string;
+  userOrgId?: number | null;
   userName?: string;
   userAvatar?: string | null;
   open?: boolean;
@@ -67,15 +68,6 @@ const menuItems: MenuItem[] = [
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'pm',
-    label: 'บำรุงรักษา',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
       </svg>
     ),
   },
@@ -156,29 +148,39 @@ const adminMenuItems = menuItems.filter((i) => i.id === 'schools');
 // it_support    : ทำงานซ่อม (อุปกรณ์/สแกน/ticket/รายงาน) — ไม่จัดการ user/ตั้งค่า
 // teacher/student: แจ้งซ่อม + ติดตาม — เห็นแค่ Dashboard/สแกน/Tickets ของตัวเอง
 const ROLE_MENUS: Record<string, string[]> = {
-  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
-  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'users', 'reports', 'settings', 'profile'],
-  admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'users', 'reports', 'settings', 'profile'],
-  it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'reports', 'settings', 'profile'],
+  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
+  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'users', 'reports', 'settings', 'profile'],
+  admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'users', 'reports', 'settings', 'profile'],
+  it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'reports', 'settings', 'profile'],
   teacher: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
   student: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
 };
 
+// it_support ที่มีสังกัด (สร้างโดย admin_school) ไม่เห็น ยอดขาย (sales) / การตั้งค่าโรงเรียน
+export function visibleMenusForRole(role: string | undefined, organizationId?: number | null): string[] {
+  const base = ROLE_MENUS[role || ''] || ROLE_MENUS.teacher;
+  let menus = [...base];
+  if (role === 'it_support' && organizationId) {
+    menus = menus.filter((m) => m !== 'sales');
+  }
+  return menus;
+}
+
 export { ROLE_MENUS };
 
 // เรียงเมนูตามลำดับเดิมใน menuItems
-const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'pm', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'];
+const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'];
 
-function visibleMenusFor(role: string | undefined): MenuItem[] {
-  const allowed = ROLE_MENUS[role || ''] || ROLE_MENUS.teacher;
+function visibleMenusFor(role: string | undefined, organizationId?: number | null): MenuItem[] {
+  const allowed = visibleMenusForRole(role, organizationId);
   return ROLE_MENU_ORDER
     .filter((id) => allowed.includes(id))
     .map((id) => menuItems.find((i) => i.id === id)!)
     .filter(Boolean);
 }
 
-export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart Classroom', userRole, userName, userAvatar, open, onClose, onLogout }: SidebarProps) {
-  const visibleItems = visibleMenusFor(userRole);
+export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart Classroom', userRole, userOrgId, userName, userAvatar, open, onClose, onLogout }: SidebarProps) {
+  const visibleItems = visibleMenusFor(userRole, userOrgId);
 
   return (
     <>

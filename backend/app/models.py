@@ -453,51 +453,6 @@ class SelfServiceCase(Base):
     )
 
 
-# ---------------------------------------------------------------------------
-# Preventive Maintenance (PM) — ตาม TOR 1.5.10 / 5.9
-# ---------------------------------------------------------------------------
-
-class PMPlan(Base):
-    __tablename__ = "pm_plans"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    device_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    interval_days: Mapped[int] = mapped_column(default=90, nullable=False)
-    checklist: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list
-    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
-class PMTask(Base):
-    __tablename__ = "pm_tasks"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    task_no: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
-    plan_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("pm_plans.id", ondelete="SET NULL"), nullable=True
-    )
-    device_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
-    organization_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(32), default="pending", nullable=False, index=True
-    )  # pending | done | skipped | overdue
-    result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON checklist result
-    photos: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list of URLs
-    done_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_due: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    ticket_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    skip_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
 # ─── Buildings (ระหว่าง organizations กับ rooms — TOR 3.1) ─────────────
 class Building(Base):
     __tablename__ = "buildings"

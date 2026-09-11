@@ -183,28 +183,6 @@ export const api = {
   // ─── SLA ───────────────────────────────────────────────────────────
   slaCheck: () => request<any>('/internal/sla/check'),
 
-  // ─── PM (Preventive Maintenance) ───────────────────────────────────
-  listPMPlans: () => request<any[]>('/pm/plans'),
-  createPMPlan: (data: any) =>
-    request<any>('/pm/plans', { method: 'POST', body: JSON.stringify(data) }),
-  updatePMPlan: (planId: number, data: any) =>
-    request<any>(`/pm/plans/${planId}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deletePMPlan: (planId: number) =>
-    request<any>(`/pm/plans/${planId}`, { method: 'DELETE' }),
-  listPMTasks: (params?: { status?: string; device_id?: string; organization_id?: number }) => {
-    const qs = new URLSearchParams();
-    if (params?.status) qs.set('status', params.status);
-    if (params?.device_id) qs.set('device_id', params.device_id);
-    if (params?.organization_id) qs.set('organization_id', String(params.organization_id));
-    const q = qs.toString();
-    return request<any[]>(`/pm/tasks${q ? '?' + q : ''}`);
-  },
-  pmGenerate: () => request<any>('/pm/generate', { method: 'POST' }),
-  pmSubmit: (taskId: number, data: any) =>
-    request<any>(`/pm/tasks/${taskId}/submit`, { method: 'POST', body: JSON.stringify(data) }),
-  pmSkip: (taskId: number, reason: string) =>
-    request<any>(`/pm/tasks/${taskId}/skip`, { method: 'POST', body: JSON.stringify({ reason }) }),
-
   // ─── QR ────────────────────────────────────────────────────────────
   qrResolve: (token: string) => request<any>(`/qr/resolve/${token}`),
   qrRotate: (deviceId: string) =>
