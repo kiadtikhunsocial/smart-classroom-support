@@ -18,6 +18,7 @@ import KBPage from './components/KBPage';
 import QRBatchPage from './components/QRBatchPage';
 import SalesPage from './components/SalesPage';
 import PrivacyPage from './components/PrivacyPage';
+import { roleLabel } from './roleLabels';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend
@@ -566,7 +567,7 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
                   <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{user.line_display_name || 'ผู้ใช้'}</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                      {user.role === 'super_admin' ? 'ผู้ดูแลระบบสูงสุด' : user.role === 'admin' ? 'ผู้ดูแลระบบ' : user.role === 'it_support' ? 'เจ้าหน้าที่ IT' : user.role === 'teacher' ? 'ครูผู้สอน' : 'นักเรียน/นักศึกษา'}
+                      {roleLabel(user.role)}
                     </div>
                   </div>
                   <button
@@ -2394,7 +2395,10 @@ function AppInner() {
   const DEVICE_PAGE_ROLE_KEY = role as DevicePageRole;
   const devicePageRole = DEVICE_PAGE_ROLES[DEVICE_PAGE_ROLE_KEY] ?? 'other';
   const devicePageRoleBadge = DEVICE_PAGE_ROLE_BADGE[DEVICE_PAGE_ROLE_KEY] ?? DEVICE_PAGE_ROLE_KEY;
-  const canManage = ['super_admin', 'admin', 'it_support'].includes(role);
+  const canManage = ['owner', 'super_admin', 'admin', 'it_support', 'admin_school'].includes(role);
+  // เห็นข้อมูลทุกโรงเรียน: owner/super_admin/admin + เจ้าหน้าที่ IT ที่ไม่มีสังกัด (สร้างโดยส่วนกลาง)
+  const globalScope = ['owner', 'super_admin', 'admin'].includes(role)
+    || (role === 'it_support' && !auth.user?.organization_id);
 
   const sidebarSchoolName = auth.user?.organization?.name ?? 'Smart Classroom';
 
@@ -2443,8 +2447,9 @@ function AppInner() {
                 <DevicesPage
                   onBack={() => handleMenuChange('dashboard')}
                   currentOrgId={currentOrgId}
-                  isSuperAdmin={auth.user?.role === 'super_admin'}
+                  isSuperAdmin={globalScope}
                   canManage={canManage}
+                  userRole={role}
                 />
               )}
               {menu === 'tickets' && (
@@ -2456,7 +2461,7 @@ function AppInner() {
                 />
               )}
               {menu === 'kb' && (
-                <KBPage onBack={() => handleMenuChange('dashboard')} />
+                <KBPage onBack={() => handleMenuChange('dashboard')} userRole={role} userOrgId={auth.user?.organization_id} />
               )}
               {menu === 'qrbatch' && (
                 <QRBatchPage onBack={() => handleMenuChange('dashboard')} />

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { api, setToken } from '../api/client';
 import { User } from '../types/user';
+import { roleLabel } from '../roleLabels';
 
 export default function ProfilePage({ user, onUpdateUser, onBack }: {
   user?: User | null;
@@ -115,7 +116,7 @@ export default function ProfilePage({ user, onUpdateUser, onBack }: {
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadAvatar} />
             <div style={{ fontWeight: 600, fontSize: '1.05rem', color: 'var(--color-text)' }}>{user?.line_display_name || 'ผู้ใช้'}</div>
             <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-              {user?.role === 'super_admin' ? 'ผู้ดูแลระบบสูงสุด' : user?.role === 'admin' ? 'ผู้ดูแลระบบ' : user?.role === 'it_support' ? 'เจ้าหน้าที่ IT' : user?.role === 'teacher' ? 'ครูผู้สอน' : 'นักเรียน/นักศึกษา'}
+              {roleLabel(user?.role)}
             </div>
           </div>
 

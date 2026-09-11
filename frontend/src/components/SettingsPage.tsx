@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { roleLabel } from '../roleLabels';
 
 const THEMES = [
   { id: 'theme-purple', name: 'ม่วง', icon: '🟣', primary: '#7C3AED', desc: 'สีประจำระบบ' },
@@ -16,8 +17,7 @@ export default function SettingsPage({ onBack, user }: { onBack: () => void; use
     localStorage.setItem('sc_theme', currentTheme);
   }, [currentTheme]);
 
-  const roleLabel = (r?: string) =>
-    r === 'super_admin' ? 'ผู้ดูแลระบบสูงสุด' : r === 'admin' ? 'ผู้ดูแลระบบ' : r === 'it_support' ? 'เจ้าหน้าที่ IT' : r === 'teacher' ? 'ครูผู้สอน' : 'นักเรียน/นักศึกษา';
+  const roleLabelLocal = (r?: string) => roleLabel(r);
 
   return (
     <div className="page-content" style={{ maxWidth: 860, margin: '0 auto' }}>
@@ -90,7 +90,7 @@ export default function SettingsPage({ onBack, user }: { onBack: () => void; use
           )}
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>{user?.line_display_name || 'ผู้ใช้'}</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>{roleLabel(user?.role)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>{roleLabelLocal(user?.role)}</div>
           </div>
           <button className="btn btn-secondary" onClick={() => {
             window.dispatchEvent(new CustomEvent('navigate', { detail: 'profile' }));

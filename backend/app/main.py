@@ -18,7 +18,7 @@ from slowapi.errors import RateLimitExceeded
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select, text
+from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.kb_loader import invalidate_kb_cache
@@ -231,6 +231,7 @@ class DeviceInfo(BaseModel):
     gps_lng: Optional[float] = None
     organization_code: str
     organization_name: str
+    organization_id: Optional[int] = None
     warranty_until: Optional[datetime] = None
     notes: Optional[str] = None
 
@@ -720,6 +721,7 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
         gps_lng=float(room.gps_lng) if room and room.gps_lng is not None else None,
         organization_code=org.code,
         organization_name=org.name,
+        organization_id=device.organization_id,
         warranty_until=device.warranty_until,
         notes=device.notes,
     )
@@ -898,6 +900,7 @@ def public_options(db: Session = Depends(get_db)):
             floor=room.floor if room else None,
             organization_code=org.code,
             organization_name=org.name,
+            organization_id=device.organization_id,
             warranty_until=device.warranty_until,
             notes=device.notes,
         ))
@@ -1106,7 +1109,7 @@ def list_devices(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user),
 ):
     stmt = (
         select(Device, Room, Organization)
@@ -1150,6 +1153,7 @@ def list_devices(
             floor=room.floor if room else None,
             organization_code=org.code,
             organization_name=org.name,
+            organization_id=device.organization_id,
             warranty_until=device.warranty_until,
             notes=device.notes,
         ))
@@ -1225,6 +1229,7 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
         gps_lng=float(room.gps_lng) if room and room.gps_lng is not None else None,
         organization_code=org.code,
         organization_name=org.name,
+        organization_id=device.organization_id,
         warranty_until=device.warranty_until,
         notes=device.notes,
     )
@@ -1547,44 +1552,50 @@ def get_device_stats(db: Session = Depends(get_db), user: Optional[User] = Depen
     params: dict = {}
     scope_where = ""
     dev_scope_where = ""
+    _oids = bindparam("oids", expanding=True)
     if scope is not None:
         params["oids"] = tuple(scope)
         scope_where = " AND d.organization_id IN :oids"
         dev_scope_where = " AND d.organization_id IN :oids"
-    by_type = db.execute(text(f"""
+
+    def _q(sql: str):
+        stmt = text(sql)
+        return db.execute(stmt.bindparams(_oids), params) if scope is not None else db.execute(stmt)
+
+    by_type = _q(f"""
         SELECT d.device_type, COUNT(rt.id) as count
         FROM repair_tickets rt
         JOIN devices d ON rt.device_id = d.device_id
         WHERE 1=1 {scope_where}
         GROUP BY d.device_type
         ORDER BY count DESC
-    """), params).fetchall()
+    """).fetchall()
 
-    by_status = db.execute(text(f"""
+    by_status = _q(f"""
         SELECT rt.status, COUNT(*) as count
         FROM repair_tickets rt
         JOIN devices d ON d.device_id = rt.device_id
         WHERE 1=1 {scope_where}
         GROUP BY rt.status
         ORDER BY count DESC
-    """), params).fetchall()
+    """).fetchall()
 
-    by_priority = db.execute(text(f"""
+    by_priority = _q(f"""
         SELECT rt.priority, COUNT(*) as count
         FROM repair_tickets rt
         JOIN devices d ON d.device_id = rt.device_id
         WHERE 1=1 {scope_where}
         GROUP BY rt.priority
         ORDER BY count DESC
-    """), params).fetchall()
+    """).fetchall()
 
-    devices_by_status = db.execute(text(f"""
+    devices_by_status = _q(f"""
         SELECT d.status, COUNT(*) as count
         FROM devices d
         WHERE 1=1 {dev_scope_where}
         GROUP BY d.status
         ORDER BY count DESC
-    """), params).fetchall()
+    """).fetchall()
 
     return {
         "by_type": [{"device_type": r.device_type, "count": r.count} for r in by_type],
@@ -1594,9 +1605,9 @@ def get_device_stats(db: Session = Depends(get_db), user: Optional[User] = Depen
     }
 
 @app.get("/api/organizations")
-def list_organizations(db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
+def list_organizations(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """รายการโรงเรียน — admin_school เห็นเฉพาะรรตัวเอง"""
-    scope = visible_org_ids(user) if user else None
+    scope = visible_org_ids(user)
     stmt = (
         select(
             Organization.id,
@@ -2024,11 +2035,20 @@ def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_
     params: dict = {}
     if scope is not None:
         params["oids"] = tuple(scope)
-    total = db.execute(text("SELECT COUNT(*) FROM repair_tickets t LEFT JOIN devices d ON d.device_id=t.device_id" + (" WHERE d.organization_id IN :oids" if scope is not None else "")), params).scalar_one()
-    total_devices = db.execute(text("SELECT COUNT(*) FROM devices d" + (" WHERE d.organization_id IN :oids" if scope is not None else "")), params).scalar_one()
+    # หมายเหตุ: ต้องใช้ bindparam(..., expanding=True) — ถ้าใส่ tuple ตรง ๆ
+    # SQLAlchemy จะไม่ขยาย IN ให้ (ใช้ได้แค่กรณีมีค่าเดียว)
+    oids_param = bindparam("oids", expanding=True)
+
+    def _run(q: str):
+        stmt = text(q)
+        return db.execute(stmt.bindparams(oids_param), params) if scope is not None else db.execute(stmt)
+
+    total = _run("SELECT COUNT(*) FROM repair_tickets t LEFT JOIN devices d ON d.device_id=t.device_id" + (" WHERE d.organization_id IN :oids" if scope is not None else "")).scalar_one()
+    total_devices = _run("SELECT COUNT(*) FROM devices d" + (" WHERE d.organization_id IN :oids" if scope is not None else "")).scalar_one()
 
     def count_by(col, table, where=None):
-        q = f"SELECT {col}, COUNT(*) FROM {table}"
+        # ต้องอ้างชื่อคอลัมน์แบบมีชื่อตาราง — หลัง JOIN มีคอลัมน์ชื่อซ้ำ (status) จะกำกวม
+        q = f"SELECT {table}.{col}, COUNT(*) FROM {table}"
         joins = ""
         if scope is not None:
             if table == "repair_tickets":
@@ -2045,8 +2065,8 @@ def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_
         if where:
             w = (w + " AND " + where) if w else (" WHERE " + where)
         q += joins + w
-        q += " GROUP BY " + col
-        return {r[0]: r[1] for r in db.execute(text(q), params).fetchall()}
+        q += f" GROUP BY {table}.{col}"
+        return {r[0]: r[1] for r in _run(q).fetchall()}
 
     by_status = count_by("status", "repair_tickets")
     by_priority = count_by("priority", "repair_tickets")
@@ -2058,14 +2078,14 @@ def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_
 
     # self_service_cases ไม่มี organization_id — นับผ่าน device
     if scope is not None:
-        self_service_total = db.execute(text(
+        self_service_total = _run(
             "SELECT COUNT(*) FROM self_service_cases s JOIN devices d ON d.device_id = s.device_id "
-            "WHERE d.organization_id IN :oids"), params).scalar_one()
+            "WHERE d.organization_id IN :oids").scalar_one()
     else:
         self_service_total = db.execute(text("SELECT COUNT(*) FROM self_service_cases")).scalar_one()
 
     recent_where = (" WHERE d.organization_id IN :oids" if scope is not None else "")
-    recent = db.execute(text("""
+    recent = _run("""
         SELECT t.ticket_id, t.title, t.status, t.priority, t.created_at,
                d.device_type, r.name AS room_name, o.name AS organization_name
         FROM repair_tickets t
@@ -2075,7 +2095,7 @@ def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_
     """ + recent_where + """
         ORDER BY t.created_at DESC
         LIMIT 10
-    """), params).fetchall()
+    """).fetchall()
 
     return {
         "total_tickets": total,
@@ -2155,6 +2175,7 @@ class KBArticleUpdate(BaseModel):
 class KBArticleOut(BaseModel):
     id: int
     kb_id: str
+    organization_id: Optional[int] = None  # None = บทความหลัก (ส่วนกลาง)
     device_type: Optional[str] = None
     title: str
     symptom_tags: Optional[list] = None
@@ -2169,6 +2190,7 @@ class KBArticleOut(BaseModel):
 def _kb_to_out(a: KBArticle) -> KBArticleOut:
     return KBArticleOut(
         id=a.id, kb_id=a.kb_id, device_type=a.device_type, title=a.title,
+        organization_id=getattr(a, "organization_id", None),
         symptom_tags=json.loads(a.symptom_tags) if a.symptom_tags else [],
         steps=json.loads(a.steps) if a.steps else [],
         is_published=a.is_published, view_count=a.view_count, success_count=a.success_count,
@@ -2213,11 +2235,18 @@ def get_kb_article(kb_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/kb/articles", response_model=KBArticleOut, status_code=201)
 def create_kb_article(payload: KBArticleCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
-    count = db.execute(select(func.count()).select_from(KBArticle)).scalar_one() + 1
+    # สร้าง kb_id ใหม่จากเลขสูงสุดที่มีอยู่ (count+1 ผิดเมื่อมีการลบบทความ)
+    last = db.execute(
+        select(func.max(KBArticle.kb_id))
+    ).scalar_one_or_none()
+    try:
+        next_no = int(str(last).split("-")[-1]) + 1 if last else 1
+    except (ValueError, AttributeError):
+        next_no = 1
     # admin_school สร้างบทความเฉพาะรรตัวเอง; owner/admin/super_admin สร้างบทความส่วนกลาง (None)
     org_id = user.organization_id if user.role == "admin_school" else None
     a = KBArticle(
-        kb_id=f"kb-{count:04d}",
+        kb_id=f"kb-{next_no:04d}",
         organization_id=org_id,
         device_type=payload.device_type,
         title=payload.title,

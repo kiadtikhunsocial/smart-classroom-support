@@ -23,12 +23,15 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canManage }: {
+export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canManage, userRole }: {
   onBack: () => void;
   currentOrgId?: number | null;
   isSuperAdmin: boolean;
   canManage: boolean;
+  userRole?: string;
 }) {
+  // admin_school จัดการได้เฉพาะรรตัวเอง — ไม่ต้องมี dropdown เลือกโรงเรียน และล็อกฟอร์มที่รรตัวเอง
+  const lockedToOwnSchool = userRole === 'admin_school';
   const [devices, setDevices] = useState<any[]>([]);
   const [orgs, setOrgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,7 +211,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           </div>
         </div>
         <div className="top-bar-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isSuperAdmin && (
+          {isSuperAdmin && !lockedToOwnSchool && (
             <select className="form-select" style={{ width: 200 }} value={orgFilter} onChange={(e) => setOrgFilter(e.target.value === '' ? '' : Number(e.target.value))}>
               <option value="">ทุกโรงเรียน</option>
               {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
@@ -247,10 +250,15 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                   </div>
                   <div className="form-group">
                     <label className="form-label">โรงเรียน *</label>
-                    <select className="form-select" value={form.organization_id} onChange={(e) => setForm({ ...form, organization_id: Number(e.target.value) })} disabled={!!editingId}>
-                      <option value={0}>— เลือกโรงเรียน —</option>
-                      {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </select>
+                    {lockedToOwnSchool ? (
+                      <input className="form-input" value={orgs.find((o) => o.id === (currentOrgId ?? form.organization_id))?.name || '—'}
+                        disabled title="ผู้ดูแลโรงเรียนจัดการได้เฉพาะโรงเรียนของตนเอง" />
+                    ) : (
+                      <select className="form-select" value={form.organization_id} onChange={(e) => setForm({ ...form, organization_id: Number(e.target.value) })} disabled={!!editingId}>
+                        <option value={0}>— เลือกโรงเรียน —</option>
+                        {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      </select>
+                    )}
                   </div>
                 </div>
                 <div className="form-row">

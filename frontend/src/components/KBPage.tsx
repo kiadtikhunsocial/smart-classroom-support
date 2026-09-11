@@ -8,7 +8,13 @@ const DEVICE_TYPES = [
   'Software (Picaro)', 'Software (Phonics Hero)', 'Other',
 ];
 
-export default function KBPage({ onBack }: { onBack: () => void }) {
+export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => void; userRole?: string; userOrgId?: number | null }) {
+  // เจ้าหน้าที่ IT ที่มีสังกัด (สร้างโดยผู้ดูแลโรงเรียน) = ดูความรู้ได้ แต่แก้ไขไม่ได้
+  const canEditKB = userRole === 'owner' || userRole === 'super_admin' || userRole === 'admin'
+    || userRole === 'admin_school' || (userRole === 'it_support' && !userOrgId);
+  // admin_school แก้ได้เฉพาะบทความของรรตัวเอง (บทความส่วนกลาง read-only)
+  const canEditArticle = (a: any) =>
+    canEditKB && !(userRole === 'admin_school' && (a?.organization_id ?? null) !== (userOrgId ?? null));
   const [articles, setArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +119,7 @@ export default function KBPage({ onBack }: { onBack: () => void }) {
           <input className="form-input" style={{ width: 200 }} placeholder="ค้นหาบทความ..." value={q}
             onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
           <button className="btn btn-secondary" onClick={load}>⟳</button>
-          <button className="btn btn-primary" onClick={openNew}>+ เพิ่มบทความ</button>
+          {canEditKB && <button className="btn btn-primary" onClick={openNew}>+ เพิ่มบทความ</button>}
         </div>
       </div>
 
@@ -146,6 +152,9 @@ export default function KBPage({ onBack }: { onBack: () => void }) {
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                 {a.kb_id} · ดู {a.view_count} ครั้ง · ช่วยได้ {a.success_count} ครั้ง · {stepsArray(a).length} ขั้นตอน
+                {(a.organization_id ?? null) === null
+                  ? <span style={{ marginLeft: 6, color: 'var(--color-primary)' }}>· ส่วนกลาง</span>
+                  : <span style={{ marginLeft: 6, color: 'var(--color-success, #2F855A)' }}>· เฉพาะโรงเรียน</span>}
               </div>
               {!a.is_published && <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', marginTop: 4 }}>⛔ ยังไม่เผยแพร่</div>}
               {stepsArray(a).length > 0 && (
@@ -225,8 +234,17 @@ export default function KBPage({ onBack }: { onBack: () => void }) {
                   <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)' }}>แก้ไขสำเร็จ</div>
                 </div>
                 <div style={{ flex: 1 }} />
-                <button className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '8px 16px' }} onClick={() => openEdit(selected)}>✏️ แก้ไขบทความ</button>
-                <button className="btn btn-ghost" style={{ fontSize: '0.82rem', padding: '8px 16px', color: 'var(--color-danger)' }} onClick={() => remove(selected)}>🗑️ ลบ</button>
+                {canEditArticle(selected) && (
+                  <>
+                    <button className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '8px 16px' }} onClick={() => openEdit(selected)}>✏️ แก้ไขบทความ</button>
+                    <button className="btn btn-ghost" style={{ fontSize: '0.82rem', padding: '8px 16px', color: 'var(--color-danger)' }} onClick={() => remove(selected)}>🗑️ ลบ</button>
+                  </>
+                )}
+                {!canEditArticle(selected) && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>
+                    {(selected.organization_id ?? null) === null ? 'บทความส่วนกลาง — ดูได้อย่างเดียว' : 'ดูได้อย่างเดียว'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
