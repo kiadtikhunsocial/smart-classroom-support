@@ -157,7 +157,14 @@ export const api = {
   createSelfService: (data: any) =>
     request<any>('/self-service', { method: 'POST', body: JSON.stringify(data) }),
 
-  listSelfService: () => request<any[]>('/self-service'),
+  listSelfService: (params?: { device_id?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.device_id) q.set('device_id', params.device_id);
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request<any[]>(`/self-service${qs ? `?${qs}` : ''}`);
+  },
 
   // ─── Uploads ───────────────────────────────────────────────────────
   upload: async (file: File): Promise<{ url: string }> => {

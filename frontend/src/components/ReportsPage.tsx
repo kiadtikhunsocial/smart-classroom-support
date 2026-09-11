@@ -38,6 +38,8 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
   const [deviceTicketsLoading, setDeviceTicketsLoading] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [avgRes, setAvgRes] = useState<any>(null);
+  const [selfServiceList, setSelfServiceList] = useState<any[]>([]);
+  const [selfServiceLoading, setSelfServiceLoading] = useState(false);
 
   const loadAll = () => {
     setLoading(true);
@@ -55,6 +57,14 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
       })
       .catch((e) => setError(e.message || 'โหลดไม่สำเร็จ'))
       .finally(() => setLoading(false));
+  };
+
+  const loadSelfService = () => {
+    setSelfServiceLoading(true);
+    api.listSelfService({ limit: 100 })
+      .then((data: any) => setSelfServiceList(data || []))
+      .catch(() => setSelfServiceList([]))
+      .finally(() => setSelfServiceLoading(false));
   };
 
   const exportCSV = () => {
@@ -156,6 +166,7 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
         <div className="top-bar-actions">
           <button className="btn btn-secondary" onClick={() => fetchAvgResolution()}>⏱ Avg Resolution</button>
           <button className="btn btn-secondary" onClick={exportCSV}>⬇ Export CSV</button>
+          <button className="btn btn-secondary" onClick={loadSelfService}>🤖 Self-Service</button>
           <button className="btn btn-ghost" onClick={loadAll}>⟳</button>
         </div>
       </div>
@@ -401,6 +412,44 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
               </table>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Self-Service ที่ผ่านมา */}
+      <div className="page-section">
+        <div className="section-header">
+          <span className="section-title">Self-Service ที่ผ่านมา ({selfServiceList.length})</span>
+          <span className="section-action" onClick={loadSelfService}>⟳ โหลด</span>
+        </div>
+        <div className="section-body">
+          {selfServiceLoading ? <div className="empty-text">กำลังโหลด...</div>
+            : selfServiceList.length === 0 ? <div className="empty-text">ยังไม่มีข้อมูล self-service — กดปุ่ม "🤖 Self-Service" เพื่อโหลด</div>
+            : (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr><th>วันที่</th><th>อุปกรณ์</th><th>ประเภท</th><th>ห้อง</th><th>อาการ/ปัญหา</th><th>ช่วยได้ไหม</th><th>เวลาที่ประหยัด</th></tr>
+                  </thead>
+                  <tbody>
+                    {selfServiceList.map((s: any) => (
+                      <tr key={s.id}>
+                        <td style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>{fmtDate(s.created_at)}</td>
+                        <td className="table-id">{s.device_id || '—'}</td>
+                        <td>{s.device_type || '—'}</td>
+                        <td>{s.room_name || '—'}</td>
+                        <td style={{ fontSize: '0.85rem' }}>{s.symptom || '—'}</td>
+                        <td>
+                          <span className={`badge ${s.resolved ? 'badge-resolved' : 'badge-cancelled'}`} style={{ fontSize: '0.75rem' }}>
+                            {s.resolved ? '✅ แก้ได้เอง' : '❌ ส่งต่อช่าง'}
+                          </span>
+                        </td>
+                        <td>{s.time_saved_minutes != null ? `~${s.time_saved_minutes} นาที` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
         </div>
       </div>
 

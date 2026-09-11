@@ -2604,19 +2604,39 @@ def list_self_service(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("super_admin", "admin")),
+    user: User = Depends(require_roles("super_admin", "admin", "admin_school", "it_support")),
 ):
+    """รายการ self-service — จำกัดตามบทบาท: admin_school/it_support(มีสังกัด) เห็นเฉพาะรรตัวเอง"""
+    scope = visible_org_ids(user)
     stmt = select(SelfServiceCase).order_by(SelfServiceCase.created_at.desc())
+    # self_service_cases ไม่มี organization_id — filter ผ่าน device
+    if scope is not None:
+        if not scope:
+            return []  # scope ว่าง → ไม่เห็นข้อมูล
+        stmt = stmt.where(
+            SelfServiceCase.device_id.in_(
+                select(Device.device_id).where(Device.organization_id.in_(scope))
+            )
+        )
     if device_id:
         stmt = stmt.where(SelfServiceCase.device_id == device_id)
     rows = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
+    # ดึง device_type + room เพื่อแสดงในตาราง
+    dev_info = {}
+    dev_ids = list({c.device_id for c in rows if c.device_id})
+    if dev_ids:
+        for d in db.execute(select(Device).where(Device.device_id.in_(dev_ids))).scalars():
+            dev_info[d.device_id] = {"device_type": d.device_type, "room_name": d.room.name if d.room else None}
     return [
         {
             "id": c.id,
             "device_id": c.device_id,
+            "device_type": dev_info.get(c.device_id, {}).get("device_type"),
+            "room_name": dev_info.get(c.device_id, {}).get("room_name"),
             "symptom": c.symptom,
             "kb_article_id": c.kb_article_id,
             "ai_session_id": c.ai_session_id,
+            "resolved": c.resolved,
             "helpful_step": c.helpful_step,
             "time_saved_minutes": c.time_saved_minutes,
             "created_at": c.created_at,
