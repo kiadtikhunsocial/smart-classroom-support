@@ -187,13 +187,15 @@ export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart 
       <aside className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-top">
           <div className="sidebar-brand">
-            <div className="sidebar-brand-icon">
-              <img src="/logo.jpg" alt="IWA" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
-            </div>
-            <div>
-              <div className="sidebar-brand-text">Smart Classroom</div>
-              <div className="sidebar-brand-sub">{schoolName}</div>
-            </div>
+            <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 10 }}>
+              <div className="sidebar-brand-icon">
+                <img src="/logo.jpg" alt="IWA" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
+              </div>
+              <div>
+                <div className="sidebar-brand-text">Smart Classroom</div>
+                <div className="sidebar-brand-sub">{schoolName}</div>
+              </div>
+            </a>
             <button className="sidebar-close-mobile" onClick={onClose} aria-label="ปิดเมนู">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12"/>

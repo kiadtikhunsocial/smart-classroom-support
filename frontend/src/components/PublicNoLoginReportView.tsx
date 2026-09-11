@@ -106,13 +106,15 @@ export default function PublicNoLoginReportView() {
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 500 }}>
         <div className="login-logo">
-          <div className="login-logo-icon">
-            <img src="/logo.jpg" alt="IWA" style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 4 }} />
-          </div>
-          <div>
-            <h1 className="login-title">Smart Classroom Support</h1>
-            <p className="login-subtitle">แจ้งซ่อมสาธารณะ — ไม่ต้องมีบัญชี</p>
-          </div>
+          <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
+            <div className="login-logo-icon">
+              <img src="/logo.jpg" alt="IWA" style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 4 }} />
+            </div>
+            <div>
+              <h1 className="login-title">Smart Classroom Support</h1>
+              <p className="login-subtitle">แจ้งซ่อมสาธารณะ — ไม่ต้องมีบัญชี</p>
+            </div>
+          </a>
         </div>
         <div className="login-divider" />
 

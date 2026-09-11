@@ -209,11 +209,13 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
-          <div className="login-logo-icon"><AppLogo size={22} /></div>
-          <div>
-            <h1 className="login-title">IWA Smart Classroom Support</h1>
-            <p className="login-subtitle">ระบบจัดการแจ้งซ่อมอุปกรณ์อัจฉริยะ</p>
-          </div>
+          <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
+            <div className="login-logo-icon"><AppLogo size={22} /></div>
+            <div>
+              <h1 className="login-title">IWA Smart Classroom Support</h1>
+              <p className="login-subtitle">ระบบจัดการแจ้งซ่อมอุปกรณ์อัจฉริยะ</p>
+            </div>
+          </a>
         </div>
         <div className="login-divider" />
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 14 }}>
@@ -1619,11 +1621,13 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 480 }}>
         <div className="login-logo">
-          <div className="login-logo-icon"><AppLogo size={22} /></div>
-          <div>
-            <h1 className="login-title">IWA Smart Classroom Support</h1>
-            <p className="login-subtitle">แจ้งซ่อมออนไลน์ — ไม่ต้องเข้าสู่ระบบ</p>
-          </div>
+          <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
+            <div className="login-logo-icon"><AppLogo size={22} /></div>
+            <div>
+              <h1 className="login-title">IWA Smart Classroom Support</h1>
+              <p className="login-subtitle">แจ้งซ่อมออนไลน์ — ไม่ต้องเข้าสู่ระบบ</p>
+            </div>
+          </a>
         </div>
         <div className="login-divider" />
 
@@ -2040,11 +2044,13 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 480 }}>
         <div className="login-logo">
-          <div className="login-logo-icon"><AppLogo size={22} /></div>
-          <div>
-            <h1 className="login-title">IWA Smart Classroom Support</h1>
-            <p className="login-subtitle">ติดตามสถานะการแจ้งซ่อม — ไม่ต้องเข้าสู่ระบบ</p>
-          </div>
+          <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
+            <div className="login-logo-icon"><AppLogo size={22} /></div>
+            <div>
+              <h1 className="login-title">IWA Smart Classroom Support</h1>
+              <p className="login-subtitle">ติดตามสถานะการแจ้งซ่อม — ไม่ต้องเข้าสู่ระบบ</p>
+            </div>
+          </a>
         </div>
         <div className="login-divider" />
 
@@ -2198,11 +2204,13 @@ function QrTokenResolveView({ token }: { token: string }) {
       <div className="login-page">
         <div className="login-card" style={{ maxWidth: 440, textAlign: 'center' }}>
           <div className="login-logo">
-            <div className="login-logo-icon"><AppLogo size={22} /></div>
-            <div>
-              <h1 className="login-title">IWA Smart Classroom Support</h1>
-              <p className="login-subtitle">แจ้งซ่อมออนไลน์</p>
-            </div>
+            <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
+              <div className="login-logo-icon"><AppLogo size={22} /></div>
+              <div>
+                <h1 className="login-title">IWA Smart Classroom Support</h1>
+                <p className="login-subtitle">แจ้งซ่อมออนไลน์</p>
+              </div>
+            </a>
           </div>
           <div className="login-divider" />
           <div style={{ color: 'var(--color-danger)', fontSize: '0.9rem', marginBottom: 16 }}>{error}</div>
