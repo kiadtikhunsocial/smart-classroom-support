@@ -127,6 +127,46 @@ def _is_out_of_scope(text: str) -> bool:
     return any(_normalized_reply(term) in value for term in _OUT_OF_SCOPE_TERMS)
 
 
+# คำที่บอกว่า "ผู้ใช้ต้องการแจ้งซ่อมตรง ๆ" (ไม่ใช่การเล่าอาการให้วินิจฉัย)
+_EXPLICIT_REPAIR_KEYS = [
+    "แจ้งซ่อม", "แจ้งปัญหา", "แจ้งเรื่องซ่อม", "สร้างงานซ่อม",
+    "เรียกช่าง", "ให้ช่างมาตรวจ", "ให้ช่างมาดู",
+]
+_STRONG_SYMPTOM_WORDS = [
+    "ไม่ติด", "ไม่มีภาพ", "ไม่มีเสียง", "จอดำ", "ค้าง", "พัง", "เสีย", "ไม่ทำงาน",
+    "ไม่ขึ้น", "เข้าไม่ได้", "หลุด", "ร้อน", "ดัง", "ช้า", "เปิดไม่",
+]
+# คำถามธุรกิจที่ชัดเจน (ห้ามใช้ตอนผู้ใช้กำลังตอบเรื่องอุปกรณ์)
+_CLEAR_BUSINESS_WORDS = [
+    "สินค้า", "ราคา", "ใบเสนอราคา", "โปรโมชั่น", "แคตตาล็อก", "จัดจำหน่าย",
+    "บริการ", "อบรม", "หลักสูตร", "สเปก", "ทดลองใช้", "มีอะไรขาย",
+    "ซื้อ", "สั่งซื้อ", "อยากได้ใหม่", "รุ่นใหม่", "ของใหม่",
+]
+
+
+def _is_explicit_repair(text: str) -> bool:
+    """true = ผู้ใช้สั่งแจ้งซ่อมตรง ๆ → เข้าเก็บข้อมูลทันที ไม่ต้องวินิจฉัยซ้ำ"""
+    t = _normalized_reply(text)
+    core = re.sub(r"\s+", "", t)
+    core = re.sub(r"(ครับ|ค่ะ|คะ|นะคะ|นะครับ|จ้า|หน่อย|ด้วย)+$", "", core)
+    if core in {"ซ่อม", "แจ้งซ่อม", "แจ้งซ่อมใหม่", "แจ้งปัญหา", "แจ้งเรื่องซ่อม",
+                "สร้างงานซ่อม", "เรียกช่าง", "ให้ช่าง"}:
+        return True
+    # คำว่า "ซ่อม" ต่อท้ายข้อความสั้น ๆ (รองรับพิมพ์ผิดเล็กน้อย เช่น "เเจ้วซ่อม")
+    if core.endswith("ซ่อม") and len(core) <= 8:
+        return True
+    if any(k in t for k in _EXPLICIT_REPAIR_KEYS):
+        # ถ้ามีคำอาการปนมาด้วย ให้ลองวินิจฉัยจาก KB ก่อน (ผู้ใช้จะได้ลองแก้เอง)
+        return not any(w in t for w in _STRONG_SYMPTOM_WORDS)
+    return False
+
+
+def _is_clear_business(text: str) -> bool:
+    """true = ถามสินค้า/บริการชัดเจน (ใช้ตอนขัดจังหวะผู้ที่กำลังตอบเรื่องอุปกรณ์)"""
+    t = _normalized_reply(text)
+    return any(w in t for w in _CLEAR_BUSINESS_WORDS)
+
+
 def _form_fallback_text() -> str:
     """ข้อความส่งต่อเมื่อแก้เบื้องต้นไม่ได้ — ให้เลือกส่งลิงก์ฟอร์ม (หลัก) หรือให้บอทเก็บข้อมูลสร้าง ticket"""
     return (
@@ -233,11 +273,31 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     session = get_session(user_id)
     phase = session.get("phase", "new")
 
-    # ── ขัดจังหวะ: ถ้าอยู่กลางเก็บข้อมูล(แจ้งซ่อม) แล้วเปลี่ยนไปถามสินค้า/บริการ → ตอบ business + reset ──
+    # ── ขัดจังหวะ: ผู้ใช้ถามสินค้า/บริการชัดเจน → ตอบเรื่องนั้น ไม่ว่าจะอยู่สถานะไหน ──
+    # ใช้ _is_clear_business (คำชัดเจน) ไม่ใช่ classify()==business เพราะข้อความตอบคำถาม
+    # เรื่องอุปกรณ์ เช่น "จอ Interactive Display ห้อง 2208" มีคำว่า จอ/interactive
+    # ซึ่ง classify() ตีเป็น business ได้ → เดิมบอทหลุดไปขึ้นรายการสินค้าทั้งที่กำลังเก็บข้อมูลซ่อม
     from app.company_catalog import classify as _cls
-    if phase in ("collecting", "confirm") and _cls(text) == "business":
-        clear_session(user_id)
+    if _is_clear_business(text):
+        keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+        save_session(user_id, {"phase": "new", "fields": {}, **keep})
         return _answer_business(text)
+
+    # ── ผู้ใช้สั่ง "แจ้งซ่อม" ตรง ๆ → เข้าเก็บข้อมูลทันที (เดี๋ยวนี้ตกไปวินิจฉัยซ้ำแล้วจบที่ลิงก์ฟอร์ม) ──
+    if _is_explicit_repair(text) and phase in ("new", "done", "diagnosing"):
+        fields = dict(session.get("fields") or {})
+        dev = session.get("saved_device") or fields.get("device_id")
+        sym = session.get("symptom_buf") or session.get("initial_symptom")
+        if dev:
+            fields["device_id"] = dev
+        if sym and not fields.get("symptom"):
+            fields["symptom"] = sym
+        save_session(user_id, {"phase": "collecting", "fields": fields})
+        if fields.get("device_id"):
+            return ("ได้เลยค่ะ 🙏 จะแจ้งซ่อมให้ **" + str(fields["device_id"]) + "** นะคะ "
+                    "ขอ **ชื่อผู้แจ้ง** ก่อนค่ะ")
+        return ("ได้เลยค่ะ 🙏 ขอ **ชื่อผู้แจ้ง** ก่อนนะคะ "
+                "(หรือบอกอุปกรณ์/ห้องที่จะแจ้งซ่อมมาก็ได้ค่ะ)")
 
     # ── DIAGNOSING: รวบรวมอาการ + เก็บ device/ข้อมูลที่ผู้ใช้ให้ไปแล้ว (ก่อนเก็บชื่อ) ──
     if phase == "diagnosing":
@@ -308,19 +368,38 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         # fallback regex เฉพาะ field ที่ Gemini ยังไม่ได้ (กัน Gemini ล่ม/ไม่มี key)
         for key, _q in field_order:
             if not fields.get(key):
+                # ห้ามเก็บชื่อ/เบอร์ที่เพิ่งตอบ มาเป็น "อาการ" — คำตอบสั้น ๆ ที่ไม่ใช่อาการ
+                # จะกลายเป็น description ของ ticket ที่ผิด (เช่น symptom = "สมหญิง ใจดี")
+                if key == "symptom" and session.get("_ask_field") != "symptom":
+                    continue
                 val = _extract_field_from_text(key, text)
                 if val:
                     fields[key] = val
         # ถาม field ที่ขาดถัดไป — ให้ Gemini ถามธรรมชาติ (มี fallback template เดิม)
         for key, question in field_order:
             if not fields.get(key):
+                # กันวังวน: ถ้าถาม field เดิมซ้ำหลายรอบแล้วผู้ใช้ยังให้ไม่ได้
+                # (เช่น ไม่รู้รหัสอุปกรณ์) → ส่งลิงก์ฟอร์มแจ้งซ่อมแทน ไม่ถามวนไปเรื่อย ๆ
+                asked = session.get("_ask_field")
+                tries = session.get("_ask_tries", 0) + 1 if asked == key else 1
+                if tries >= 3:
+                    session["phase"] = "new"
+                    session["fields"] = fields
+                    session.pop("_ask_field", None)
+                    session.pop("_ask_tries", None)
+                    save_session(user_id, session)
+                    return _form_fallback_text()
                 session["fields"] = fields
+                session["_ask_field"] = key
+                session["_ask_tries"] = tries
                 save_session(user_id, session)
                 natural = phrase_slot_question(fields, key, text)
                 return natural or f"ขอบคุณนะคะ 🙏 ถ้าอย่างนั้น {question}"
         # ครบทุก field → ยืนยัน
         session["phase"] = "confirm"
         session["fields"] = fields
+        session.pop("_ask_field", None)
+        session.pop("_ask_tries", None)
         save_session(user_id, session)
         summary = "\n".join(f"• {k}: {v}" for k, v in fields.items())
         _confirm_texts = [
@@ -467,7 +546,9 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         return _answer_product_followup(session.get("last_product"), text)
 
     # อาการ → วินิจฉัยจาก KB (ผ่าน Gemini + KB)
-    if _is_symptom(text):
+    # ใช้ classify() ของ catalog เสริม เพราะข้อความอาการจริงใน LINE มักไม่มีคำใน HELP_WORDS
+    # (เช่น "หน้าจอห้อง 201 ค้าง กดอะไรไม่ได้เลย") — เดิมตกไปตอบว่า "นอกขอบเขต"
+    if _is_symptom(text) or _cls(text) == "repair":
         from app.kb_loader import load_kb_candidates
         db = SessionLocal()
         try:

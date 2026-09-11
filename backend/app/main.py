@@ -9,7 +9,9 @@ from contextlib import asynccontextmanager
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
+import base64
 import hashlib
+import hmac
 import logging
 import os
 import threading
@@ -3352,6 +3354,26 @@ def report_avg_resolution(organization_id: Optional[int] = Query(None, descripti
 # ปรับจากเวอร์ชันทีมบอท: เพิ่ม postback (Rich Menu) + กัน event ซ้ำ (idempotency)
 # ผ่านตาราง line_webhook_events + จำกัด worker thread (ไม่สร้าง thread ไม่จำกัด)
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
+# ค่าลับที่ n8n แนบมาใน header X-N8N-Secret (ตั้ง env นี้เมื่ออัปเดต n8n แล้วเท่านั้น)
+# ทำไมต้องมี: n8n รับ body จาก LINE แล้วส่งต่อใหม่ (re-serialize) ทำให้ X-Line-Signature
+# ของ LINE ใช้ไม่ได้อีก → ถ้าไม่ตั้ง env นี้ ระบบจะยอมรับคำขอที่ไม่มี signature
+# (พฤติกรรมเดิม เพื่อไม่ให้ LINE ล่ม) แต่ถ้าตั้งแล้ว จะบังคับให้ต้องมี secret เท่านั้น
+N8N_SHARED_SECRET = os.environ.get("N8N_SHARED_SECRET", "")
+
+
+def _line_request_trusted(raw: bytes, x_line_signature: Optional[str],
+                          x_n8n_secret: Optional[str]) -> bool:
+    """true = คำขอนี้มาจาก LINE (signature ถูก) หรือจาก n8n (shared secret ถูก)"""
+    if N8N_SHARED_SECRET and x_n8n_secret and hmac.compare_digest(N8N_SHARED_SECRET, x_n8n_secret):
+        return True
+    if LINE_CHANNEL_SECRET and x_line_signature:
+        mac = hmac.new(LINE_CHANNEL_SECRET.encode(), raw, hashlib.sha256).digest()
+        expected = base64.b64encode(mac).decode()
+        if hmac.compare_digest(expected, x_line_signature):
+            return True
+    return False
+
+
 
 try:
     _line_worker_count = max(2, min(16, int(os.environ.get("LINE_WORKERS", "8"))))
@@ -3399,7 +3421,8 @@ def _line_postback_text(event: dict) -> str:
 
 @app.post("/api/line/webhook")
 @limiter.limit("120/minute")
-async def line_webhook(request: Request, x_line_signature: Optional[str] = Header(None)):
+async def line_webhook(request: Request, x_line_signature: Optional[str] = Header(None),
+                x_n8n_secret: Optional[str] = Header(None)):
     """รับ event จาก LINE OA โดยตรง → ตรวจ signature → เรียก LINE chatbot (คุยหลายรอบ)
 
     LINE ส่ง {events:[{type:message, replyToken, source:{userId,groupId,type},
@@ -3407,16 +3430,16 @@ async def line_webhook(request: Request, x_line_signature: Optional[str] = Heade
     ตอบ 200 เสมอ (เพื่อให้ LINE ไม่ retry); การ reply ข้อความทำผ่าน LINE API แยก.
     """
     raw = await request.body()
-    # ตรวจ signature (HMAC-SHA256 ของ channel secret กับ raw body) — ถ้ามี secret ตั้งไว้
-    if LINE_CHANNEL_SECRET:
-        if not x_line_signature:
+    # ── ตรวจสิทธิ์: LINE ส่ง X-Line-Signature / n8n ส่ง X-N8N-Secret ──
+    # n8n รับ body แล้วส่งต่อใหม่ signature ของ LINE จึงไม่ตรง — ตั้ง N8N_SHARED_SECRET
+    # เพื่อบังคับโหมดเข้ม (ต้องมี secret เท่านั้น) เมื่ออัปเดต workflow ฝั่ง n8n แล้ว
+    if not _line_request_trusted(raw, x_line_signature, x_n8n_secret):
+        if N8N_SHARED_SECRET:
+            # โหมดเข้ม: ไม่มีทั้ง signature ที่ถูก และ secret ที่ถูก → ปฏิเสธ
+            logger.warning("LINE webhook: rejected request without valid signature/secret")
             return {"status": "ignored"}
-        import hmac, hashlib, base64 as _b64
-        mac = hmac.new(LINE_CHANNEL_SECRET.encode(), raw, hashlib.sha256).digest()
-        expected = _b64.b64encode(mac).decode()
-        if not hmac.compare_digest(expected, x_line_signature):
-            # signature ไม่ตรง → ตอบ 200 เงียบ ๆ (ไม่ประมวลผล) ป้องกันของปลอม
-            return {"status": "ignored"}
+        # ยังไม่ตั้ง N8N_SHARED_SECRET: ยอมรับคำขอที่ไม่มี signature (n8n รุ่นปัจจุบัน)
+        logger.warning("LINE webhook: accepted request without signature (N8N_SHARED_SECRET not set)")
     try:
         payload = json.loads(raw or b"{}")
     except Exception:
@@ -3548,9 +3571,12 @@ class LineBotIn(BaseModel):
     is_group: bool = False
 
 @app.post("/api/line/bot", status_code=200)
-def line_bot_handle(payload: LineBotIn):
+def line_bot_handle(payload: LineBotIn, x_n8n_secret: Optional[str] = Header(None)):
     """ประมวลผลข้อความ LINE chatbot — คืน {reply: text} (n8n จะเอาคำตอบไป reply)
-    ถ้า reply_token มี → backend reply เองได้เลย"""
+    ถ้า reply_token มี → backend reply เองได้เลย
+    ถ้าตั้ง N8N_SHARED_SECRET ไว้ ต้องแนบ header X-N8N-Secret ให้ตรง"""
+    if N8N_SHARED_SECRET and not (x_n8n_secret and hmac.compare_digest(N8N_SHARED_SECRET, x_n8n_secret)):
+        raise HTTPException(status_code=401, detail="unauthorized")
     from app.chatbot_core import handle_message
     reply = handle_message(
         user_id=payload.user_id,
