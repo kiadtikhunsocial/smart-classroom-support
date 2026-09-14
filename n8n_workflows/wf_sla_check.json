@@ -1,63 +1,63 @@
 {
-  "id": "7924bb8d-6437-4314-9a44-358b59b01351",
-  "name": "SLA Check (ทุก 15 นาที)",
-  "active": false,
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 15
-            }
-          ]
-        }
-      },
-      "id": "7d3193a1-cd84-43be-becc-ef5b13d745e2",
-      "name": "ทุก 15 นาที",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        220,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "url": "https://smart-classroom-backend-3tv7.onrender.com/api/internal/sla/check",
-        "options": {}
-      },
-      "id": "58e97afd-efec-4bb7-9a7f-50172541aa54",
-      "name": "SLA Check",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        520,
-        300
-      ],
-      "retryOnFail": true,
-      "maxTries": 5,
-      "waitBetweenTries": 20000
+ "id": "7924bb8d-6437-4314-9a44-358b59b01351",
+ "name": "SLA Check (ทุก 15 นาที)",
+ "active": false,
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 15
+      }
+     ]
     }
-  ],
-  "connections": {
-    "ทุก 15 นาที": {
-      "main": [
-        [
-          {
-            "node": "SLA Check",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+   },
+   "id": "7d3193a1-cd84-43be-becc-ef5b13d745e2",
+   "name": "ทุก 15 นาที",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    220,
+    300
+   ]
   },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "meta": {
-    "description": "ตรวจงานเกิน SLA แล้วยกระดับ L1-L3"
+  {
+   "parameters": {
+    "url": "https://smart-classroom-backend-3tv7.onrender.com/api/internal/sla/check",
+    "options": {}
+   },
+   "id": "58e97afd-efec-4bb7-9a7f-50172541aa54",
+   "name": "SLA Check",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    520,
+    300
+   ],
+   "retryOnFail": true,
+   "maxTries": 5,
+   "waitBetweenTries": 20000
   }
+ ],
+ "connections": {
+  "ทุก 15 นาที": {
+   "main": [
+    [
+     {
+      "node": "SLA Check",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "meta": {
+  "description": "ตรวจงานเกิน SLA แล้วยกระดับ L1-L3"
+ }
 }

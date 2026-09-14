@@ -1,77 +1,77 @@
 {
-  "id": "08633af9-3ad7-435a-b2fd-3e97d67e9e90",
-  "name": "LINE → Backend (Smart Classroom)",
-  "active": false,
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "line-webhook",
-        "responseMode": "onReceived",
-        "options": {}
+ "id": "08633af9-3ad7-435a-b2fd-3e97d67e9e90",
+ "name": "LINE → Backend (Smart Classroom)",
+ "active": false,
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "line-webhook",
+    "responseMode": "onReceived",
+    "options": {}
+   },
+   "id": "221af9bd-4ddd-4089-9b35-9e7b4a00c26a",
+   "name": "Webhook - LINE OA",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    220,
+    300
+   ],
+   "webhookId": "d253196b-6509-44ce-802c-727314f15986"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://smart-classroom-backend-3tv7.onrender.com/api/line/webhook?k=<N8N_SHARED_SECRET>",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
       },
-      "id": "221af9bd-4ddd-4089-9b35-9e7b4a00c26a",
-      "name": "Webhook - LINE OA",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        220,
-        300
-      ],
-      "webhookId": "d253196b-6509-44ce-802c-727314f15986"
+      {
+       "name": "X-N8N-Secret",
+       "value": "<N8N_SHARED_SECRET>"
+      }
+     ]
     },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://smart-classroom-backend-3tv7.onrender.com/api/line/webhook?k=<N8N_SHARED_SECRET>",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "X-N8N-Secret",
-              "value": "<N8N_SHARED_SECRET>"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.body) }}",
-        "options": {}
-      },
-      "id": "1f39ed21-baee-47d5-b98c-9e3191c1315b",
-      "name": "Forward to Backend Chatbot",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        520,
-        300
-      ],
-      "retryOnFail": true,
-      "maxTries": 5,
-      "waitBetweenTries": 20000
-    }
-  ],
-  "connections": {
-    "Webhook - LINE OA": {
-      "main": [
-        [
-          {
-            "node": "Forward to Backend Chatbot",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "meta": {
-    "description": "รับ LINE webhook แล้วส่งต่อ backend (backend ตอบ LINE เอง)"
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.body) }}",
+    "options": {}
+   },
+   "id": "1f39ed21-baee-47d5-b98c-9e3191c1315b",
+   "name": "Forward to Backend Chatbot",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    520,
+    300
+   ],
+   "retryOnFail": true,
+   "maxTries": 5,
+   "waitBetweenTries": 20000
   }
+ ],
+ "connections": {
+  "Webhook - LINE OA": {
+   "main": [
+    [
+     {
+      "node": "Forward to Backend Chatbot",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "meta": {
+  "description": "รับ LINE webhook แล้วส่งต่อ backend (backend ตอบ LINE เอง)"
+ }
 }

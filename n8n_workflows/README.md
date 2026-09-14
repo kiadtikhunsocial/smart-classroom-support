@@ -3,9 +3,21 @@
 ไฟล์ในโฟลเดอร์นี้คือ workflow ที่ใช้งานจริงบน Railway (service `n8n`)
 เก็บไว้เพื่อ **กู้คืนได้เสมอ** — n8n บน Railway เก็บข้อมูลใน volume ถ้า volume หาย งานหายทั้งหมด
 
-## วิธีนำกลับเข้า n8n
+## วิธีนำกลับเข้า n8n (แนะนำ — คำสั่งเดียว)
+
+ไฟล์ในโฟลเดอร์นี้แทนค่าลับด้วย `<N8N_SHARED_SECRET>` (เพื่อไม่ให้ความลับขึ้น git)
+สคริปต์ `prepare_import.py` จะแทนค่าจริงกลับและพิมพ์คำสั่ง import/publish ให้:
+
 ```bash
-# 1) แทนที่ <N8N_SHARED_SECRET> ด้วยค่าจริง (ดูใน Render env: N8N_SHARED_SECRET)
+cd n8n_workflows
+python prepare_import.py        # อ่านค่าลับจาก env N8N_SHARED_SECRET หรือไฟล์ _n8n_secret.txt
+```
+
+จากนั้นคัดลอกคำสั่งที่มันพิมพ์ออกมา (import → publish → restart) ได้เลย
+
+## วิธีนำกลับเข้า n8n (แบบทำมือ)
+```bash
+# 1) แทนที่ <N8N_SHARED_SECRET> ทุกจุดด้วยค่าจริง (ดูใน Render env: N8N_SHARED_SECRET)
 # 2) ส่งไฟล์เข้า container แล้ว import
 railway ssh --service n8n -- "n8n import:workflow --input=/tmp/<ไฟล์>.json"
 railway ssh --service n8n -- "n8n publish:workflow --id=<workflow-uuid>"   # ต้อง publish รายตัว
@@ -30,6 +42,7 @@ railway restart --service n8n --yes                                        # ต
   - `GET  /webhook/qr-scan?deviceId=xxx` → คืนข้อมูลอุปกรณ์ที่ต้องเติมในฟอร์ม
   - `GET  /webhook/ticket-status?ticketNo=TK-YYYYMM-XXXX` → สถานะงาน
   - `POST /webhook/web-report` → สร้าง ticket จากฟอร์มเว็บ (เรียก backend)
-  - `POST /webhook/ticket-update` → เจ้าหน้าที่อัปเดตสถานะ (เรียก backend ด้วย X-N8N-Secret)
+- `POST /webhook/ticket-update` → เจ้าหน้าที่อัปเดตสถานะ (เรียก backend ด้วย X-N8N-Secret)
+  - ต้องแนบ header `X-N8N-Secret` ที่ตรงกับ Render ด้วย มิฉะนั้นได้ `401`
 - **หมายเหตุ n8n 2.38**: webhook path ที่มี `:param` **ไม่ถูกลงทะเบียน** จึงเปลี่ยนมาใช้ query string แทน
 - โหนดที่เหลือของสาขา LINE (Postgres/Gemini เดิม) เป็นโหนดที่ไม่มีทางถูกเรียก — เก็บไว้เป็นข้อมูลอ้างอิง

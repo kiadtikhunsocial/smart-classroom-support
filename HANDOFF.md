@@ -118,3 +118,23 @@ DATABASE_URL='<neon>' JWT_SECRET=x PYTHONPATH=. .venv/Scripts/python.exe scripts
 (ไฟล์สำรองเป็นข้อมูลอย่างเดียว ไม่รวมสคีมา — สคีมาสร้างจาก models.py)
 
 **บทเรียน**: ก่อน redeploy service ที่ไม่มี volume (เช่น n8n) ต้องสำรองก่อนทุกครั้ง — เคยทำข้อมูล n8n หายมาแล้วครั้งหนึ่ง
+
+---
+
+## 9. Checklist ก่อน deploy จริง
+
+| # | รายการ | สถานะ |
+|---|---|---|
+| 1 | `JWT_SECRET` บน Render เป็นค่าสุ่มจริง (ไม่ใช่ค่า dev) | ✅ ตั้งแล้ว (ยาว 64) |
+| 2 | `N8N_SHARED_SECRET` บน Render ตั้งแล้ว | ✅ ตั้งแล้ว (ยาว 43) |
+| 3 | workflow ใน n8n มีค่าลับจริง (ไม่ใช่ placeholder) ครบทุกจุด | ✅ ตรวจแล้ว |
+| 4 | LINE Channel Access Token ใหม่ ตั้งทั้ง Render + Railway n8n | ✅ ตั้งแล้ว |
+| 5 | สำรองฐานข้อมูลล่าสุด | ✅ `backups/` (995 แถว) |
+| 6 | n8n มี volume ถาวร | ✅ `n8n-volume` |
+| 7 | ทดสอบสาย LINE → n8n → backend | ✅ ผ่าน |
+| 8 | ทดสอบ webhook เสริม (qr-scan / ticket-status / web-report / ticket-update) | ✅ ผ่าน |
+| 9 | ทดสอบด้วย LINE จริงจากมือถือ (คนส่งเอง) | ⬜ ต้องมีคนทดสอบ |
+| 10 | ข้อความแจ้งเตือนเข้ากลุ่ม LINE เจ้าหน้าที่จริง | ⬜ ต้องยืนยันด้วยข้อความจริง |
+
+**หมายเหตุ**: ไฟล์ใน `n8n_workflows/` แทนค่าลับด้วย `<N8N_SHARED_SECRET>` โดยเจตนา (กันความลับขึ้น git)
+ก่อน import ให้รัน `python n8n_workflows/prepare_import.py` เพื่อแทนค่าจริงกลับ
