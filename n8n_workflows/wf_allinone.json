@@ -2454,7 +2454,16 @@
     "sendBody": true,
     "specifyBody": "json",
     "jsonBody": "={{ JSON.stringify($json) }}",
-    "options": {}
+    "options": {},
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-N8N-Secret",
+       "value": "<N8N_SHARED_SECRET>"
+      }
+     ]
+    }
    },
    "id": "http-create-ticket",
    "name": "HTTP - Create Ticket (FastAPI)",

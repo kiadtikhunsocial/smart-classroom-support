@@ -26,7 +26,16 @@
   {
    "parameters": {
     "url": "https://smart-classroom-backend-3tv7.onrender.com/api/internal/sla/check",
-    "options": {}
+    "options": {},
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-N8N-Secret",
+       "value": "<N8N_SHARED_SECRET>"
+      }
+     ]
+    }
    },
    "id": "58e97afd-efec-4bb7-9a7f-50172541aa54",
    "name": "SLA Check",

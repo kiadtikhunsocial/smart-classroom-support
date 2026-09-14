@@ -93,7 +93,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/smart_classroom
-      CORS_ORIGIN: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
       LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:-}
@@ -105,6 +105,9 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       NOTIFY_EMAIL_TO: ${NOTIFY_EMAIL_TO:-}
+      N8N_SHARED_SECRET: ${N8N_SHARED_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET:-smart-classroom-dev-secret-change-me}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
     env_file:
       - .env
     depends_on:

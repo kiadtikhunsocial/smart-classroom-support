@@ -83,6 +83,24 @@ import time
 JWT_SECRET = os.environ.get("JWT_SECRET", "smart-classroom-dev-secret-change-me")
 JWT_TTL_SECONDS = 60 * 60 * 12  # 12 ชั่วโมง
 
+# Never let a deployment accidentally use the repository's development key.
+# Local development remains convenient, while hosted environments must supply
+# an unpredictable value through their secret manager.
+if os.environ.get("ENVIRONMENT", "").lower() in {"production", "prod"} and JWT_SECRET == "smart-classroom-dev-secret-change-me":
+    raise RuntimeError("JWT_SECRET must be configured in production")
+
+# Shared credential for automation-to-backend calls.  Unlike a user JWT this
+# is only for the n8n service, never for browsers or public webhooks.
+N8N_SHARED_SECRET = os.environ.get("N8N_SHARED_SECRET", "")
+
+
+def require_n8n_secret(x_n8n_secret: Optional[str] = Header(None)) -> None:
+    """Reject automation calls unless a configured n8n secret matches."""
+    if not N8N_SHARED_SECRET:
+        raise HTTPException(status_code=503, detail="n8n integration is not configured")
+    if not x_n8n_secret or not hmac.compare_digest(N8N_SHARED_SECRET, x_n8n_secret):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
 
 def _b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
@@ -1940,6 +1958,9 @@ def update_ticket_status(
     current = ticket.status
     target = payload.status
 
+    if target not in STATUS_TRANSITIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown ticket status: {target}")
+
     if not payload.force and target not in STATUS_TRANSITIONS.get(current, set()):
         raise HTTPException(
             status_code=400,
@@ -2757,7 +2778,7 @@ def list_self_service(
 # ─── SLA Check + Escalation (TOR 4.5) — เรียกโดย n8n Cron ─────────────
 
 @app.get("/api/internal/sla/check")
-def sla_check(db: Session = Depends(get_db)):
+def sla_check(db: Session = Depends(get_db), _: None = Depends(require_n8n_secret)):
     """ตรวจงานเกินกำหนด SLA → ยกระดับ L1/L2/L3 (เรียกทุก 15 นาทีโดย n8n)"""
     now = datetime.now(timezone.utc)
     overdue = db.execute(
@@ -3108,9 +3129,10 @@ def ticket_resolve(ticket_id: str, payload: TicketResolveReq, db: Session = Depe
     return {"ticket_id": t.ticket_id, "status": t.status, "resolved_at": t.resolved_at, "sla_met": t.sla_met}
 
 @app.post("/api/tickets/{ticket_id}/close", status_code=200)
-def ticket_close(ticket_id: str, payload: TicketCloseReq, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def ticket_close(ticket_id: str, payload: TicketCloseReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ผู้แจ้ง/admin ปิดงาน + ให้คะแนน (resolved → closed)"""
     t = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, t)
     if t.status != "resolved":
         raise HTTPException(status_code=409, detail={"code": "INVALID_STATUS_TRANSITION", "message": f"ต้องเป็นสถานะ resolved ก่อนปิด (ปัจจุบัน: {t.status})"})
     old = t.status
@@ -3125,9 +3147,10 @@ def ticket_close(ticket_id: str, payload: TicketCloseReq, db: Session = Depends(
     return {"ticket_id": t.ticket_id, "status": t.status, "closed_at": t.closed_at, "rating": t.rating}
 
 @app.post("/api/tickets/{ticket_id}/reopen", status_code=200)
-def ticket_reopen(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def ticket_reopen(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """เปิดงานใหม่กรณีปัญหากลับมา (closed → in_progress)"""
     t = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, t)
     if t.status != "closed":
         raise HTTPException(status_code=409, detail={"code": "INVALID_STATUS_TRANSITION", "message": f"เฉพาะงานที่ปิดแล้วเท่านั้นที่เปิดใหม่ได้ (ปัจจุบัน: {t.status})"})
     old = t.status
@@ -3154,36 +3177,44 @@ def ticket_cancel(ticket_id: str, payload: TicketCommentReq, db: Session = Depen
 
 # ─── Comments (TOR 5.7) ────────────────────────────────────────────────
 @app.get("/api/tickets/{ticket_id}/comments")
-def list_ticket_comments(ticket_id: str, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
-    _get_ticket_or_404(db, ticket_id)
+def list_ticket_comments(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, ticket)
     rows = db.execute(select(TicketComment).where(TicketComment.ticket_id == ticket_id).order_by(TicketComment.created_at)).scalars().all()
+    if user.role not in ("owner", "super_admin", "admin", "admin_school", "it_support"):
+        rows = [c for c in rows if not c.is_internal]
     return [{"id": c.id, "note": c.note, "author_name": c.author_name, "author_role": c.author_role,
              "is_internal": c.is_internal, "created_at": c.created_at} for c in rows]
 
 @app.post("/api/tickets/{ticket_id}/comments", status_code=201)
-def add_ticket_comment(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
-    _get_ticket_or_404(db, ticket_id)
+def add_ticket_comment(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, ticket)
+    if payload.is_internal and user.role not in ("owner", "super_admin", "admin", "admin_school", "it_support"):
+        raise HTTPException(status_code=403, detail="เฉพาะเจ้าหน้าที่เท่านั้นที่เพิ่มหมายเหตุภายในได้")
     c = TicketComment(ticket_id=ticket_id, note=payload.note, is_internal=payload.is_internal,
-                      author_id=user.id if user else None,
-                      author_name=payload.author_name or (user.line_display_name if user else "Guest"),
-                      author_role=user.role if user else "guest")
+                      author_id=user.id,
+                      author_name=user.line_display_name or "User",
+                      author_role=user.role)
     db.add(c); db.commit(); db.refresh(c)
     return {"id": c.id, "note": c.note, "author_name": c.author_name, "created_at": c.created_at}
 
 # ─── Attachments (TOR 5.7) ─────────────────────────────────────────────
 @app.get("/api/tickets/{ticket_id}/attachments")
-def list_ticket_attachments(ticket_id: str, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
-    _get_ticket_or_404(db, ticket_id)
+def list_ticket_attachments(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, ticket)
     rows = db.execute(select(TicketAttachment).where(TicketAttachment.ticket_id == ticket_id).order_by(TicketAttachment.created_at)).scalars().all()
     return [{"id": a.id, "file_url": a.file_url, "phase": a.phase, "mime_type": a.mime_type,
              "file_size": a.file_size, "uploaded_by": a.uploaded_by, "created_at": a.created_at} for a in rows]
 
 @app.post("/api/tickets/{ticket_id}/attachments", status_code=201)
-def add_ticket_attachment(ticket_id: str, payload: TicketAttachmentReq, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
-    _get_ticket_or_404(db, ticket_id)
+def add_ticket_attachment(ticket_id: str, payload: TicketAttachmentReq, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ticket = _get_ticket_or_404(db, ticket_id)
+    check_ticket_access(db, user, ticket)
     a = TicketAttachment(ticket_id=ticket_id, file_url=payload.file_url, file_size=payload.file_size,
                          mime_type=payload.mime_type, phase=payload.phase,
-                         uploaded_by=payload.uploaded_by or (user.line_display_name if user else "Guest"))
+                         uploaded_by=user.line_display_name or "User")
     db.add(a); db.commit(); db.refresh(a)
     return {"id": a.id, "file_url": a.file_url, "phase": a.phase, "created_at": a.created_at}
 
@@ -3310,6 +3341,10 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
                              user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """Analytics จาก chatbot_logs: self-service success rate, การกระจาย intent,
     คำถามที่บอทตอบไม่ได้/พลาด (intent=other + empty reply) เพื่อปรับปรุง"""
+    # chatbot_logs has no organization_id.  Until that relationship exists,
+    # only globally scoped operators may view aggregate conversations.
+    if visible_org_ids(user) is not None:
+        raise HTTPException(status_code=403, detail="ข้อมูล chatbot ยังไม่รองรับการกรองตามโรงเรียน")
     params = {"days": days}
     total = db.execute(text("SELECT COUNT(*) FROM chatbot_logs WHERE created_at >= now() - make_interval(days => :days)"), params).scalar_one()
     resolved = db.execute(text("SELECT COUNT(*) FROM chatbot_logs WHERE resolved=TRUE AND created_at >= now() - make_interval(days => :days)"), params).scalar_one()
@@ -3368,7 +3403,6 @@ LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 # ทำไมต้องมี: n8n รับ body จาก LINE แล้วส่งต่อใหม่ (re-serialize) ทำให้ X-Line-Signature
 # ของ LINE ใช้ไม่ได้อีก → ถ้าไม่ตั้ง env นี้ ระบบจะยอมรับคำขอที่ไม่มี signature
 # (พฤติกรรมเดิม เพื่อไม่ให้ LINE ล่ม) แต่ถ้าตั้งแล้ว จะบังคับให้ต้องมี secret เท่านั้น
-N8N_SHARED_SECRET = os.environ.get("N8N_SHARED_SECRET", "")
 
 
 def _line_request_trusted(raw: bytes, x_line_signature: Optional[str],
@@ -3447,12 +3481,8 @@ async def line_webhook(request: Request, x_line_signature: Optional[str] = Heade
     # n8n รับ body แล้วส่งต่อใหม่ signature ของ LINE จึงไม่ตรง — ตั้ง N8N_SHARED_SECRET
     # เพื่อบังคับโหมดเข้ม (ต้องมี secret เท่านั้น) เมื่ออัปเดต workflow ฝั่ง n8n แล้ว
     if not _line_request_trusted(raw, x_line_signature, x_n8n_secret, request.query_params.get("k")):
-        if N8N_SHARED_SECRET:
-            # โหมดเข้ม: ไม่มีทั้ง signature ที่ถูก และ secret ที่ถูก → ปฏิเสธ
-            logger.warning("LINE webhook: rejected request without valid signature/secret")
-            return {"status": "ignored"}
-        # ยังไม่ตั้ง N8N_SHARED_SECRET: ยอมรับคำขอที่ไม่มี signature (n8n รุ่นปัจจุบัน)
-        logger.warning("LINE webhook: accepted request without signature (N8N_SHARED_SECRET not set)")
+        logger.warning("LINE webhook: rejected request without valid signature/secret")
+        raise HTTPException(status_code=401, detail="unauthorized")
     try:
         payload = json.loads(raw or b"{}")
     except Exception:
@@ -3595,12 +3625,10 @@ class LineBotIn(BaseModel):
     is_group: bool = False
 
 @app.post("/api/line/bot", status_code=200)
-def line_bot_handle(payload: LineBotIn, x_n8n_secret: Optional[str] = Header(None)):
+def line_bot_handle(payload: LineBotIn, _: None = Depends(require_n8n_secret)):
     """ประมวลผลข้อความ LINE chatbot — คืน {reply: text} (n8n จะเอาคำตอบไป reply)
     ถ้า reply_token มี → backend reply เองได้เลย
     ถ้าตั้ง N8N_SHARED_SECRET ไว้ ต้องแนบ header X-N8N-Secret ให้ตรง"""
-    if N8N_SHARED_SECRET and not (x_n8n_secret and hmac.compare_digest(N8N_SHARED_SECRET, x_n8n_secret)):
-        raise HTTPException(status_code=401, detail="unauthorized")
     from app.chatbot_core import handle_message
     reply = handle_message(
         user_id=payload.user_id,
@@ -3639,7 +3667,7 @@ class N8nTicketIn(BaseModel):
     replyToken: str = ""
 
 @app.post("/api/line/create-ticket", status_code=201)
-def line_create_ticket(payload: N8nTicketIn, db: Session = Depends(get_db)):
+def line_create_ticket(payload: N8nTicketIn, db: Session = Depends(get_db), _: None = Depends(require_n8n_secret)):
     """รับ payload จาก n8n → resolve device (หรือ default) → สร้าง repair_ticket.
     คืน {ticket_no, ticket_id, success} ให้ n8n นำไป notify ต่อ"""
     from datetime import datetime, timezone as _tz
