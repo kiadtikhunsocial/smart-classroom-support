@@ -3540,6 +3540,23 @@ _STATUS_LABEL_TH = {
 }
 
 
+N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://n8n:5678/webhook/")
+
+
+def _notify_n8n(event: str, payload: dict):
+    """ส่ง event ไป n8n (fire-and-forget) — n8n ไม่พร้อมก็ข้าม ไม่ทำให้ request หลักล้ม"""
+    try:
+        import httpx
+        url = f"{N8N_WEBHOOK_URL}notify"
+        body = {"event": event, **payload}
+        try:
+            httpx.post(url, json=body, timeout=2.0)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def _ticket_event_payload(t: "RepairTicket") -> dict:
     return {
         "ticket_id": t.ticket_id,
