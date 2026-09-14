@@ -1918,14 +1918,24 @@ def update_ticket_status(
     ticket_id: str,
     payload: StatusUpdateRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support")),
+    user: Optional[User] = Depends(get_current_user_optional),
+    x_n8n_secret: Optional[str] = Header(None),
 ):
+    # รับได้ 2 ทาง: ผู้ใช้ที่ login (ต้องมีบทบาทถูก) หรือ n8n automation (แนบ X-N8N-Secret)
+    is_n8n = bool(N8N_SHARED_SECRET and x_n8n_secret
+                  and hmac.compare_digest(N8N_SHARED_SECRET, x_n8n_secret))
+    if not is_n8n:
+        if user is None:
+            raise HTTPException(status_code=401, detail="กรุณาเข้าสู่ระบบก่อน (ไม่พบ token)")
+        if user.role not in ("owner", "super_admin", "admin", "admin_school", "it_support"):
+            raise HTTPException(status_code=403, detail="คุณไม่มีสิทธิ์ทำรายการนี้")
     ticket = db.execute(
         select(RepairTicket).where(RepairTicket.ticket_id == ticket_id)
     ).scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    check_ticket_access(db, user, ticket)
+    if not is_n8n:
+        check_ticket_access(db, user, ticket)
 
     current = ticket.status
     target = payload.status
@@ -1943,7 +1953,7 @@ def update_ticket_status(
         if target == TicketStatus.RESOLVED and ticket.resolved_at is None:
             ticket.resolved_at = datetime.now(timezone.utc)
     if target == TicketStatus.ASSIGNED and not ticket.assigned_to:
-        ticket.assigned_to = payload.author_name or "Unassigned"
+        ticket.assigned_to = payload.author_name or ("n8n automation" if is_n8n else "Unassigned")
 
     update = TicketUpdate(
         ticket=ticket,
