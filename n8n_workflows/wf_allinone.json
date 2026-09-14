@@ -1,0 +1,3160 @@
+{
+  "name": "Smart Classroom - All-in-One (WF1-WF5)",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "qr-scan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e8084f1f-083c-4bc0-9d28-8b8321024b64",
+      "name": "Webhook - QR Scan",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1104
+      ],
+      "webhookId": "738536cb-beb8-4e89-80e8-0a29295dd622"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://smart-classroom-backend-3tv7.onrender.com/api/devices/' + $json.query.deviceId }}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "<N8N_SHARED_SECRET>"
+            }
+          ]
+        }
+      },
+      "id": "19628a62-0f69-4632-8c7f-38f6576f1893",
+      "name": "HTTP - Get Device (backend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        1104
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0fa6afd3-9ab9-4901-a5d0-0ff5eaa36e5a",
+              "name": "deviceId",
+              "type": "string",
+              "value": "={{ $json.device_id || $('Webhook - QR Scan').item.json.query.deviceId }}"
+            },
+            {
+              "id": "fa2927ae-18e3-4323-a5b1-f73452c101c1",
+              "name": "deviceType",
+              "type": "string",
+              "value": "={{ $json.device_type || '' }}"
+            },
+            {
+              "id": "ab35353e-b44e-4429-97c5-caf5dce92762",
+              "name": "room",
+              "type": "string",
+              "value": "={{ $json.room_name || $json.room || '' }}"
+            },
+            {
+              "id": "77297b5e-59ea-4dbc-9270-acf884cf144d",
+              "name": "school",
+              "type": "string",
+              "value": "={{ $json.organization_name || $json.school || '' }}"
+            },
+            {
+              "id": "c40612db-5d30-4896-adea-9e7b1ebe66fc",
+              "name": "model",
+              "type": "string",
+              "value": "={{ $json.model || '' }}"
+            },
+            {
+              "id": "b2222222-2222-4222-8222-222222222222",
+              "name": "found",
+              "type": "boolean",
+              "value": "={{ !!$json.device_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4ac84bb3-95e1-4ba5-8c0e-00f12bb850c6",
+      "name": "Set - Build Device Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        512,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"prefill\": $json, \"formUrl\": \"https://repair.smartclassroom.local/report?device=\" + $json.deviceId } }}",
+        "options": {}
+      },
+      "id": "90d72c81-c60d-4816-8f5b-73bcbbe065ab",
+      "name": "Respond to Webhook - QR (Prefilled Form)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        752,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f0bb4596-a328-4f70-be5c-d77ae5ef9677",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $json.body.events[0].source?.userId || '' }}"
+            },
+            {
+              "id": "b843237d-62b7-4321-8ef7-6b33c8e878df",
+              "name": "eventType",
+              "type": "string",
+              "value": "={{ $json.body.events[0].type }}"
+            },
+            {
+              "id": "cb9675a5-465d-41a4-88d9-689ed48d0f78",
+              "name": "messageType",
+              "type": "string",
+              "value": "={{ $json.body.events[0].message?.type || '' }}"
+            },
+            {
+              "id": "49f8902e-9192-4abc-accb-00413c020ada",
+              "name": "text",
+              "type": "string",
+              "value": "={{ $json.body.events[0].message?.text || $json.body.events[0].postback?.data || '' }}"
+            },
+            {
+              "id": "01d36fd1-d953-4563-8a21-5405a6378d92",
+              "name": "replyToken",
+              "type": "string",
+              "value": "={{ $json.body.events[0].replyToken || '' }}"
+            },
+            {
+              "id": "a1111111-1111-1111-1111-111111111111",
+              "name": "messageId",
+              "type": "string",
+              "value": "={{ $json.body.events[0].message?.id || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "14187e2f-48e1-4f2e-9967-6d2a4bdf1be0",
+      "name": "Set - Parse LINE Event",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c7fac799-2f2c-4416-b6f1-36d92d562ca0",
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "3d46e3d6-8ee9-40f3-b518-2fe0e5ee4a84",
+                    "leftValue": "={{ $json.messageType }}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a07666ed-2a06-4484-8c57-43d0623a6c96",
+                    "leftValue": "={{ $json.eventType }}",
+                    "rightValue": "postback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2f599ede-09f9-4eb8-a3d2-06370d956d48",
+                    "leftValue": "={{ $json.messageType }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "5b9cfbb9-9df4-4f9a-91de-4197381e1335",
+      "name": "Switch - Route LINE Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        672,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1000001-0000-4000-8000-0000000000a2",
+              "name": "mode",
+              "type": "string",
+              "value": "analyze"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000a3",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000a4",
+              "name": "problemDetail",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000a5",
+              "name": "replyToken",
+              "type": "string",
+              "value": "={{ $json.replyToken }}"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000a6",
+              "name": "answer",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000a7",
+              "name": "chatLogId",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000001-0000-4000-8000-0000000000a1",
+      "name": "Set - Chatbot Analyze Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -112,
+        2288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// LINE postback data e.g. mode=confirm&answer=yes&chatLogId=12\nconst out = [];\nfor (const item of $input.all()) {\n  const raw = String(item.json.text || '');\n  const params = {};\n  for (const pair of raw.split('&')) {\n    const kv = pair.split('=');\n    if (kv[0]) params[decodeURIComponent(kv[0])] = decodeURIComponent(kv.slice(1).join('=') || '');\n  }\n  out.push({ json: {\n    ...item.json,\n    mode: params.mode || '',\n    answer: params.answer || '',\n    chatLogId: params.chatLogId || ''\n  }});\n}\nreturn out;"
+      },
+      "id": "d1149236-c0b7-45e7-be01-bc899d63bf1c",
+      "name": "Code - Parse Postback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "if000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "confirm",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "37121978-714c-474e-a9b0-deef3a6d5855",
+      "name": "IF - Is Chatbot Confirm",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        816,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1000001-0000-4000-8000-0000000000b2",
+              "name": "mode",
+              "type": "string",
+              "value": "confirm"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000b3",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $json.userId }}"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000b4",
+              "name": "problemDetail",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000b5",
+              "name": "replyToken",
+              "type": "string",
+              "value": "={{ $json.replyToken }}"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000b6",
+              "name": "answer",
+              "type": "string",
+              "value": "={{ $json.answer }}"
+            },
+            {
+              "id": "a1000001-0000-4000-8000-0000000000b7",
+              "name": "chatLogId",
+              "type": "string",
+              "value": "={{ $json.chatLogId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000001-0000-4000-8000-0000000000b1",
+      "name": "Set - Chatbot Confirm Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        2864
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a2",
+              "name": "channel",
+              "type": "string",
+              "value": "LINE"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a3",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $json.userId || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a4",
+              "name": "reporterName",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a5",
+              "name": "organization",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a6",
+              "name": "room",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a7",
+              "name": "contact",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a8",
+              "name": "deviceId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000a9",
+              "name": "deviceType",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000aa",
+              "name": "problemDetail",
+              "type": "string",
+              "value": "={{ $json.text || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000ab",
+              "name": "urgency",
+              "type": "string",
+              "value": "Normal"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000ac",
+              "name": "imageUrl",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000ad",
+              "name": "replyToken",
+              "type": "string",
+              "value": "={{ $json.replyToken || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000ae",
+              "name": "intent",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a2000001-0000-4000-8000-0000000000a1",
+      "name": "Set - Ticket Input (Postback)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1232,
+        3056
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2afa33ee-9df1-433b-a01b-e900cadfaf78",
+              "name": "imageUrl",
+              "type": "string",
+              "value": "={{ 'https://api-data.line.me/v2/bot/message/' + $json.messageId + '/content' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "2ac8c45c-3cf0-4b5a-a8d5-ff522d9bb5d5",
+      "name": "Set - Store Image URL in Session",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        976,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO chat_sessions (user_id, pending_image_url, updated_at) VALUES ($1,$2, now()) ON CONFLICT (user_id) DO UPDATE SET pending_image_url = $2, updated_at = now()",
+        "options": {
+          "queryReplacement": "={{ $json.userId }},={{ $json.imageUrl }}"
+        }
+      },
+      "id": "464928b7-a62c-4972-84b8-9bf99f54d701",
+      "name": "Postgres - Save Image to Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1216,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "web-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d7c279ab-94ac-4918-926a-8276b1234212",
+      "name": "Webhook - Web Form Report",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        176,
+        720
+      ],
+      "webhookId": "16b1d1db-dd08-4956-a7b0-fea55faeb3c2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3309fc3b-a622-4831-9923-697df0b4243b",
+              "name": "channel",
+              "type": "string",
+              "value": "Web"
+            },
+            {
+              "id": "1de87dab-b098-4fb3-95b7-2d2bf4173f05",
+              "name": "reporterName",
+              "type": "string",
+              "value": "={{ $json.body.reporter_name || '' }}"
+            },
+            {
+              "id": "f6d3d7ed-d0a7-4fe8-b0b4-4866c123b2c1",
+              "name": "organization",
+              "type": "string",
+              "value": "={{ $json.body.organization || '' }}"
+            },
+            {
+              "id": "52479319-8fff-4480-8e77-9b0700eaf0e9",
+              "name": "room",
+              "type": "string",
+              "value": "={{ $json.body.room || '' }}"
+            },
+            {
+              "id": "bf6c4c4e-0834-45fe-ab8d-37bcf816cf3b",
+              "name": "contact",
+              "type": "string",
+              "value": "={{ $json.body.contact || '' }}"
+            },
+            {
+              "id": "fe0564e7-44d6-4f32-9be8-5009680fdcf4",
+              "name": "deviceId",
+              "type": "string",
+              "value": "={{ $json.body.device_id || '' }}"
+            },
+            {
+              "id": "ba5ae244-cd65-4e8e-bca4-4fed861d7410",
+              "name": "deviceType",
+              "type": "string",
+              "value": "={{ $json.body.device_type || '' }}"
+            },
+            {
+              "id": "f32f98d4-0bd7-445e-a79d-45a766c2df6b",
+              "name": "problemDetail",
+              "type": "string",
+              "value": "={{ $json.body.problem_detail || '' }}"
+            },
+            {
+              "id": "e7fe09cc-da3b-424c-894a-d1c6e0a53712",
+              "name": "urgency",
+              "type": "string",
+              "value": "={{ $json.body.urgency || '' }}"
+            },
+            {
+              "id": "23242a0f-a0fa-483f-b5c6-aceeba140e1e",
+              "name": "imageUrl",
+              "type": "string",
+              "value": "={{ $json.body.image_url || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3db0780e-44cf-4f52-b560-264f06f1c6e0",
+      "name": "Set - Map Web Form Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a3000001-0000-4000-8000-0000000000a2",
+              "name": "event",
+              "type": "string",
+              "value": "TICKET_CREATED"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000a3",
+              "name": "ticket",
+              "type": "object",
+              "value": "={{ $json }}"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000a4",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $('HTTP - Create Ticket (FastAPI)').item.json.userId }}"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000a5",
+              "name": "replyToken",
+              "type": "string",
+              "value": "={{ $('HTTP - Create Ticket (FastAPI)').item.json.replyToken }}"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000a6",
+              "name": "deviceId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000a7",
+              "name": "repeatCount",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3000001-0000-4000-8000-0000000000a1",
+      "name": "Set - Notify Input (TICKET_CREATED)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2128,
+        2864
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e88f906b-cae4-49f5-9336-84284c7bcdc8",
+              "name": "ticketNo",
+              "type": "string",
+              "value": "={{ $('HTTP - Create Ticket (FastAPI)').item.json.ticket_no }}"
+            },
+            {
+              "id": "745d0437-cd02-43bc-a31a-0747ee9e0aaa",
+              "name": "status",
+              "type": "string",
+              "value": "Open"
+            },
+            {
+              "id": "dcaf8d88-9717-42c9-9494-f9ff1c72c672",
+              "name": "message",
+              "type": "string",
+              "value": "={{ 'รับเรื่องแล้ว หมายเลข Ticket: ' + $('HTTP - Create Ticket (FastAPI)').item.json.ticket_no + ' ตรวจสอบสถานะได้ทุกเมื่อ' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "de95fc57-08a6-41cf-81c2-78fcd1d8d810",
+      "name": "Set - Output Ticket Confirmation",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2160,
+        2592
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "45f399a7-c3ec-4dac-a8ce-41531e5d3419",
+      "name": "Respond to Webhook - Web",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        912,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6a178534-2ed0-4b74-819b-f3ece5fea5ff",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "analyze",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9aecfd77-6b51-4363-bc46-ef3bd2881a8f",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "confirm",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "96040d1b-e8f4-49ee-bcbd-adab2fadc4a2",
+      "name": "Switch - Mode",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -16,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://smart-classroom-backend-3tv7.onrender.com/api/ai/diagnose",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"คุณคือผู้ช่วย IT Support สำหรับ Smart Classroom วิเคราะห์อาการที่ผู้ใช้แจ้ง จัดกลุ่มปัญหา (Display/Network/Audio/Software-LMS/Other) และแนะนำขั้นตอนตรวจสอบเบื้องต้นสูงสุด 6 ข้อ แบบสั้นกระชับ ตอบเป็น JSON เท่านั้นรูปแบบ {intent, confidence(0-1), suggested_steps: []} อาการที่แจ้ง: \" + $json.problemDetail }] }] }) }}",
+        "options": {}
+      },
+      "id": "82915008-c2d7-4fab-8226-1db8e17dc6e0",
+      "name": "HTTP Request - Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        2352
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $('Switch - Mode').item.json;\nlet parsed = { intent: 'Other', confidence: 0, suggested_steps: [] };\ntry {\n  const raw = $input.first().json.candidates[0].content.parts[0].text;\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  const j = JSON.parse(cleaned);\n  parsed = {\n    intent: j.intent || 'Other',\n    confidence: Number(j.confidence) || 0,\n    suggested_steps: Array.isArray(j.suggested_steps) ? j.suggested_steps : []\n  };\n} catch (e) {\n  parsed.intent = 'Other';\n}\nreturn [{ json: { ...parsed, userId: src.userId, problemDetail: src.problemDetail, replyToken: src.replyToken } }];"
+      },
+      "id": "0a755486-d227-4b4e-be4d-745290dd4eae",
+      "name": "Code - Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO chatbot_logs (user_id, message, ai_response, intent, resolved) VALUES ($1,$2,$3,$4,false) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ $json.userId }},={{ $json.problemDetail }},={{ JSON.stringify($json.suggested_steps) }},={{ $json.intent }}"
+        }
+      },
+      "id": "c6c362a9-4bd9-4d88-b922-dd21f85eec16",
+      "name": "Postgres - Insert Chatbot Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        736,
+        2352
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1c5ae4a6-fd9e-4e1c-a25c-f2b3c02e6d7a",
+              "leftValue": "={{ $('Code - Parse AI Response').item.json.confidence }}",
+              "rightValue": 0.5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "d0bb4648-de36-43d9-9556-661e974e6943",
+              "leftValue": "={{ $('Code - Parse AI Response').item.json.suggested_steps.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0b02d09f-31f0-4a1f-b9f3-8c6b169b147a",
+      "name": "IF - Confidence High & Has Steps",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        992,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cd40d59f-7e25-421c-a326-6a4a60bf00c3",
+              "name": "replyText",
+              "type": "string",
+              "value": "={{ 'ลองทำตามขั้นตอนนี้ดูก่อนนะครับ:\\n' + $('Code - Parse AI Response').item.json.suggested_steps.map((s,i)=>(i+1)+'. '+s).join('\\n') + '\\n\\nสามารถใช้งานได้แล้วหรือไม่?' }}"
+            },
+            {
+              "id": "ebdb635c-7392-42e0-8645-c0916194be8d",
+              "name": "chatLogId",
+              "type": "string",
+              "value": "={{ $('Postgres - Insert Chatbot Log').item.json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b97fa7ad-6db7-4acc-a442-495dd30aa837",
+      "name": "Set - Format LINE Flex Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1232,
+        2256
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ replyToken: $('Code - Parse AI Response').item.json.replyToken, messages: [{ type: 'text', text: $json.replyText, quickReply: { items: [ {type:'action', action:{type:'postback', label:'ใช้งานได้แล้ว', data:'mode=confirm&answer=yes&chatLogId='+$json.chatLogId}}, {type:'action', action:{type:'postback', label:'ยังใช้งานไม่ได้', data:'mode=confirm&answer=no&chatLogId='+$json.chatLogId}} ] } }] }) }}",
+        "options": {}
+      },
+      "id": "6ebe579f-cb51-46a0-afd2-743c25190218",
+      "name": "HTTP Request - LINE Reply (Steps + Quick Reply)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1488,
+        2256
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b2",
+              "name": "channel",
+              "type": "string",
+              "value": "LINE"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b3",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $('Code - Parse AI Response').item.json.userId || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b4",
+              "name": "reporterName",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b5",
+              "name": "organization",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b6",
+              "name": "room",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b7",
+              "name": "contact",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b8",
+              "name": "deviceId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000b9",
+              "name": "deviceType",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000ba",
+              "name": "problemDetail",
+              "type": "string",
+              "value": "={{ $('Code - Parse AI Response').item.json.problemDetail || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000bb",
+              "name": "urgency",
+              "type": "string",
+              "value": "Normal"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000bc",
+              "name": "imageUrl",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000bd",
+              "name": "replyToken",
+              "type": "string",
+              "value": "={{ $('Code - Parse AI Response').item.json.replyToken || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000be",
+              "name": "intent",
+              "type": "string",
+              "value": "={{ $('Code - Parse AI Response').item.json.intent || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a2000001-0000-4000-8000-0000000000b1",
+      "name": "Set - Ticket Input (Low Confidence)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1232,
+        2480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "057d78af-2628-470b-a231-a2e90346921f",
+              "leftValue": "={{ $json.answer }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "be92c606-5b0a-4a13-a877-deb4f5693343",
+      "name": "IF - Answer Yes",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        240,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE chatbot_logs SET resolved = true WHERE id = $1",
+        "options": {
+          "queryReplacement": "={{ $json.chatLogId }}"
+        }
+      },
+      "id": "384dadd4-bca7-4839-b83f-9b05b9ac88bc",
+      "name": "Postgres - Mark Resolved (Self-Service)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        480,
+        2656
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ replyToken: $('Set - Chatbot Confirm Input').item.json.replyToken, messages: [{type:'text', text:'ยินดีด้วยครับ ปัญหาได้รับการแก้ไขแล้ว หากมีปัญหาอื่นแจ้งเข้ามาได้เลยครับ'}] }) }}",
+        "options": {}
+      },
+      "id": "8258fa4f-11ad-4d21-b00d-7095d2bb754d",
+      "name": "HTTP Request - LINE Reply (Thanks)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        2656
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT message, intent FROM chatbot_logs WHERE id = $1",
+        "options": {
+          "queryReplacement": "={{ $json.chatLogId }}"
+        }
+      },
+      "id": "067daabd-2fbf-44f5-bd07-eaf4ad9ade7d",
+      "name": "Postgres - Get Chat Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        832,
+        3024
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c2",
+              "name": "channel",
+              "type": "string",
+              "value": "LINE"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c3",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $('Set - Chatbot Confirm Input').item.json.userId || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c4",
+              "name": "reporterName",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c5",
+              "name": "organization",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c6",
+              "name": "room",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c7",
+              "name": "contact",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c8",
+              "name": "deviceId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000c9",
+              "name": "deviceType",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000ca",
+              "name": "problemDetail",
+              "type": "string",
+              "value": "={{ $json.message || 'ผู้ใช้แจ้งว่าทำตามขั้นตอนแล้วยังใช้งานไม่ได้' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000cb",
+              "name": "urgency",
+              "type": "string",
+              "value": "Normal"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000cc",
+              "name": "imageUrl",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000cd",
+              "name": "replyToken",
+              "type": "string",
+              "value": "={{ $('Set - Chatbot Confirm Input').item.json.replyToken || '' }}"
+            },
+            {
+              "id": "a2000001-0000-4000-8000-0000000000ce",
+              "name": "intent",
+              "type": "string",
+              "value": "={{ $json.intent || 'Other' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a2000001-0000-4000-8000-0000000000c1",
+      "name": "Set - Ticket Input (Not Resolved)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1232,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ticket-update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "78eb9773-f5f7-456f-b71b-015a077a665d",
+      "name": "Webhook - Ticket Update (Staff)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        912,
+        2896
+      ],
+      "webhookId": "bb8f8ab4-0e4e-461d-b62f-aa5f253358ea"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://smart-classroom-backend-3tv7.onrender.com/api/tickets/' + $json.body.ticket_no + '/status' }}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "<N8N_SHARED_SECRET>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: $json.body.status, author_name: $json.body.assigned_to || 'n8n automation', author_role: 'it_support', force: true }) }}"
+      },
+      "id": "b34e8104-2713-4b40-9d84-b21f96ab875b",
+      "name": "HTTP - Update Ticket Status (backend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1168,
+        2896
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fba5c817-41bc-434c-9364-17b82465a96e",
+              "leftValue": "={{ $json.status || '' }}",
+              "rightValue": "^(resolved|closed)$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "16659aa7-18a0-48fa-ae73-1efac04455a9",
+      "name": "IF - Status Completed or Closed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        2896
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a3000001-0000-4000-8000-0000000000b2",
+              "name": "event",
+              "type": "string",
+              "value": "STATUS_CHANGED"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000b3",
+              "name": "ticket",
+              "type": "object",
+              "value": "={{ $('HTTP - Update Ticket Status (backend)').item.json }}"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000b4",
+              "name": "userId",
+              "type": "string",
+              "value": "={{ $('HTTP - Update Ticket Status (backend)').item.json.reporter_userid }}"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000b5",
+              "name": "replyToken",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000b6",
+              "name": "deviceId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000b7",
+              "name": "repeatCount",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3000001-0000-4000-8000-0000000000b1",
+      "name": "Set - Notify Input (STATUS_CHANGED)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        336,
+        3936
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, ticket: $('Postgres - Update Ticket Status').item.json } }}",
+        "options": {}
+      },
+      "id": "e12dd390-bf02-4238-9f8f-3ed8fe698c08",
+      "name": "Respond to Webhook - Update OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2416,
+        2896
+      ]
+    },
+    {
+      "parameters": {
+        "path": "ticket-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "890744b4-8b24-4743-b53c-e6ad7b7e9474",
+      "name": "Webhook - Ticket Status Check",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        912,
+        3200
+      ],
+      "webhookId": "da794b36-3c42-4d2b-b912-e7b8c1a02bc9"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://smart-classroom-backend-3tv7.onrender.com/api/tickets/track/' + $json.query.ticketNo }}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "<N8N_SHARED_SECRET>"
+            }
+          ]
+        }
+      },
+      "id": "4b6de9dc-2433-4dfc-a346-1962d418a36d",
+      "name": "HTTP - Track Ticket (backend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1168,
+        3200
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.ticket_no ? $json : { success: false, message: 'ไม่พบหมายเลข Ticket นี้' } }}",
+        "options": {}
+      },
+      "id": "1da68e3d-d26f-4508-a47b-12b0e1f1f7a6",
+      "name": "Respond to Webhook - Status",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1408,
+        3200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg00001-0000-4000-8000-000000000001",
+              "name": "itStaffGroupId",
+              "type": "string",
+              "value": "IT_STAFF_GROUP_ID"
+            },
+            {
+              "id": "cfg00001-0000-4000-8000-000000000002",
+              "name": "itLeadUserId",
+              "type": "string",
+              "value": "IT_LEAD_USER_ID"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "56e12527-e169-4b2a-88c4-a5bcf196dc10",
+      "name": "Set - Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2672,
+        3440
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cc96f609-a989-4acf-a549-83bc0b177717",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "TICKET_CREATED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5bb9fe93-fe8b-4ca6-84b7-6191f701b377",
+                    "leftValue": "={{ $json.ticket?.status || '' }}",
+                    "rightValue": "Assigned",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "36af320b-f121-4c46-90b7-d1a279b71f4a",
+                    "leftValue": "={{ $json.ticket?.status || '' }}",
+                    "rightValue": "In Progress",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "30e2cb7e-7d62-45a9-86e1-685e19eb3248",
+                    "leftValue": "={{ $json.ticket?.status || '' }}",
+                    "rightValue": "Waiting for Parts",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a4b9d9e8-3413-4a56-81d5-c3e7451bc631",
+                    "leftValue": "={{ $json.ticket?.status || '' }}",
+                    "rightValue": "Completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d7e5528e-6de2-4e46-bc68-3c2005ccdf45",
+                    "leftValue": "={{ $json.ticket?.status || '' }}",
+                    "rightValue": "Closed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "816b6222-5c53-4439-bf1d-6f0c7905c86e",
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "PREVENTIVE_ALERT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "2a03b1b6-c05e-4e7c-97ff-dc25d933fddb",
+      "name": "Switch - Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        2480,
+        3040
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "19527f17-9a48-4325-b94d-207d7f6f7a01",
+              "name": "notifyText",
+              "type": "string",
+              "value": "={{ 'มีรายการแจ้งซ่อมใหม่ หมายเลข ' + $json.ticket.ticket_no + ' ระบบได้รับเรื่องแล้ว' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "eae89db9-9275-413d-b44d-0f7843e192ff",
+      "name": "Set - Message (TicketCreated)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2736,
+        2736
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.ticket?.reporter_userid || $('Set - Config').item.json.userId, messages: [{type:'text', text: $json.notifyText}] }) }}",
+        "options": {}
+      },
+      "id": "5fb9ff14-01ce-4c02-afc0-f28bedca9316",
+      "name": "HTTP Request - LINE Push (TicketCreated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2928,
+        2736
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('Set - Config').item.json.itStaffGroupId, messages: [{type:'text', text: 'งานแจ้งซ่อมใหม่: ' + $json.ticket.ticket_no + ' | อุปกรณ์: ' + ($json.ticket.device_type || '-') + ' | ห้อง: ' + ($json.ticket.room || '-') + ' | อาการ: ' + ($json.ticket.problem_detail || '-')}] }) }}",
+        "options": {}
+      },
+      "id": "d12b5d06-7389-4488-9aff-f39b646d0045",
+      "name": "HTTP Request - LINE Push (IT Staff Group)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2928,
+        2640
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "28e6a870-5e60-4e56-a483-b4786d746944",
+              "name": "notifyText",
+              "type": "string",
+              "value": "={{ 'เจ้าหน้าที่รับงาน Ticket ' + $json.ticket.ticket_no + ' แล้ว' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "7f8de31a-1eb7-4b4c-a8f4-862dfe180d64",
+      "name": "Set - Message (Assigned)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2736,
+        2880
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.ticket?.reporter_userid || $('Set - Config').item.json.userId, messages: [{type:'text', text: $json.notifyText}] }) }}",
+        "options": {}
+      },
+      "id": "38a58855-eb47-476a-8641-93527f497df5",
+      "name": "HTTP Request - LINE Push (Assigned)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2928,
+        2880
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b9c49e67-4c8e-4f10-a51e-6bf84bd2dfd9",
+              "name": "notifyText",
+              "type": "string",
+              "value": "={{ 'เริ่มดำเนินการซ่อม Ticket ' + $json.ticket.ticket_no }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "ae98b898-a895-4ccb-80ba-1d604d2ed7a3",
+      "name": "Set - Message (InProgress)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2736,
+        3040
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.ticket?.reporter_userid || $('Set - Config').item.json.userId, messages: [{type:'text', text: $json.notifyText}] }) }}",
+        "options": {}
+      },
+      "id": "857e4e58-4fc5-4dd2-a841-661ac4f821ff",
+      "name": "HTTP Request - LINE Push (InProgress)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2928,
+        3040
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "60c779b0-39f6-4550-a0f3-10e4425aa4ce",
+              "name": "notifyText",
+              "type": "string",
+              "value": "={{ 'Ticket ' + $json.ticket.ticket_no + ' กำลังรออะไหล่' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "2078ab9f-e6e9-4325-82bf-c32415e50416",
+      "name": "Set - Message (WaitingParts)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2736,
+        3184
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.ticket?.reporter_userid || $('Set - Config').item.json.userId, messages: [{type:'text', text: $json.notifyText}] }) }}",
+        "options": {}
+      },
+      "id": "dfe5c44b-7897-4c64-8792-4a6b6165fb74",
+      "name": "HTTP Request - LINE Push (WaitingParts)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2928,
+        3184
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f42207b0-70d3-4eac-9610-ceef9a5aedab",
+              "name": "notifyText",
+              "type": "string",
+              "value": "={{ 'ดำเนินการซ่อม Ticket ' + $json.ticket.ticket_no + ' เสร็จแล้ว กรุณายืนยันการใช้งาน' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "a028b34e-a909-4698-90fe-d5740c82f599",
+      "name": "Set - Message (Completed)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2736,
+        3344
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.ticket?.reporter_userid || $('Set - Config').item.json.userId, messages: [{type:'text', text: $json.notifyText}] }) }}",
+        "options": {}
+      },
+      "id": "fcdec1ca-9a1b-496a-a2d6-fa14c3c8e3ce",
+      "name": "HTTP Request - LINE Push (Completed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2928,
+        3344
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ca364c56-0cfb-4bee-94c0-7164af89c64d",
+              "name": "notifyText",
+              "type": "string",
+              "value": "={{ 'ปิดงาน Ticket ' + $json.ticket.ticket_no + ' เรียบร้อยแล้ว ขอบคุณที่แจ้งเข้ามาครับ' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "b1c30ed2-8c18-4306-ba58-9802cacd2f2d",
+      "name": "Set - Message (Closed)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2736,
+        3488
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.ticket?.reporter_userid || $('Set - Config').item.json.userId, messages: [{type:'text', text: $json.notifyText}] }) }}",
+        "options": {}
+      },
+      "id": "c381e7f1-bfa3-435e-9f91-7298f6d67286",
+      "name": "HTTP Request - LINE Push (Closed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2928,
+        3488
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bf94195b-7f86-4916-a0a0-3372a6f7a9aa",
+              "name": "notifyText",
+              "type": "string",
+              "value": "={{ 'แจ้งเตือน Preventive Maintenance: อุปกรณ์ ' + $json.deviceId + ' มีรายการแจ้งซ่อมซ้ำ ' + ($json.repeatCount || 'หลาย') + ' ครั้ง ในช่วง 30 วันที่ผ่านมา ควรพิจารณาบำรุงรักษาเชิงป้องกัน' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "35fb1d94-4b91-4c4a-aae3-134af77e92e9",
+      "name": "Set - Message (PreventiveAlert)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2736,
+        3632
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('Set - Config').item.json.itLeadUserId, messages: [{type:'text', text: $json.notifyText}] }) }}",
+        "options": {}
+      },
+      "id": "754228b2-3f84-45b9-a546-a2f43caafb5b",
+      "name": "HTTP Request - LINE Push (Preventive Alert to Lead)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2976,
+        3632
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "7e3db05a-dcad-4796-88f9-c42c737f8d91",
+      "name": "Schedule Trigger - Daily 06:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        1776,
+        3472
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM tickets) AS total_tickets,\n  (SELECT COUNT(*) FROM tickets WHERE created_at::date = current_date) AS today_tickets,\n  (SELECT COUNT(*) FROM tickets WHERE date_trunc('month', created_at) = date_trunc('month', now())) AS month_tickets,\n  (SELECT COUNT(*) FROM tickets WHERE status IN ('Open','Assigned','In Progress','Waiting for Parts','Waiting for User')) AS in_progress,\n  (SELECT COUNT(*) FROM tickets WHERE status IN ('Completed','Closed')) AS closed_tickets,\n  (SELECT AVG(EXTRACT(EPOCH FROM (closed_at - created_at))/3600) FROM tickets WHERE closed_at IS NOT NULL) AS avg_repair_hours,\n  (SELECT COUNT(*) FROM chatbot_logs WHERE resolved = true) AS resolved_by_chatbot,\n  (SELECT COUNT(*) FROM chatbot_logs WHERE resolved = false) AS escalated_to_staff",
+        "options": {}
+      },
+      "id": "1bd4f7ee-9853-4723-9d48-1a19be16edd1",
+      "name": "Postgres - Aggregate Ticket Summary",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2016,
+        3312
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT intent, COUNT(*) AS cnt FROM chatbot_logs GROUP BY intent ORDER BY cnt DESC LIMIT 10",
+        "options": {}
+      },
+      "id": "8bd81b41-842c-47d2-b157-7f7f35550f4e",
+      "name": "Postgres - Top Problem Types",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2336,
+        3872
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT device_id, device_type, COUNT(*) AS cnt FROM tickets GROUP BY device_id, device_type ORDER BY cnt DESC LIMIT 10",
+        "options": {}
+      },
+      "id": "16bedb2c-00f9-4de6-8277-135fa8b984df",
+      "name": "Postgres - Top Problem Devices",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2528,
+        3872
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT organization, COUNT(*) AS cnt FROM tickets GROUP BY organization ORDER BY cnt DESC LIMIT 10",
+        "options": {}
+      },
+      "id": "2c038574-7cae-44c3-be7a-cbc953ee86aa",
+      "name": "Postgres - Top Schools/Orgs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2736,
+        3872
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sum = $('Postgres - Aggregate Ticket Summary').first().json;\nconst pick = (name, key) => $(name).all().map(i => `${i.json[key] ?? '-'}:${i.json.cnt}`).join(', ');\nreturn [{ json: {\n  report_date: new Date().toISOString().slice(0,10),\n  total_tickets: Number(sum.total_tickets || 0),\n  today_tickets: Number(sum.today_tickets || 0),\n  month_tickets: Number(sum.month_tickets || 0),\n  in_progress: Number(sum.in_progress || 0),\n  closed_tickets: Number(sum.closed_tickets || 0),\n  avg_repair_hours: sum.avg_repair_hours ? Number(Number(sum.avg_repair_hours).toFixed(2)) : 0,\n  resolved_by_chatbot: Number(sum.resolved_by_chatbot || 0),\n  escalated_to_staff: Number(sum.escalated_to_staff || 0),\n  top_problem_types: pick('Postgres - Top Problem Types','intent'),\n  top_problem_devices: pick('Postgres - Top Problem Devices','device_id'),\n  top_organizations: pick('Postgres - Top Schools/Orgs','organization')\n}}];"
+      },
+      "id": "faf9320e-7dfe-4992-8e28-9eeaa35d325f",
+      "name": "Code - Build Dashboard Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        3872
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "DASHBOARD_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "DailySummary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4508fcb0-87d4-4312-a73f-de05fe9bf046",
+      "name": "Google Sheets - Update Dashboard Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3136,
+        3968
+      ],
+      "disabled": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT device_id, COUNT(*) AS cnt FROM tickets WHERE created_at >= now() - interval '30 days' GROUP BY device_id HAVING COUNT(*) >= 3",
+        "options": {}
+      },
+      "id": "fc8d8468-9075-4f64-964b-a12a01c2e60a",
+      "name": "Postgres - Devices with Repeat Tickets",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        3168,
+        3776
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e5b2c7a1-9f34-4d18-a6e2-3c8b1d6f0a27",
+          "name": "Smart Classroom Postgres (Neon)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "if500001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.device_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a31a641c-b65b-4c9d-a9fc-55ded1b94d33",
+      "name": "IF - Has Repeat-Failure Devices",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        3776
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a3000001-0000-4000-8000-0000000000c2",
+              "name": "event",
+              "type": "string",
+              "value": "PREVENTIVE_ALERT"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000c3",
+              "name": "ticket",
+              "type": "object",
+              "value": "{}"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000c4",
+              "name": "userId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000c5",
+              "name": "replyToken",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000c6",
+              "name": "deviceId",
+              "type": "string",
+              "value": "={{ $json.device_id }}"
+            },
+            {
+              "id": "a3000001-0000-4000-8000-0000000000c7",
+              "name": "repeatCount",
+              "type": "string",
+              "value": "={{ $json.cnt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3000001-0000-4000-8000-0000000000c1",
+      "name": "Set - Notify Input (PREVENTIVE_ALERT)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2128,
+        3248
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gather ticket data from whichever feeder Set node ran (only one per execution)\nconst candidates = ['Set - Ticket Input (Postback)','Set - Map Web Form Fields','Set - Ticket Input (Low Confidence)','Set - Ticket Input (Not Resolved)'];\nlet ctx = {};\nfor (const n of candidates) {\n  try { const it = $(n).item; if (it && it.json && Object.keys(it.json).length) { ctx = it.json; break; } } catch(e) {}\n}\nreturn [{ json: ctx }];"
+      },
+      "id": "code-gather-ticket",
+      "name": "Code - Gather Ticket Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        2592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://smart-classroom-backend-3tv7.onrender.com/api/line/create-ticket",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "http-create-ticket",
+      "name": "HTTP - Create Ticket (FastAPI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1664,
+        2592
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    }
+  ],
+  "connections": {
+    "Webhook - QR Scan": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Get Device (backend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Build Device Context": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - QR (Prefilled Form)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Parse LINE Event": {
+      "main": [
+        [
+          {
+            "node": "Switch - Route LINE Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Route LINE Event": {
+      "main": [
+        [
+          {
+            "node": "Set - Chatbot Analyze Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Parse Postback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Store Image URL in Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Chatbot Analyze Input": {
+      "main": [
+        [
+          {
+            "node": "Switch - Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Parse Postback": {
+      "main": [
+        [
+          {
+            "node": "IF - Is Chatbot Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Is Chatbot Confirm": {
+      "main": [
+        [
+          {
+            "node": "Set - Chatbot Confirm Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Ticket Input (Postback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Chatbot Confirm Input": {
+      "main": [
+        [
+          {
+            "node": "IF - Answer Yes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Ticket Input (Postback)": {
+      "main": [
+        [
+          {
+            "node": "Code - Gather Ticket Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Store Image URL in Session": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Save Image to Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Web Form Report": {
+      "main": [
+        [
+          {
+            "node": "Set - Map Web Form Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Map Web Form Fields": {
+      "main": [
+        [
+          {
+            "node": "Code - Gather Ticket Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Notify Input (TICKET_CREATED)": {
+      "main": [
+        [
+          {
+            "node": "Set - Output Ticket Confirmation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set - Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Output Ticket Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Mode": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Gemini API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - Answer Yes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Gemini API": {
+      "main": [
+        [
+          {
+            "node": "Code - Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Insert Chatbot Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Insert Chatbot Log": {
+      "main": [
+        [
+          {
+            "node": "IF - Confidence High & Has Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Confidence High & Has Steps": {
+      "main": [
+        [
+          {
+            "node": "Set - Format LINE Flex Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Ticket Input (Low Confidence)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Format LINE Flex Reply": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Reply (Steps + Quick Reply)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Ticket Input (Low Confidence)": {
+      "main": [
+        [
+          {
+            "node": "Code - Gather Ticket Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Answer Yes": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Mark Resolved (Self-Service)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres - Get Chat Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Mark Resolved (Self-Service)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Reply (Thanks)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Get Chat Log": {
+      "main": [
+        [
+          {
+            "node": "Set - Ticket Input (Not Resolved)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Ticket Input (Not Resolved)": {
+      "main": [
+        [
+          {
+            "node": "Code - Gather Ticket Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Ticket Update (Staff)": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Update Ticket Status (backend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Status Completed or Closed": {
+      "main": [
+        [
+          {
+            "node": "Set - Notify Input (STATUS_CHANGED)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Notify Input (STATUS_CHANGED)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Update OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Ticket Status Check": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Track Ticket (backend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Config": {
+      "main": [
+        [
+          {
+            "node": "Switch - Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Event Type": {
+      "main": [
+        [
+          {
+            "node": "Set - Message (TicketCreated)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Message (Assigned)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Message (InProgress)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Message (WaitingParts)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Message (Completed)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Message (Closed)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set - Message (PreventiveAlert)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Message (TicketCreated)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Push (TicketCreated)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - LINE Push (IT Staff Group)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Message (Assigned)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Push (Assigned)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Message (InProgress)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Push (InProgress)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Message (WaitingParts)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Push (WaitingParts)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Message (Completed)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Push (Completed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Message (Closed)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Push (Closed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Message (PreventiveAlert)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - LINE Push (Preventive Alert to Lead)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger - Daily 06:00": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Aggregate Ticket Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Aggregate Ticket Summary": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Top Problem Types",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Top Problem Types": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Top Problem Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Top Problem Devices": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Top Schools/Orgs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Top Schools/Orgs": {
+      "main": [
+        [
+          {
+            "node": "Code - Build Dashboard Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Build Dashboard Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Dashboard Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Update Dashboard Data": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Devices with Repeat Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Devices with Repeat Tickets": {
+      "main": [
+        [
+          {
+            "node": "IF - Has Repeat-Failure Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Has Repeat-Failure Devices": {
+      "main": [
+        [
+          {
+            "node": "Set - Notify Input (PREVENTIVE_ALERT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - Notify Input (PREVENTIVE_ALERT)": {
+      "main": [
+        [
+          {
+            "node": "Set - Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Gather Ticket Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Create Ticket (FastAPI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Create Ticket (FastAPI)": {
+      "main": [
+        [
+          {
+            "node": "Set - Notify Input (TICKET_CREATED)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set - Output Ticket Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Get Device (backend)": {
+      "main": [
+        [
+          {
+            "node": "Set - Build Device Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Track Ticket (backend)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Update Ticket Status (backend)": {
+      "main": [
+        [
+          {
+            "node": "IF - Status Completed or Closed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "id": "d4e7a1b3-2c58-4f09-8b16-7a3d5e9c2f44",
+  "active": false
+}

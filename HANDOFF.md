@@ -43,6 +43,7 @@
 | `Notification Dispatcher (จาก backend)` | รับ event จาก backend (`/webhook/notify`) → push ข้อความเข้ากลุ่ม LINE เจ้าหน้าที่ |
 | `SLA Check (ทุก 15 นาที)` | เรียก `/api/internal/sla/check` เพื่อยกระดับงานเกินกำหนด |
 | `Keep-alive backend (ทุก 10 นาที)` | ยิง `/health` กัน Render หลับ (ไม่งั้น LINE ตอบช้า/error) |
+| `Smart Classroom - All-in-One (WF1-WF5)` | webhook เสริม: `qr-scan`, `web-report`, `ticket-status`, `ticket-update` (สาขา LINE ตัดออกแล้ว) |
 
 **การแก้ workflow** (n8n 2.38):
 ```bash
