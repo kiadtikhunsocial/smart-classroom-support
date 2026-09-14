@@ -102,3 +102,19 @@ DATABASE_URL='<neon>' JWT_SECRET=x PYTHONPATH=. .venv/Scripts/python.exe scripts
 - **Backend (Render)**: push ขึ้น `main` แล้ว Render deploy อัตโนมัติ หรือสั่งผ่าน API
 - **Frontend (Vercel)**: `cd frontend && npm run build && vercel --prod`
 - **n8n**: import + publish + restart (ดูข้อ 3)
+
+---
+
+## 8. การสำรองข้อมูล (สำคัญ — ทำก่อนแก้อะไรใหญ่ๆ)
+
+| ต้องสำรอง | ที่เก็บ | วิธี |
+|---|---|---|
+| ฐานข้อมูล (Neon) | `backups/neondb_<วันเวลา>.sql` / `.json` | `cd backend` แล้ว `DATABASE_URL='<neon>' PYTHONPATH=. .venv/Scripts/python.exe scripts/backup_db.py` |
+| n8n workflows | `n8n_workflows/` (ใน git) | ดึงจาก n8n แล้วบันทึกทับ (ดู README ในโฟลเดอร์) |
+| โค้ด | GitHub | `git push` |
+| ค่าตั้งค่า/ความลับ | `.env` ในเครื่อง + env ของ Render/Railway | ไม่ขึ้น git — เก็บสำเนาไว้ในที่ปลอดภัย |
+
+**กู้คืนฐานข้อมูล**: ให้ backend รันหนึ่งครั้งเพื่อสร้างสคีมา แล้ว `psql < backups/neondb_xxx.sql`
+(ไฟล์สำรองเป็นข้อมูลอย่างเดียว ไม่รวมสคีมา — สคีมาสร้างจาก models.py)
+
+**บทเรียน**: ก่อน redeploy service ที่ไม่มี volume (เช่น n8n) ต้องสำรองก่อนทุกครั้ง — เคยทำข้อมูล n8n หายมาแล้วครั้งหนึ่ง

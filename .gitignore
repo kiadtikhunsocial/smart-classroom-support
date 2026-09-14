@@ -44,3 +44,6 @@ backend/uploads/
 _backup_app_*/
 _n8n_secret.txt
 _n8n_restore/
+
+# ข้อมูลสำรองฐานข้อมูล (มีข้อมูลจริง — ห้ามขึ้น git)
+backups/
