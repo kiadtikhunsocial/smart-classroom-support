@@ -1,0 +1,102 @@
+{
+  "id": "b1f0c2d4-7a3e-4c11-9f60-5d2e8a4b7c31",
+  "name": "Notification Dispatcher (จาก backend)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notify",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "d5d4c2fe-c44b-4df9-83e9-1e68d483fdce",
+      "name": "Webhook - Notify",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "ae2c52be-d73d-46c7-9ec3-bc48d2a13104"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// สร้างข้อความไทยจาก event ที่ backend ส่งมา (ticket.created / ticket.status_changed / ...)\nconst body = $input.first().json.body || $input.first().json;\nconst ev = body.event || \"unknown\";\nconst LABEL = {\n  new: \"🆕 รอรับเรื่อง\", assigned: \"👷 มอบหมายแล้ว\", in_progress: \"🔧 กำลังดำเนินการ\",\n  pending: \"⏳ รออะไหล่/รอภายนอก\", waiting_parts: \"⏳ รออะไหล่\", waiting_user: \"⏳ รอผู้ใช้ตอบกลับ\",\n  resolved: \"✅ ซ่อมเสร็จ รอยืนยัน\", closed: \"🔒 ปิดงานแล้ว\", cancelled: \"❌ ยกเลิก\",\n};\nconst who = {\n  qr: \"สแกน QR\", public: \"ฟอร์มแจ้งซ่อม\", web: \"เว็บ\", line: \"LINE\", pm: \"บำรุงรักษา\",\n};\nlet msg = \"\";\nif (ev === \"ticket.created\") {\n  msg = [\"🆕 Ticket ใหม่: \" + (body.ticket_id || \"-\"),\n         \"เรื่อง: \" + (body.title || \"-\"),\n         \"อุปกรณ์: \" + (body.device_id || \"-\"),\n         \"ผู้แจ้ง: \" + (body.reporter_name || \"-\") + (body.reporter_phone ? \" (\" + body.reporter_phone + \")\" : \"\"),\n         \"ช่องทาง: \" + (who[body.channel] || body.channel || \"-\"),\n         \"ความเร่งด่วน: \" + (body.priority || \"normal\")].join(\"\\n\");\n} else if (ev === \"ticket.status_changed\") {\n  msg = [\"🔔 เปลี่ยนสถานะ \" + (body.ticket_id || \"-\"),\n         \"จาก: \" + (LABEL[body.from_status] || body.from_status || \"-\") + \" → \" + (LABEL[body.to_status] || body.to_status || \"-\"),\n         \"เรื่อง: \" + (body.title || \"-\"),\n         \"ผู้รับผิดชอบ: \" + (body.assigned_to || \"-\")].join(\"\\n\");\n} else {\n  msg = \"📣 \" + ev + \"\\n\" + JSON.stringify(body).slice(0, 500);\n}\nreturn [{ json: { to: $env.LINE_GROUP_ID, text: msg } }];\n"
+      },
+      "id": "045cf01c-c5c9-498e-88d9-6740ae7c8877",
+      "name": "สร้างข้อความแจ้งเตือน",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.to, messages: [{ type: 'text', text: $json.text }] }) }}",
+        "options": {}
+      },
+      "id": "a57dc74b-8728-43e4-8c18-63d4a3fc3988",
+      "name": "Push กลุ่ม LINE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 20000
+    }
+  ],
+  "connections": {
+    "Webhook - Notify": {
+      "main": [
+        [
+          {
+            "node": "สร้างข้อความแจ้งเตือน",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "สร้างข้อความแจ้งเตือน": {
+      "main": [
+        [
+          {
+            "node": "Push กลุ่ม LINE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "รับ event จาก backend (N8N_WEBHOOK_URL + notify) แล้ว push เข้ากลุ่ม LINE เจ้าหน้าที่"
+  }
+}

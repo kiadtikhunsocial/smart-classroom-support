@@ -1,0 +1,73 @@
+{
+  "id": "c7a1e5b2-3d84-4f60-9a12-6b0d8e4f2a55",
+  "name": "Keep-alive backend (ทุก 10 นาที)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "6ec90026-68e5-4c31-8f78-7e0ea2a85edb",
+      "name": "ทุก 10 นาที",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://smart-classroom-backend-3tv7.onrender.com/health",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      },
+      "id": "cec53b79-fbb8-4359-88e1-27a10a81b746",
+      "name": "ปลุก backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 15000,
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "ทุก 10 นาที": {
+      "main": [
+        [
+          {
+            "node": "ปลุก backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "ยิง /health ทุก 10 นาที กัน Render free tier หลับ (ทำให้ LINE ตอบช้า/error)"
+  }
+}
