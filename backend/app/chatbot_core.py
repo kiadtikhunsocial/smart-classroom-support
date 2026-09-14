@@ -422,10 +422,12 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             session["ticket_no"] = ticket_no
             save_session(user_id, session)
             _notify_ticket_created(fields, ticket_no)
-            from app.gemini_service import phrase_repair_reply
-            natural = phrase_repair_reply("ticket_created", f"เลข ticket: {ticket_no}")
-            return natural or (f"✅ สร้าง Ticket ให้แล้วนะคะ: **{ticket_no}**\n"
-                    "เจ้าหน้าที่จะรีบดำเนินการให้เร็วที่สุดเลยค่ะ ขอบคุณมากนะคะ 🙏 ถ้ามีอะไรเพิ่มเติม พิมพ์บอกได้เสมอค่ะ")
+            # ใช้ template แน่นอน (ไม่ให้ Gemini ใส่ placeholder หลุดในข้อความยืนยันสำคัญ)
+            name = (fields.get("name") or "").strip()
+            who = f"คุณ{name} " if name else ""
+            return (f"✅ แจ้งซ่อมเรียบร้อยแล้วนะคะ {who}เลขที่ใบงานของคุณคือ **{ticket_no}**\n"
+                    "ทีมงานจะรีบตรวจสอบและดำเนินการให้เร็วที่สุดเลยค่ะ ขอบคุณที่ไว้วางใจให้เราดูแลนะคะ 🙏\n"
+                    "ติดตามสถานะได้โดยพิมพ์ 'ติดตาม' หรือส่งเลขใบงานมาได้ทุกเมื่อค่ะ")
         if _is_negative(text):
             session["phase"] = "collecting"
             # reset ให้ถามใหม่
