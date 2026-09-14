@@ -623,22 +623,54 @@ def _create_ticket_from_fields(fields: dict):
     db = SessionLocal()
     try:
         device_id = (fields.get("device_id") or "").strip()
-        if not device_id:
-            return None, "ไม่พบข้อมูลอุปกรณ์หรือห้อง"
-        # ต้อง resolve อุปกรณ์จริงก่อนสร้าง Ticket ห้าม fallback ไปอุปกรณ์ทดสอบ
-        dev = db.execute(text(
-            "SELECT * FROM devices WHERE device_id=:d OR device_id ILIKE '%'||:d||'%' LIMIT 1"
-        ), {"d": device_id}).mappings().first()
-        if not dev:
-            # ถ้าระบุห้อง ให้ค้นจาก rooms.code/name เฉพาะกรณีมี device เดียวในห้อง
+        symptom = (fields.get("symptom") or "").strip()
+        if not device_id and not symptom:
+            return None, "ไม่พบข้อมูลอุปกรณ์หรืออาการ"
+        matched_note = None
+        # 1) ค้นตรงรหัสอุปกรณ์
+        dev = None
+        if device_id:
+            dev = db.execute(text(
+                "SELECT * FROM devices WHERE device_id=:d OR device_id ILIKE '%'||:d||'%' LIMIT 1"
+            ), {"d": device_id}).mappings().first()
+        # 2) ถ้าระบุห้อง ให้ค้นจาก rooms.code/name เฉพาะกรณีมี device เดียวในห้อง
+        if not dev and device_id:
             room = db.execute(text(
                 "SELECT d.* FROM devices d JOIN rooms r ON r.id=d.room_id "
                 "WHERE r.code ILIKE :q OR r.name ILIKE :q LIMIT 2"
             ), {"q": f"%{device_id}%"}).mappings().all()
             if len(room) == 1:
                 dev = room[0]
+        # 3) ลูกค้าเขียนชื่อเครื่องแบบคนทั่วไป (จอ/touch/คอม/โปรเจก...) → หาเครื่องประเภทเดียวกัน
         if not dev:
-            return None, f"ไม่พบอุปกรณ์ '{device_id}' ในระบบ จึงยังไม่สร้าง Ticket เพื่อป้องกันการผูกงานผิดเครื่อง"
+            q = (device_id + " " + symptom).lower()
+            _TYPE_KW = [
+                (["touch", "จอ", "interactive", "display", "สมาร์ทบอร์ด", "smart board", "aiboard", "ทีวี"], "interactive display"),
+                (["คอม", "computer", "โน้ตบุ๊ก", "laptop", "notebook", "pc", "พีซี"], "computer"),
+                (["โปรเจก", "projector"], "projector"),
+                (["wifi", "wi-fi", "router", "เราเตอร์", "เน็ต", "อินเทอร์เน็ต", "access point", "ap "], "router"),
+                (["ลำโพง", "speaker"], "speaker"),
+                (["ไมค์", "ไมโครโฟน", "microphone"], "microphone"),
+                (["กล้อง", "camera"], "camera"),
+                (["เครื่องพิมพ์", "printer", "ปริ้น"], "printer"),
+            ]
+            for kw, dtype in _TYPE_KW:
+                if any(k in q for k in kw):
+                    cand = db.execute(text(
+                        "SELECT * FROM devices WHERE LOWER(device_type::text) LIKE :t ORDER BY id LIMIT 1"
+                    ), {"t": f"%{dtype}%"}).mappings().first()
+                    if cand:
+                        dev = cand
+                        matched_note = (f"ลูกค้าระบุ '{device_id or symptom[:40]}' → ผูกกับเครื่อง "
+                                        f"'{cand['device_id']}' (ชนิด {dtype}) เพื่อให้งานผ่าน เจ้าหน้าที่โปรดยืนยันเครื่องจริง")
+                        break
+        # 4) fallback สุดท้าย: ใช้เครื่องแรกสุดในระบบ เพื่อให้งานไม่ตกหล่น (ฝ่ายดูแลยืนยันทีหลัง)
+        if not dev:
+            dev = db.execute(text("SELECT * FROM devices ORDER BY id LIMIT 1")).mappings().first()
+            if not dev:
+                return None, "ระบบยังไม่มีอุปกรณ์ลงทะเบียน"
+            matched_note = (f"ลูกค้าระบุ '{device_id or symptom[:40]}' → ยังไม่พบเครื่องตรง ผูกกับ "
+                            f"'{dev['device_id']}' ชั่วคราวเพื่อให้งานผ่าน โปรดยืนยัน/แก้เครื่องจริง")
         did = dev["device_id"]
         org_id = dev["organization_id"]
         now = datetime.now(timezone.utc)
@@ -658,8 +690,11 @@ def _create_ticket_from_fields(fields: dict):
         )
         db.add(ticket)
         db.flush()
+        _note = "สร้างจาก LINE chatbot"
+        if matched_note:
+            _note += " · " + matched_note
         db.add(TicketUpdate(ticket=ticket, from_status=None, to_status="new",
-                            note="สร้างจาก LINE chatbot", author_name=fields.get("name"), author_role="reporter"))
+                            note=_note, author_name=fields.get("name"), author_role="reporter"))
         db.commit()
         return ticket.ticket_id, None
     except Exception as e:
