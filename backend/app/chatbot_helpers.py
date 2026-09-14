@@ -71,11 +71,12 @@ def detect_intent(text: str) -> str:
     # ชื่อสินค้าจริงในข้อความ (ยกเว้นคำซื้อชัดเจนให้เป็น buy ก่อน)
     prod_hit = [p for p in ALL_PRODUCTS if any(tag in t for tag in p["tags"])]
     if not any(w in t for w in INTENTS["repair"]):
-        # buy ชนะ product (อยากซื้อ X)
-        if any(k in t for k in INTENTS["buy"]):
-            return "buy"
+        # เจอชื่อสินค้าเจาะจง → product (ตอบข้อมูล+ราคาใน LINE ทันที)
+        # อย่าให้คำว่า "ราคา/ซื้อ" เบี่ยงไป flow เก็บชื่อก่อน ทั้งที่ลูกค้าแค่ถามราคา
         if prod_hit:
             return "product"
+        if any(k in t for k in INTENTS["buy"]):
+            return "buy"
     # ไล่เจตนาที่เจาะจงก่อน
     for key in ["greeting", "thanks", "repair", "buy", "human", "contact", "company", "catalog", "service", "track"]:
         if any(k in t for k in INTENTS[key]):

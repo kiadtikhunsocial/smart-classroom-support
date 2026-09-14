@@ -28,7 +28,7 @@ def mask_pii(text: str) -> str:
 
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "")
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 _ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 ENABLE_NATURAL_REPLIES = os.environ.get("ENABLE_GEMINI_NATURAL_REPLIES", "0").lower() in {"1", "true", "yes", "on"}
 
@@ -218,12 +218,28 @@ def gemini_orchestrate(text: str, user_context: dict) -> dict | None:
     คืน {"reply": str, "action": "answer|ask_info|search_kb|create_ticket|escalate",
           "product": str, "service": str, "confidence": float}
     คืน None ถ้า Gemini ล่ม/429 → caller fallback ไป rule FSM เดิม
-    user_context: {phase, fields, has_product, has_service, name}"""
+    user_context: {phase, fields, has_product, has_service, name, history}
+    history: [{u, b}, ...] ประวัติสนทนาก่อนหน้านี้ (ย้อนไป ~6 รอบ) — ให้ตอบต่อเนื่อง
+    เมื่อลูกค้าเปลี่ยนหัวข้อกระทันหัน หรือถามย้อนกลับสิ่งที่เพิ่งคุย"""
     if not API_KEY:
         return None
     ctx = _orchestrate_context()
+    hist = user_context.get("history") or []
+    history_text = ""
+    if hist:
+        lines = []
+        for turn in hist[-6:]:
+            u = mask_pii(str(turn.get("u", "")))[:200]
+            b = mask_pii(str(turn.get("b", "")))[:200]
+            if u:
+                lines.append(f"ลูกค้า: {u}")
+            if b:
+                lines.append(f"บอท: {b}")
+        if lines:
+            history_text = "ประวัติการสนทนาที่ผ่านมา:\n" + "\n".join(lines) + "\n\n"
     prompt = (
-        f"ข้อความลูกค้า: {text}\n"
+        f"ข้อความล่าสุดของลูกค้า: {text}\n"
+        f"{history_text}"
         f"บริบทสนทนา: {user_context}\n"
         f"ข้อมูลธุรกิจ:\n{ctx}\n\n"
         "จงตัดสินใจว่าบอทควรทำอะไรใน turn นี้ และร่างคำตอบถึงลูกค้า:\n"
@@ -232,6 +248,8 @@ def gemini_orchestrate(text: str, user_context: dict) -> dict | None:
         "- search_kb: ดูเป็นปัญหาอุปกรณ์ที่ควรแนะนำวิธีแก้\n"
         "- create_ticket: ข้อมูลครบแล้ว ควรสร้าง ticket แจ้งซ่อม\n"
         "- escalate: อาการอันตราย/กำกวม ควรส่งช่าง\n"
+        "ใช้ประวัติการสนทนาช่วย — ถ้าลูกค้าเปลี่ยนหัวข้อกระทันหัน หรืออ้างถึงสิ่งที่คุยไปแล้ว "
+        "ให้ตอบต่อเนื่องสอดคล้องกับที่คุยมา ไม่ใช่เริ่มต้นใหม่\n"
         "คำตอบภาษาไทยสุภาพ อบอุ่น เหมือนพนักงานไทย 1-3 ประโยค ใช้ 'ค่ะ' ไม่ใช้ 'ฉัน'\n"
         'ตอบ JSON เท่านั้น: {"reply":"...", "action":"answer|ask_info|search_kb|create_ticket|escalate", '
         '"product":"ชื่อสินค้าถ้าเจอ หรือว่าง", "service":"ชื่อบริการถ้าเจอ หรือว่าง", "confidence":0.0-1.0}'

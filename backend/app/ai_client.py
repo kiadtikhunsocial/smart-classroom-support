@@ -19,7 +19,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "")
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 

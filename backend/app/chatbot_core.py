@@ -168,13 +168,14 @@ def _is_clear_business(text: str) -> bool:
 
 
 def _form_fallback_text() -> str:
-    """ข้อความส่งต่อเมื่อแก้เบื้องต้นไม่ได้ — ให้เลือกส่งลิงก์ฟอร์ม (หลัก) หรือให้บอทเก็บข้อมูลสร้าง ticket"""
+    """ข้อความส่งต่อเมื่อแก้เบื้องต้นไม่ได้ — ให้แจ้งผ่านบอทตรงนี้ หรือสแกน QR บนตัวอุปกรณ์
+    (ไม่มีลิงก์ฟอร์มสาธารณะอีกต่อไป — ลูกค้าไม่ต้องออกจาก LINE ไปกรอกที่อื่น)"""
     return (
         "เสียใจด้วยนะคะที่ยังหาวิธีแก้เบื้องต้นไม่เจอ 😔\n\n"
-        "แจ้งปัญหาให้ทีมช่างได้ 2 ทางค่ะ:\n"
-        f"1️⃣ กรอกฟอร์มแจ้งซ่อม: {REPORT_FORM_URL}\n"
-        "2️⃣ หรือแจ้งผ่านบอทตรงนี้ (พิมพ์ 'แจ้งซ่อม' แล้วกรอกข้อมูล) ให้เราสร้างงานให้\n\n"
-        "พิมพ์ 'แจ้งซ่อม' เพื่อใช้บอทช่วยสร้างงาน หรือเปิดลิงก์ฟอร์มก็ได้นะคะ"
+        "แจ้งซ่อมได้ง่าย ๆ โดยไม่ต้องไปไหนไกลค่ะ:\n"
+        "📱 **สแกน QR Code ที่ติดอยู่บนตัวอุปกรณ์** แล้วกรอกข้อมูลตามฟอร์ม จะส่งงานให้ทีมช่างทันที\n"
+        "หรือจะแจ้งผ่านบอทตรงนี้เลยก็ได้ — พิมพ์ **'แจ้งซ่อม'** แล้วกรอกชื่อ/เบอร์/อาการ ให้เราสร้างงานให้ค่ะ\n\n"
+        "สแกน QR ที่ตัวเครื่อง → กรอกครบ → ทีมช่างรับเรื่องและไปดูแลถึงที่ให้ค่ะ"
     )
 
 
@@ -279,7 +280,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     # ซึ่ง classify() ตีเป็น business ได้ → เดิมบอทหลุดไปขึ้นรายการสินค้าทั้งที่กำลังเก็บข้อมูลซ่อม
     from app.company_catalog import classify as _cls
     if _is_clear_business(text):
-        keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+        keep = {"last_product": session["last_product"], "history": session.get("history")} if session.get("last_product") else {"history": session.get("history")}
         save_session(user_id, {"phase": "new", "fields": {}, **keep})
         return _answer_business(text)
 
@@ -492,7 +493,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     # เริ่มต้นรอบใหม่เฉพาะ phase==new (ไม่ reset state resolving)
     if phase == "new":
         # เก็บ context สินค้าล่าสุดไว้ (มิฉะนั้นคำถามติดตามเช่น 'มีขนาดอื่นไหม' จะหล่นไป flow แจ้งซ่อม)
-        _keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+        _keep = {"last_product": session["last_product"], "history": session.get("history")} if session.get("last_product") else {"history": session.get("history")}
         session = {"phase": "new", "fields": {}, **_keep}
         save_session(user_id, session)
 
@@ -512,7 +513,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         # A business question explicitly changes the subject. Park any active
         # repair/lead/tracking state so the next message starts cleanly.
         if phase not in ("new", "done") or session.get("resolving"):
-            keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+            keep = {"last_product": session["last_product"], "history": session.get("history")} if session.get("last_product") else {"history": session.get("history")}
             session = {"phase": "new", "fields": {}, **keep}
             save_session(user_id, session)
         _reply = _answer_business(text)
@@ -750,10 +751,9 @@ def _answer_out_of_scope() -> str:
 
 
 def _format_product_reply(prod: dict, extra: str = "") -> str:
-    """ตอบสินค้าโดยใช้เฉพาะข้อมูลใน company_catalog และปิดคำถามให้ครบ"""
+    """ตอบสินค้าโดยใช้เฉพาะข้อมูลใน company_catalog และปิดคำถามให้ครบใน LINE (ไม่มีลิงก์ให้เปิดเอง)"""
     price = prod.get("price")
     price_line = f"💰 ราคา: {price}" if price not in (None, "") else "💰 ราคา/โปรโมชั่น: กรุณาติดต่อทีมงานเพื่อขอใบเสนอราคาตามรุ่นและจำนวนค่ะ"
-    link_line = f"🔗 รายละเอียดเพิ่มเติม: {prod['link']}" if prod.get("link") else ""
     parts = [
         f"📦 **{prod.get('name', 'สินค้า')}**",
         f"หมวด: {prod.get('category', '-')}",
@@ -762,9 +762,7 @@ def _format_product_reply(prod: dict, extra: str = "") -> str:
     if extra:
         parts.append(extra.strip())
     parts.append(price_line)
-    if link_line:
-        parts.append(link_line)
-    parts.append("หากต้องการสอบถามราคา ขอใบเสนอราคา หรือให้ทีมงานแนะนำรุ่นที่เหมาะสม พิมพ์ **ติดต่อเรา** ได้เลยนะคะ")
+    parts.append("สนใจสอบถามราคา ขอใบเสนอราคา หรือให้ทีมงานแนะนำรุ่นที่เหมาะสม พิมพ์ **ติดต่อเรา** ได้เลยนะคะ")
     return "\n".join(parts)
 
 
@@ -870,6 +868,8 @@ _PRODUCT_FOLLOWUP_KW = [
     "ขนาด", "รุ่นอื่น", "ตัวอื่น", "นิ้วอื่น", "กี่นิ้ว", "กี่ขนาด", "ใหญ่กว่า", "เล็กกว่า",
     "ใหญ่ขึ้น", "เล็กลง", "มีกี่", "สเปก", "spec", "เทียบ", "ต่างกัน", "ต่างยังไง",
     "อื่นไหม", "อื่นๆ", "อื่นอีก", "ทั้งหมด", "อีกไหม", "กี่รุ่น",
+    "เท่าไหร่", "เท่าไร", "ราคา", "กี่บาท", "แพงไหม", "ซื้อเท่าไหร่", "ราคาเท่าไหร่",
+    "ขายเท่าไหร่", "ราคาเท่าไร", "ลดได้ไหม", "ส่วนลด", "โปร",
 ]
 
 
@@ -879,17 +879,48 @@ def _is_product_followup(text: str) -> bool:
 
 
 def _answer_product_followup(last: dict, text: str) -> str:
-    """ตอบคำถามติดตามจากสินค้าที่เพิ่งคุย (เช่น 'มีขนาดอื่นไหม' → ขึ้นขนาดทั้งหมดของ AiBoard)"""
-    from app.company_catalog import PRODUCT_CATEGORIES
+    """ตอบคำถามติดตามจากสินค้าที่เพิ่งคุย (เช่น 'มีขนาดอื่นไหม' 'แล้ว 75 ราคาเท่าไหร่')
+    ใช้ข้อมูลจริงใน company_catalog (ราคาจริง ไม่ให้ Gemini เดา)"""
+    from app.company_catalog import PRODUCT_CATEGORIES, find_product
+    t = text.strip().lower()
+    # ระบุขนาด/รุ่นเฉพาะ (เช่น 75, 86, นิ้ว) → ตอบราคารุ่นนั้นตรง ๆ
+    sz = None
+    for s in ("86", "75", "65"):
+        if s in t and ("นิ้ว" in t or "ตัว" in t or "ขนาด" in t or "รุ่น" in t or "เท่า" in t or s in last.get("name", "")):
+            sz = s
+            break
+    if sz and last.get("cat_id") == "smart-board":
+        cat = next((c for c in PRODUCT_CATEGORIES if c["id"] == "smart-board"), None)
+        if cat:
+            for p in cat["products"]:
+                if sz in p["name"]:
+                    _set_pending_product({**p, "cat_id": "smart-board", "category": cat["name"]})
+                    _set_pending_image(p.get("img") or "")
+                    price = p.get("price")
+                    pl = f"💰 ราคา: {price}" if price else "💰 ราคา: กรุณาติดต่อขอใบเสนอราคาค่ะ"
+                    return (f"📦 **{p['name']}**\n{p['summary']}\n{pl}\n\n"
+                            "สนใจสอบถามราคา/โปรโมชั่น พิมพ์ **ติดต่อเรา** ได้เลยนะคะ")
     if last.get("cat_id") == "smart-board":
         cat = next((c for c in PRODUCT_CATEGORIES if c["id"] == "smart-board"), None)
         if cat and cat["products"]:
             _set_pending_product({**cat["products"][0], "cat_id": "smart-board",
                                   "category": cat["name"]})
             _set_pending_image(cat["products"][0].get("img") or "")
-            lines = [f"• **{p['name']}** — {p['summary']}" for p in cat["products"]]
-            return ("🖥️ **Iwa AiBoard มีให้เลือกหลายขนาด:**\n" + "\n".join(lines) +
+            lines = []
+            for p in cat["products"]:
+                price = p.get("price")
+                pl = f" — {price}" if price else ""
+                lines.append(f"• **{p['name']}**{pl}\n   {p['summary']}")
+            return ("🖥️ **Iwa AiBoard มีให้เลือกหลายขนาด (พร้อมราคา):**\n" + "\n".join(lines) +
                     "\n\nพิมพ์ขนาดที่สนใจ เช่น 'Iwa AiBoard 86 นิ้ว' หรือ 'ติดต่อ' เพื่อสอบถามราคาค่ะ")
+    # สินค้าไม่ใช่ AiBoard — ลองหา product ที่ตรงจากข้อความ ถ้าเจอตอบราคา
+    p = find_product(text)
+    if p:
+        _set_pending_product(p)
+        _set_pending_image(p.get("img") or "")
+        price = p.get("price")
+        pl = f"💰 ราคา: {price}" if price else "💰 ราคา: กรุณาติดต่อขอใบเสนอราคาค่ะ"
+        return f"📦 **{p['name']}**\n{p['summary']}\n{pl}\n\nสนใจสอบถามราคา พิมพ์ **ติดต่อเรา** ได้เลยนะคะ"
     _set_pending_image(last.get("img") or "")
     return (f"📦 **{last.get('name', 'สินค้า')}**\n{last.get('summary', '')}\n\n"
             "สนใจสอบถามราคาหรือรายละเอียดเพิ่ม ติดต่อทีมงานได้เลยค่ะ (พิมพ์ 'ติดต่อ')")
@@ -914,6 +945,15 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     def _finish(reply: str, resolved: bool = None, intent_used: str = intent,
                 qr: list | None = None, faq_cacheable: bool | None = None):
         reply = format_chatbot_reply(reply)
+        # A: จดจำประวัติสนทนา (ย้อนหลัง ~6 รอบ) — ให้ตอบต่อเนื่องเมื่อลูกค้าเปลี่ยนหัวข้อ
+        # กระทันหันหรือถามย้อนกลับสิ่งที่เพิ่งคุย (คล้าย AI ที่จดจำ sessions ได้ดี)
+        try:
+            s = get_session(user_id)
+            hist = list(s.get("history") or [])
+            hist.append({"u": text, "b": reply})
+            save_session(user_id, {**s, "history": hist[-6:]})
+        except Exception:
+            pass
         # ฝาก quick-reply suggestions ลง session ให้ main ดึงไป attach กับ reply (G)
         if qr:
             try:
@@ -944,14 +984,14 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     # collecting fields so phrases such as "แอดมิน", "ติดต่อเรา", or a Rich
     # Menu contact action never get mistaken for a name/device/symptom.
     if _is_admin_contact_request(text):
-        keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+        keep = {"last_product": session["last_product"], "history": session.get("history")} if session.get("last_product") else {"history": session.get("history")}
         save_session(user_id, {"phase": "new", "fields": {}, **keep})
         return _finish(_answer_admin_contact(), intent_used="admin_contact")
 
     # Clearly unrelated questions should receive a graceful hand-off even if
     # the user is currently midway through a repair or sales flow.
     if _is_out_of_scope(text):
-        keep = {"last_product": session["last_product"]} if session.get("last_product") else {}
+        keep = {"last_product": session["last_product"], "history": session.get("history")} if session.get("last_product") else {"history": session.get("history")}
         save_session(user_id, {"phase": "new", "fields": {}, **keep})
         return _finish(_answer_out_of_scope(), intent_used="out_of_scope")
 
@@ -983,11 +1023,12 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     # ถ้า Gemini ล่ม/429 → fallback ไป rule FSM เดิม (ปลอดภัย ไม่พัง)
     if (ENABLE_GEMINI_ORCHESTRATION and phase in ("new", "done")
             and intent in ("product", "service", "company", "greeting", "thanks", "other")
-            and not _is_product_followup(text)):
+            and not _is_product_followup(text) and not _has_product):
         try:
             from app.gemini_service import gemini_orchestrate
             _gctx = {"phase": phase, "fields": session.get("fields", {}),
-                     "name": profile.get("name") if profile else None}
+                     "name": profile.get("name") if profile else None,
+                     "history": session.get("history")}
             _go = gemini_orchestrate(text, _gctx)
             if _go and _go.get("reply") and _go.get("confidence", 0) >= 0.6:
                 action = _go.get("action")

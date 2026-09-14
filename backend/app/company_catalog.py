@@ -1,14 +1,17 @@
 """
 company_catalog.py — ความรู้บริษัท / สินค้า / บริการ / ติดต่อ ของ IWA RICH YOU D CO.,LTD.
-รวบจากเว็บไซต์ https://iwa-web.onrender.com/ (ตัวแทนขายอย่างเป็นทางการ)
+ราคารวบจากเว็บไซต์ทางการ https://www.edtech-info.com/ (หมวด สินค้า)
+
+หลักการตอบสินค้า:
+  - ให้รายละเอียดครบใน LINE ไม่ต้องส่งลิงก์ให้ลูกค้าไปเปิดเอง
+  - สินค้าที่มีราคาประกาศ → ใส่ราคาให้ชัดเจน
+  - สินค้าที่ไม่มีราคาสาธารณะ → ให้ติดต่อขอใบเสนอราคาตามรุ่น/จำนวน
 
 โครงสร้าง:
   COMPANY     — ภาพรวมบริษัท + ตัวเลข
   SERVICES    — 5 บริการหลัก
-  PRODUCTS    — รายการสินค้าทั้งหมด (จัดหมวด)
+  PRODUCT_CATEGORIES — สินค้าทั้งหมด (จัดหมวด พร้อมราคา)
   CONTACT     — ช่องทางติดต่อ
-
-ใช้เป็น context ให้ LINE chatbot ตอบเรื่องสินค้า/ขาย/สอบถามได้ (grounded, ไม่สร้างเอง)
 """
 import re
 import difflib
@@ -72,36 +75,44 @@ SERVICES = [
     },
 ]
 
-# ── สินค้า: แต่ละหมวดมี products; แต่ละ product: name, cat, summary, tags ──
+# ── สินค้า: แต่ละหมวดมี products; แต่ละ product: name, summary, tags, price ──
+# ราคา = ราคาประกาศจากเว็บ edtech-info.com; ถ้าไม่มีราคาสาธารณะ price=None (ให้ติดต่อขอใบเสนอราคา)
 PRODUCT_CATEGORIES = [
     {
         "id": "children-english",
         "name": "หลักสูตรภาษาอังกฤษสำหรับเด็ก (Children's English)",
         "products": [
             {"name": "Phonics Hero",
-             "summary": "หลักสูตรภาษาอังกฤษสำหรับเด็กวัยเริ่มต้น ฝึกการอ่านออกเสียง (Phonics) อย่างเป็นระบบ",
+             "summary": "หลักสูตรภาษาอังกฤษสำหรับเด็กวัยเริ่มต้น ฝึกการอ่านออกเสียง (Phonics) อย่างเป็นระบบ พร้อมทดลองเรียนฟรี",
              "tags": ["phonics", "โฟนิก", "โฟนิค", "ออกเสียง", "หลักสูตรเด็ก", "อ่านภาษาอังกฤษ"],
              "img": "https://iwa-web.onrender.com/assets/img/products/phonics-hero.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": None},
             {"name": "Picaro English",
-             "summary": "หลักสูตรภาษาอังกฤษสำหรับเด็ก ใช้แนวคิด Inspire · Motivate · Enjoy เรียนรู้ผ่านกิจกรรม",
+             "summary": "หลักสูตรภาษาอังกฤษสำหรับเด็กมาตรฐานสากลจากประเทศอังกฤษ ใช้แนวคิด Inspire · Motivate · Enjoy เรียนรู้ผ่านกิจกรรม",
              "tags": ["picaro", "พิคาโร", "ปิคาโร", "หลักสูตรเด็ก", "ภาษาอังกฤษ"],
              "img": "https://iwa-web.onrender.com/assets/img/products/picaro-overview.jpg",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": None},
         ],
     },
     {
         "id": "communicative-english",
         "name": "หลักสูตรภาษาอังกฤษเพื่อการสื่อสาร (Communicative English)",
         "products": [
+            {"name": "Velawoods English",
+             "summary": "เรียนรู้และฝึกทักษะการสื่อสารภาษาอังกฤษผ่านสถานการณ์ในชีวิตประจำวัน โดยจำลองตัวเองเป็นตัวละครในเมืองเสมือนจริง",
+             "tags": ["velawoods", "เวลาวูดส์", "cefr", "เพื่อการสื่อสาร", "communicative", "เมืองเสมือน", "สถานการณ์จริง"],
+             "img": "https://iwa-web.onrender.com/assets/img/products/velawoods.png",
+             "price": "เริ่มต้น 12,000 บาท"},
             {"name": "Vantage Connected Learn Social",
-             "summary": "เรียนภาษาอังกฤษเพื่อการสื่อสารตามกรอบ CEFR พร้อมการเรียนแบบโต้ตอบและติดตามความก้าวหน้า",
-             "tags": ["vantage", "แวนเทจ", "cefr", "เพื่อการสื่อสาร", "communicative", "โต้ตอบ"],
+             "summary": "เรียนภาษาอังกฤษเพื่อการสื่อสารตามกรอบ CEFR ผ่าน Learn Social Platform การเรียนแบบโต้ตอบพร้อมติดตามความก้าวหน้า",
+             "tags": ["vantage", "แวนเทจ", "cefr", "เพื่อการสื่อสาร", "communicative", "โต้ตอบ", "learn social"],
              "img": "https://iwa-web.onrender.com/assets/img/products/vantage-connected-learn-social.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": None},
+            {"name": "Dynamic English",
+             "summary": "เรียนรู้และฝึกทักษะการสื่อสารภาษาอังกฤษจากเจ้าของภาษาในรูปแบบละคร (Dynamic English)",
+             "tags": ["dynamic english", "ไดนามิก", "cefr", "เพื่อการสื่อสาร", "ละคร", "เจ้าของภาษา"],
+             "img": "https://iwa-web.onrender.com/assets/img/products/dynamic-english.png",
+             "price": None},
         ],
     },
     {
@@ -109,53 +120,50 @@ PRODUCT_CATEGORIES = [
         "name": "สื่อมัลติมีเดียระดับปฐมวัย (Preschool Multimedia)",
         "products": [
             {"name": "Click2Plearn",
-             "summary": "สื่อมัลติมีเดียสำหรับกิจกรรมการเรียนรู้ของเด็กปฐมวัย ชวนเด็กสำรวจ เรียนรู้ และลงมือทำตามจังหวะผู้สอน",
+             "summary": "สื่อมัลติมีเดียสำหรับกิจกรรมการเรียนรู้ของเด็กปฐมวัย ชวนเด็กสำรวจ เรียนรู้ และลงมือทำตามจังหวะผู้สอน สอดคล้องหลักสูตรปฐมวัย 2560",
              "tags": ["click2plearn", "คลิก", "ปฐมวัย", "เด็กเล็ก", "อนุบาล", "กิจกรรม"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/click2plearn.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "25,000 บาท"},
             {"name": "พัฒนาทักษะการใช้ภาษา (ACTIV@TEACH · LANGUAGE)",
-             "summary": "โปรแกรมสื่อมัลติมีเดียพัฒนาทักษะการใช้ภาษาสำหรับเด็กปฐมวัย",
-             "tags": ["ภาษา", "activ@teach", "activateach", "ปฐมวัย"],
+             "summary": "โปรแกรมสื่อมัลติมีเดียพัฒนาทักษะการใช้ภาษา (ฟัง พูด อ่าน เขียน) ภาษาไทยและอังกฤษสำหรับเด็กปฐมวัย",
+             "tags": ["ภาษา", "activ@teach", "activateach", "ปฐมวัย", "การพูด", "การอ่าน"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/activateach-thai.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "20,000 บาท"},
             {"name": "พัฒนาทักษะทางคณิตศาสตร์ (ACTIV@TEACH · MATH)",
-             "summary": "โปรแกรมสื่อมัลติมีเดียสำหรับกิจกรรมการเรียนรู้ด้านคณิตศาสตร์ระดับปฐมวัย",
+             "summary": "โปรแกรมสื่อมัลติมีเดียสำหรับกิจกรรมการเรียนรู้คณิตศาสตร์ระดับปฐมวัย ผ่านกระดานอัจฉริยะ",
              "tags": ["คณิต", "คณิตศาสตร์", "เลข", "ปฐมวัย"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/activateach-math.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "20,000 บาท"},
             {"name": "พัฒนาทักษะทางวิทยาศาสตร์ (ACTIV@TEACH · SCIENCE)",
-             "summary": "โปรแกรมสื่อมัลติมีเดียสำหรับกิจกรรมการเรียนรู้ด้านวิทยาศาสตร์ระดับปฐมวัย",
+             "summary": "โปรแกรมสื่อมัลติมีเดียสำหรับกิจกรรมการเรียนรู้วิทยาศาสตร์ระดับปฐมวัย",
              "tags": ["วิทย์", "วิทยาศาสตร์", "ปฐมวัย"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/activateach-science.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "20,000 บาท"},
             {"name": "พัฒนาทักษะกระบวนการคิด (ACTIV@TEACH · THINKING)",
              "summary": "โปรแกรมสื่อมัลติมีเดียเสริมกระบวนการคิดและเชาวน์ปัญญาสำหรับเด็กปฐมวัย",
              "tags": ["กระบวนการคิด", "เชาวน์", "คิด", "ปฐมวัย"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/activateach-thinking.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "20,000 บาท"},
             {"name": "ชุดอาเซียนน่ารู้",
-             "summary": "สื่อมัลติมีเดียประกอบการเรียนรู้เรื่องอาเซียนสำหรับเด็กปฐมวัย",
+             "summary": "สื่อมัลติมีเดียประกอบการเรียนรู้เรื่องประชาคมอาเซียนสำหรับเด็กปฐมวัย ครบ 10 ประเทศ",
              "tags": ["อาเซียน", "asean", "ปฐมวัย", "สังคม"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/asean.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
-            {"name": "Smart Quiz v1.0",
-             "summary": "คลังข้อสอบและระบบวัดผลสำหรับเด็กปฐมวัย ใช้ประกอบการประเมินตามกิจกรรมในชั้นเรียน",
-             "tags": ["smart quiz", "ข้อสอบ", "วัดผล", "ประเมิน", "แบบทดสอบ", "assessment"],
+             "price": "20,000 บาท"},
+            {"name": "Smart Quiz v1.0 (คลังข้อสอบปฐมวัย)",
+             "summary": "ระบบคลังข้อสอบและวัดผลสำหรับเด็กปฐมวัย ใช้ประกอบการประเมินตามกิจกรรมในชั้นเรียน ครอบคลุมทุกด้าน",
+             "tags": ["smart quiz", "ข้อสอบ", "วัดผล", "ประเมิน", "แบบทดสอบ", "assessment", "คลังข้อสอบ"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/smart-quiz.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "22,000 บาท"},
             {"name": "E-Learning สำหรับครูปฐมวัย",
-             "summary": "บทเรียนอิเล็กทรอนิกส์รูปแบบมัลติมีเดียและเครื่องมือจัดการการเรียนรู้สำหรับครูปฐมวัย",
+             "summary": "บทเรียนอิเล็กทรอนิกส์รูปแบบมัลติมีเดียและเครื่องมือจัดการการเรียนรู้สำหรับครูปฐมวัย พัฒนาตนเองอย่างต่อเนื่อง",
              "tags": ["e-learning", "อีเลิร์นนิ่ง", "ครู", "ปฐมวัย", "บทเรียนออนไลน์"],
              "img": "https://iwa-web.onrender.com/assets/img/products/preschool/elearning-teacher.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "27,000 บาท"},
+            {"name": "หนังสืออิเล็กทรอนิกส์ (e-Book) ปฐมวัย",
+             "summary": "e-Book กิจกรรมพัฒนาทักษะเด็กปฐมวัย แสดงผล 3 มิติ ภาพระบายสี 500+ ภาพ กิจกรรม 800+ รายการ ทำ Bookmark ย่อ/ขยาย/พิมพ์ได้",
+             "tags": ["e-book", "อีบุ๊ค", "หนังสือ", "ปฐมวัย", "3d", "ระบายสี", "กิจกรรม"],
+             "img": "https://iwa-web.onrender.com/assets/img/products/preschool/ebook.png",
+             "price": "16,000 บาท"},
         ],
     },
     {
@@ -166,50 +174,53 @@ PRODUCT_CATEGORIES = [
              "summary": "คลังสื่อดิจิทัลครอบคลุม 8 กลุ่มสาระการเรียนรู้ สำหรับนักเรียน ป.1–ป.6 ใช้เป็นสื่อประกอบการเรียนและค้นหาเนื้อหาได้สะดวก",
              "tags": ["digital library", "ดิจิทัลไลบรารี", "คลังสื่อ", "ประถม", "ห้องสมุด", "dls"],
              "img": "https://iwa-web.onrender.com/assets/img/products/primary/digital-library-school.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "75,000 บาท"},
             {"name": "อ่านออก เขียนได้ ง่ายนิดเดียว",
-             "summary": "สื่อมัลติมีเดียพัฒนาทักษะการอ่าน การเขียน และภาษาไทยระดับประถมศึกษา",
+             "summary": "โปรแกรมสื่อมัลติมีเดียพัฒนาทักษะการอ่าน การเขียนภาษาไทยระดับประถมศึกษา นำเสนอเป็นแอนิเมชันเสียงบรรยาย พร้อมเกมและแบบทดสอบ",
              "tags": ["ภาษาไทย", "อ่านออกเขียนได้", "อ่าน", "เขียน", "ประถม"],
              "img": "https://iwa-web.onrender.com/assets/img/products/primary/thai-primary.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
-            {"name": "โปรแกรมพัฒนาทักษะคณิตศาสตร์",
-             "summary": "สื่อมัลติมีเดียเสริมการเรียนรู้คณิตศาสตร์ระดับประถมศึกษา",
+             "price": "5,500 บาท"},
+            {"name": "โปรแกรมพัฒนาทักษะคณิตศาสตร์ (ประถม)",
+             "summary": "สื่อมัลติมีเดียเสริมการเรียนรู้คณิตศาสตร์ระดับประถมศึกษา สอดคล้องหลักสูตรแกนกลางการศึกษาขั้นพื้นฐาน",
              "tags": ["คณิต", "คณิตศาสตร์", "เลข", "ประถม"],
              "img": "https://iwa-web.onrender.com/assets/img/products/primary/math-primary.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
-            {"name": "โปรแกรมพัฒนาทักษะวิทยาศาสตร์",
-             "summary": "สื่อมัลติมีเดียเสริมการเรียนรู้วิทยาศาสตร์ระดับประถมศึกษา",
+             "price": "27,500 บาท"},
+            {"name": "โปรแกรมพัฒนาทักษะวิทยาศาสตร์ (ประถม)",
+             "summary": "สื่อมัลติมีเดียเสริมการเรียนรู้วิทยาศาสตร์ระดับประถมศึกษา สอดคล้องหลักสูตรแกนกลาง",
              "tags": ["วิทย์", "วิทยาศาสตร์", "ประถม"],
              "img": "https://iwa-web.onrender.com/assets/img/products/primary/science-primary.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "22,500 บาท"},
+            {"name": "โปรแกรมพัฒนาทักษะภาษาไทย (ประถม)",
+             "summary": "โปรแกรมสื่อมัลติมีเดียพัฒนาทักษะการเรียนรู้ภาษาไทยสำหรับนักเรียนระดับประถมศึกษา",
+             "tags": ["ภาษาไทย", "ประถม", "การอ่าน", "การเขียน"],
+             "img": "https://iwa-web.onrender.com/assets/img/products/primary/thai-primary.png",
+             "price": "24,500 บาท"},
+            {"name": "โปรแกรมสื่อมัลติมีเดีย ชุด อาเซียนน่ารู้ (ประถม)",
+             "summary": "โปรแกรมสื่อมัลติมีเดียเพื่อการเรียนรู้ชุดอาเซียนน่ารู้ สำหรับระดับประถมศึกษา",
+             "tags": ["อาเซียน", "asean", "ประถม", "สังคม"],
+             "img": "https://iwa-web.onrender.com/assets/img/products/preschool/asean.png",
+             "price": "20,000 บาท"},
         ],
     },
     {
         "id": "smart-board",
-        "name": "Iwa AiBoard (จออัจฉริยะ Interactive Display)",
+        "name": "Iwa AiBoard (จออัจฉริยะ LED Interactive Panel)",
         "products": [
             {"name": "Iwa AiBoard 65″",
-             "summary": "จออัจฉริยะ All-in-One ขนาด 65 นิ้ว 4K UHD ใช้เรียน/ประชุม/นำเสนอ",
-             "tags": ["65", "65 นิ้ว", "aiboard", "ai board", "จอ", "สมาร์ทบอร์ด", "interactive"],
+             "summary": "จออัจฉริยะ LED Interactive Panel ขนาด 65 นิ้ว 4K UHD ใช้เรียน/ประชุม/นำเสนอ",
+             "tags": ["65", "65 นิ้ว", "aiboard", "ai board", "จอ", "สมาร์ทบอร์ด", "interactive", "led"],
              "img": "https://iwa-web.onrender.com/assets/img/page-65.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "190,000 บาท"},
             {"name": "Iwa AiBoard 75″",
-             "summary": "จออัจฉริยะ All-in-One ขนาด 75 นิ้ว 4K UHD ฟังก์ชัน All-in-One",
-             "tags": ["75", "75 นิ้ว", "aiboard", "ai board", "จอ", "สมาร์ทบอร์ด"],
+             "summary": "จออัจฉริยะ LED Interactive Panel ขนาด 75 นิ้ว 4K UHD ฟังก์ชัน All-in-One",
+             "tags": ["75", "75 นิ้ว", "aiboard", "ai board", "จอ", "สมาร์ทบอร์ด", "interactive", "led"],
              "img": "https://iwa-web.onrender.com/assets/img/page-75.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "245,000 บาท"},
             {"name": "Iwa AiBoard 86″",
-             "summary": "จออัจฉริยะ All-in-One ขนาด 86 นิ้ว 4K UHD สำหรับเรียน/ประชุม/นำเสนอ 3840×2160, IR Touch, Dual OS, AI Camera, Multi-Screen Share, Wi-Fi 6",
-             "tags": ["86", "86 นิ้ว", "aiboard", "ai board", "จอ", "สมาร์ทบอร์ด", "interactive"],
+             "summary": "จออัจฉริยะ LED Interactive Panel ขนาด 86 นิ้ว 4K UHD (3840×2160) IR Touch Dual OS AI Camera Multi-Screen Share Wi-Fi 6",
+             "tags": ["86", "86 นิ้ว", "aiboard", "ai board", "จอ", "สมาร์ทบอร์ด", "interactive", "led"],
              "img": "https://iwa-web.onrender.com/assets/img/page-86.png",
-             "price": None,
-             "link": "https://iwa-web.onrender.com/products/"},
+             "price": "350,000 บาท"},
         ],
         "common": (
             "จุดเด่น Iwa AiBoard: หน้าจอ 4K Touch (3840×2160), Anti-Glare + Toughened Glass, "
@@ -224,8 +235,7 @@ for cat in PRODUCT_CATEGORIES:
     for p in cat["products"]:
         ALL_PRODUCTS.append({"name": p["name"], "summary": p["summary"],
                              "tags": p["tags"], "category": cat["name"], "cat_id": cat["id"],
-                             "img": p.get("img"), "price": p.get("price"),
-                             "link": p.get("link")})
+                             "img": p.get("img"), "price": p.get("price")})
 
 CONTACT = {
     "company": "บริษัท ไอว่า ริช ยู ดี จำกัด (IWA RICH YOU D CO.,LTD.)",
@@ -234,7 +244,7 @@ CONTACT = {
     "email": "supannee@iwarichyoudee.com",
     "line_id": "@590cbneh",
     "hours": "จันทร์–ศุกร์ เวลาทำการปกติ (แนะนำติดต่อทาง LINE/โทรก่อน)",
-    "website": "https://iwa-web.onrender.com/",
+    "website": "https://www.edtech-info.com/",
 }
 
 # ── คำ/หัวข้อที่บอกว่าเป็นคำถามเชิงธุรกิจ/สินค้า (ต่างจากแจ้งซ่อม) ──
@@ -288,16 +298,12 @@ def classify(text: str) -> str:
     """จำแนกเจตนา: 'repair' (แจ้งซ่อม/อาการ) | 'business' (สินค้า/บริการ/ติดต่อ) | 'other'
     repair strong ตรวจก่อนเสมอ (คำว่า 'จอ'/'จอไม่ติด' ต้องเป็น repair)"""
     t = _norm(text)
-    # 1) อาการ/แจ้งซ่อมชัดเจน → repair (ชนะเสมอ)
     if any(w in t for w in _REPAIR_STRONG):
         return "repair"
-    # 2) ไม่มีคำอาการ → ถ้ามีคำ business/สินค้า → business
     if any(k in t for k in BUSINESS_KEYWORDS):
         return "business"
-    # 3) พูดถึงชื่อสินค้าจริง (tag ตรง) เช่น 'Smart Quiz คืออะไร' → business
     if any(tag in t for p in ALL_PRODUCTS for tag in p["tags"]):
         return "business"
-    # 4) ชื่อสินค้าสะกดผิดเล็กน้อย (aboard/aiboradas → AiBoard) → business
     if _fuzzy_product_names(text):
         return "business"
     return "other"
@@ -315,7 +321,6 @@ def search_products(query: str) -> list:
             results.append((score, p))
     results.sort(key=lambda x: -x[0])
     result = [p for _, p in results]
-    # ต่อท้ายสินค้าที่สะกดผิดเล็กน้อย แต่ยังไม่ติดในผล (เช่น aboard → AiBoard)
     names = {p["name"] for p in result}
     for p in ALL_PRODUCTS:
         if p["name"] in _fuzzy_product_names(query) and p["name"] not in names:
@@ -328,7 +333,6 @@ def find_product(name_query: str):
     res = search_products(name_query)
     if not res:
         return None
-    # ถ้าคำถามระบุชื่อชัดพอ คืนตัวแรกที่เจอ
     return res[0]
 
 
@@ -342,7 +346,6 @@ def company_summary_text() -> str:
 
 
 def find_service(service_id: str):
-    """หาบริการตาม id ('network','software','maintenance','supply','training')"""
     for s in SERVICES:
         if s["id"] == service_id:
             return s
@@ -356,5 +359,4 @@ def contact_text() -> str:
             f"📍 ที่อยู่: {c['address']}\n"
             f"✉️ อีเมล: {c['email']}\n"
             f"💬 LINE: {c['line_id']}\n"
-            f"🕘 เวลาทำการ: {c['hours']}\n"
-            f"🌐 เว็บ: {c['website']}")
+            f"🕘 เวลาทำการ: {c['hours']}")
