@@ -875,7 +875,13 @@ _PRODUCT_FOLLOWUP_KW = [
 
 def _is_product_followup(text: str) -> bool:
     t = text.strip().lower()
-    return any(k in t for k in _PRODUCT_FOLLOWUP_KW)
+    if any(k in t for k in _PRODUCT_FOLLOWUP_KW):
+        return True
+    # ติดตามแบบสั้นจากสินค้าที่เพิ่งคุย: พูดถึงขนาด/ตัว/นิ้ว/รุ่น
+    # เช่น 'แล้วตัว 75 ล่ะ' 'จอ 86' — ต้องตอบราคาจริงจากระบบ ไม่ให้ Gemini เดา
+    if re.search(r"\b(65|75|86)\b", t) or "นิ้ว" in t or "ตัว" in t or "รุ่น" in t:
+        return True
+    return False
 
 
 def _answer_product_followup(last: dict, text: str) -> str:
