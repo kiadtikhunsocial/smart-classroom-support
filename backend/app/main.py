@@ -1962,7 +1962,6 @@ def update_ticket_status(
     payload_data["from_status"] = current
     payload_data["to_status"] = target
     _notify_n8n("ticket.status_changed", payload_data)
-    _notify_line_status_change(ticket, current, target, payload.note, payload.author_name)
 
     return {
         "ticket_id": ticket.ticket_id,
@@ -3540,45 +3539,6 @@ _STATUS_LABEL_TH = {
     "closed": "ปิดงานแล้ว", "cancelled": "ยกเลิก",
 }
 
-
-def _notify_line_status_change(ticket: "RepairTicket", from_status: str, to_status: str,
-                               note: Optional[str] = None, actor: Optional[str] = None) -> None:
-    """แจ้งเตือนกลุ่ม LINE เมื่อสถานะ ticket เปลี่ยน (ส่งจาก backend โดยตรง)
-    เดิมงานนี้อยู่ที่ n8n — ย้ายมา backend เพื่อให้มีแหล่งเดียวและไม่ต้องเก็บ token ซ้ำ"""
-    if not LINE_GROUP_ID_ENV:
-        return
-    try:
-        from app.line_bot import send_line_push
-        lines = [
-            f"🔔 เปลี่ยนสถานะงาน {ticket.ticket_id}",
-            f"จาก: {_STATUS_LABEL_TH.get(from_status, from_status)} → {_STATUS_LABEL_TH.get(to_status, to_status)}",
-            f"เรื่อง: {(ticket.title or '')[:80]}",
-        ]
-        if actor:
-            lines.append(f"โดย: {actor}")
-        if note:
-            lines.append(f"หมายเหตุ: {note[:120]}")
-        send_line_push(LINE_GROUP_ID_ENV, "\n".join(lines))
-    except Exception:
-        # การแจ้งเตือนล้มต้องไม่ทำให้การเปลี่ยนสถานะที่สำเร็จแล้วล้มตาม
-        logger.exception("LINE status notification failed for %s", ticket.ticket_id)
-
-
-N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://n8n:5678/webhook/")
-
-def _notify_n8n(event: str, payload: dict):
-    """ส่ง event ไป n8n (async fire-and-forget) — ถ้า n8n ไม่พร้อมก็ข้าม ไม่ทำให้ request หลักล้ม"""
-    try:
-        import httpx
-        url = f"{N8N_WEBHOOK_URL}notify"
-        body = {"event": event, **payload}
-        # background: ไม่รอ response เกิน 2 วิ
-        try:
-            httpx.post(url, json=body, timeout=2.0)
-        except Exception:
-            pass
-    except Exception:
-        pass
 
 def _ticket_event_payload(t: "RepairTicket") -> dict:
     return {
