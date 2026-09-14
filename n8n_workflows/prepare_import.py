@@ -44,7 +44,8 @@ def find_secret():
 secret, src = find_secret()
 print(f"ใช้ค่าลับจาก: {src} (ยาว {len(secret)} ตัวอักษร)\n")
 
-files = sorted(f for f in glob.glob(os.path.join(HERE, "wf_*.json")))
+files = sorted(f for f in glob.glob(os.path.join(HERE, "wf_*.json"))
+               if not f.endswith(".ready.json"))
 if not files:
     sys.exit("ไม่พบไฟล์ wf_*.json")
 
@@ -55,7 +56,7 @@ for fp in files:
     out = raw.replace(PLACEHOLDER, secret)
     d = json.loads(out)
     d["active"] = False                       # ให้ publish เองหลัง import
-    ready_path = fp.replace(".json", ".ready.json")
+    ready_path = fp[:-len(".json")] + ".ready.json"
     json.dump(d, open(ready_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     ready.append((os.path.basename(ready_path), d["id"], d["name"], n))
     print(f"  ✓ {os.path.basename(ready_path):34} แทน {n} จุด | id={d['id']}")

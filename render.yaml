@@ -1,6 +1,11 @@
 # Render Blueprint — deploy backend (FastAPI) เป็น Web Service
 # ใช้: Render Dashboard → Blueprint / หรือ render.yaml auto-deploy จาก GitHub
-# หมายเหตุ: Render free tier ไม่มี persistent disk → ต้องตั้ง S3/Cloudinary สำหรับ upload รูป
+# หมายเหตุ: Render free tier ไม่มี persistent disk → ต้องตั้ง S3/R2 สำหรับ upload รูป
+#
+# ⚠ สำคัญ: ค่าที่เป็น `sync: false` = "ตั้งใน Dashboard เท่านั้น ห้าม sync จากไฟล์"
+#    ห้ามใส่ค่าจริงของ DATABASE_URL / CORS_ORIGINS / REPORT_FORM_URL ในไฟล์นี้
+#    เพราะ Render จะเขียนทับค่าที่ตั้งไว้ใน production (เคยทำให้ DATABASE_URL
+#    ชี้ไปฐานข้อมูลของ Render แทน Neon แล้วระบบอ่านข้อมูลไม่ได้)
 services:
   - type: web
     name: smart-classroom-backend
@@ -13,22 +18,23 @@ services:
       # Pin Python 3.11 (Pillow 10.2.0 + code tested on 3.11; 3.14 build ของ Pillow เก่าพัง)
       - key: PYTHON_VERSION
         value: "3.11.9"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: smart-classroom-db
-          property: connectionString
-      - key: CORS_ORIGINS
-        value: "https://smart-classroom.vercel.app"
       - key: ENVIRONMENT
         value: "production"
+      - key: GEMINI_MODEL
+        value: "gemini-flash-latest"
+      # ── ค่าต่อไปนี้ต้องตั้งใน Render Dashboard (มีค่าจริงอยู่แล้ว ห้าม sync) ──
+      - key: DATABASE_URL          # Neon connection string
+        sync: false
+      - key: CORS_ORIGINS          # โดเมน frontend บน Vercel
+        sync: false
+      - key: REPORT_FORM_URL       # ลิงก์ฟอร์มแจ้งซ่อมสาธารณะ
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: N8N_SHARED_SECRET
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: GEMINI_MODEL
-        value: "gemini-flash-latest"
       - key: LINE_CHANNEL_SECRET
         sync: false
       - key: LINE_CHANNEL_TOKEN
@@ -37,9 +43,23 @@ services:
         sync: false
       - key: N8N_WEBHOOK_URL
         sync: false
-      - key: REPORT_FORM_URL
-        value: "https://smart-classroom.vercel.app/?publicreport=1"
+      - key: STORAGE_BACKEND
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_PUBLIC_BASE
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
 
+# หมายเหตุ: บล็อก databases ด้านล่างไม่ได้ใช้งานแล้ว (ระบบใช้ Neon เป็นฐานข้อมูลจริง)
+# เก็บไว้เพื่อไม่ให้ Render ลบฐานข้อมูลเดิมทิ้ง — ถ้าต้องการลบจริงให้ลบทั้งบล็อกนี้
 databases:
   - name: smart-classroom-db
     plan: free
