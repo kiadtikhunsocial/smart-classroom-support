@@ -1,5 +1,4 @@
-version: "3.9"
-
+# หมายเหตุ: ไม่ต้องมีคีย์ `version` — Docker Compose v2 เลิกใช้แล้ว (ขึ้น warning)
 services:
   postgres:
     image: postgres:16-alpine
@@ -120,12 +119,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Vite ฝังค่านี้ตอน build → ต้องส่งเป็น build arg
+        # (ตั้งใน environment ไม่มีผล เพราะ bundle ถูก build ไปแล้ว)
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
     container_name: smart_classroom_frontend
     restart: unless-stopped
     ports:
       - "5173:5173"
-    environment:
-      VITE_API_URL: http://localhost:8000/api
     depends_on:
       - backend
 

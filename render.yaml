@@ -15,7 +15,9 @@ services:
     startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     envVars:
-      # Pin Python 3.11 (Pillow 10.2.0 + code tested on 3.11; 3.14 build ของ Pillow เก่าพัง)
+      # Pin Python 3.11 — โค้ดทดสอบบน 3.11 และ Pillow 12.3.0 (ใน requirements.txt) มี wheel cp311
+      # Pillow 12.x ต้องการ Python >= 3.10 — ถ้าจะเลื่อนเวอร์ชัน Python ให้เช็ค wheel ก่อนทุกครั้ง
+=======
       - key: PYTHON_VERSION
         value: "3.11.9"
       - key: ENVIRONMENT

@@ -3,7 +3,11 @@
 ระบบแจ้งซ่อมออนไลน์และระบบสนับสนุนการบำรุงรักษาอุปกรณ์ Smart Classroom
 (Online Repair Request and Smart Classroom Maintenance Support System)
 
-โปรเจกต์ฝึกงานต้นแบบ (Prototype) ตามเอกสาร TOR `ProjectSmart-classroom-support.md`
+โปรเจกต์ฝึกงานต้นแบบ (Prototype) — ข้อกำหนดและการออกแบบดูที่
+`System_Blueprint_Smart_Classroom_IT_Support_v1_0.md` และ `วิเคราะห์และออกแบบระบบ.md`
+
+> README นี้อธิบาย **การรันบนเครื่องด้วย Docker Compose**
+> ระบบที่ deploy จริง (Vercel / Render / Neon / Railway), ค่าลับ, และงานค้างล่าสุด อยู่ใน [HANDOFF.md](HANDOFF.md)
 
 ## ภาพรวมฟีเจอร์
 
@@ -79,8 +83,16 @@ LINE_CHANNEL_TOKEN=
 
 ## บัญชีเริ่มต้น
 
+สร้างด้วย `backend/scripts/seed_admin.py` (สคริปต์นี้ **ล้างข้อมูลทั้งฐาน** — สำรองก่อน)
+
 | บทบาท | username | password |
 |---|---|---|
+| `super_admin` | `iwasuperadmin` | ตั้งผ่าน env `SEED_ADMIN_PASSWORD` ตอนรันสคริปต์ (ค่าเริ่มต้น `IwaScr2026!admin`) |
+
+bash
+cd backend
+DATABASE_URL='<connection string>' JWT_SECRET=x PYTHONPATH=. \
+ SEED_ADMIN_PASSWORD='<รหัสที่ต้องการ>' python scripts/seed_admin.py --yes
 
 
 > เปลี่ยนรหัสผ่านได้หลัง login ที่หน้า "โปรไฟล์"
@@ -99,7 +111,7 @@ LINE_CHANNEL_TOKEN=
 
 ## รูปแบบ ID
 
-- **Ticket:** `TK-YYYYMM-XXXX` เช่น `TK-202609-0001`
+- **Ticket:** `SC-YYYY-NNNNNN` เช่น `SC-2026-000001` (ของเดิม `TK-YYYYMM-XXXX` ยังค้นหาได้)
 - **Device:** `{SCHOOL}-B{อาคาร}-{ห้อง}-{TYPE}-{ลำดับ}` เช่น `SCHE2E-B1-201-DISP-01`
 - **PM task:** `PM-YYYYMM-XXXX`
 
@@ -112,10 +124,14 @@ LINE_CHANNEL_TOKEN=
 ## ดูรายละเอียด API
 
 - รันระบบแล้วเปิด `http://localhost:8000/docs` (Swagger UI อัตโนมัติ)
-- หรือดูไฟล์เอกสาร spec เดิม: `ProjectSmart-classroom-support.md`
+- เอกสารออกแบบ: `System_Blueprint_Smart_Classroom_IT_Support_v1_0.md`
 
 ## งานที่ยังค้าง / หมายเหตุ
 
-- **n8n workflow** — container พร้อม แต่ยังต้อง setup owner ผ่าน UI (`localhost:5678`) ก่อนสร้าง workflow (LINE automation ต่อเมื่อมี Channel credentials + public HTTPS URL สำหรับ webhook)
-- **LINE push จริง** — ต้องมี LINE Official Account Channel Secret/Token + public URL (prototype รันที่ localhost ยัง push ข้ามได้)
-- **Gemini** — ต่อแล้ว แต่ key free tier quota 20 req/min (503 บ่อย) → มี fallback เป็น keyword match อัตโนมัติ ใช้ paid key เพื่อความเสถียร
+สถานะจริงของระบบที่ deploy แล้วอยู่ใน [HANDOFF.md](HANDOFF.md) — ที่นี่สรุปเฉพาะที่ยังค้าง
+
+- **ทดสอบ LINE จริงจากมือถือ** — ต้องมีคนส่งข้อความหา OA เองแล้วยืนยันว่ามีข้อความตอบกลับ (HANDOFF ข้อ 9 หัวข้อ 9)
+- **ยืนยันข้อความแจ้งเตือนเข้ากลุ่ม LINE เจ้าหน้าที่** — ยังไม่ได้ตรวจด้วยข้อความจริง (HANDOFF ข้อ 9 หัวข้อ 10)
+- **Gemini** — ต่อแล้ว แต่ key free tier quota จำกัด (เจอ 503 บ่อย) → มี fallback เป็น keyword match อัตโนมัติ ใช้ paid key เพื่อความเสถียร
+- **n8n (บนเครื่อง)** — ถ้ารันด้วย docker compose ต้อง setup owner ผ่าน UI (`localhost:5678`) ก่อน แล้ว import ไฟล์ใน `n8n_workflows/` (รัน `python n8n_workflows/prepare_import.py` แทนค่าลับก่อน import)
+- **ไฟล์ `vite.config.ts` ที่ราก repo** — เป็นของเก่าที่ไม่ถูกใช้ (ตัวจริงคือ `frontend/vite.config.ts`) ลบทิ้งได้
