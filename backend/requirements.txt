@@ -11,4 +11,4 @@ httpx==0.27.0
 boto3==1.34.69
 slowapi==0.1.9
 cachetools==5.3.3
-
+google-auth>=2.0,<3.0

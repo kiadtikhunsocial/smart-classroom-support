@@ -77,6 +77,36 @@ def verify_password(password: str, stored: Optional[str]) -> bool:
     return check == digest
 
 
+def bootstrap_local_admin(db: Session) -> None:
+    """Create a development login once, without deleting or resetting any data.
+
+    This is intentionally opt-in and refuses production so a deployment can never
+    acquire a predictable administrator account from its environment by accident.
+    """
+    enabled = os.environ.get("BOOTSTRAP_LOCAL_ADMIN", "").lower() in {"1", "true", "yes"}
+    if not enabled:
+        return
+    if os.environ.get("ENVIRONMENT", "development").lower() in {"production", "prod"}:
+        raise RuntimeError("BOOTSTRAP_LOCAL_ADMIN must not be enabled in production")
+    username = os.environ.get("LOCAL_ADMIN_USERNAME", "admin").strip()
+    password = os.environ.get("LOCAL_ADMIN_PASSWORD", "").strip()
+    if not username or not password:
+        raise RuntimeError("LOCAL_ADMIN_USERNAME and LOCAL_ADMIN_PASSWORD are required when bootstrapping")
+    if len(password) < 8:
+        raise RuntimeError("LOCAL_ADMIN_PASSWORD must be at least 8 characters")
+    if db.execute(select(User).where(User.line_user_id == username)).scalar_one_or_none():
+        return
+    db.add(User(
+        line_user_id=username,
+        line_display_name="Local development administrator",
+        role="super_admin",
+        is_active=True,
+        password_hash=hash_password(password),
+    ))
+    db.commit()
+    print(f"Created local development administrator: {username}")
+
+
 # ---------------------------------------------------------------------------
 # Token (JWT-like) — HMAC-SHA256 ลงนาม, stdlib เท่านั้น
 # (base64 / hmac / hashlib import ไว้ด้านบนของไฟล์แล้ว — ไม่ import ซ้ำ)
@@ -679,6 +709,7 @@ async def lifespan(app: FastAPI):
     # Seed KB 30 หัวข้อ (ถ้าตารางว่าง) + สร้าง PM plans ตั้งต้น
     db = SessionLocal()
     try:
+        bootstrap_local_admin(db)
         seeded = seed_kb_articles(db)
         # Seed แผน PM ตั้งต้น 4 แผน (§38) — ถ้าตาราง pm_plans ยังว่าง
         if db.execute(select(func.count()).select_from(PMPlan)).scalar_one() == 0:
@@ -2446,26 +2477,81 @@ def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_
     }
 
 
-# ─── Uploads (รูปภาพแนบ — TOR 1.5.2) ─────────────────────────────────
+# ─── Uploads / ไฟล์แนบ (TOR 1.5.2 + Blueprint §41 File Attachment Security) ──
+# การตรวจไฟล์ (MIME + นามสกุล + ลายเซ็นเนื้อไฟล์ + ขนาด) และการตั้งชื่อเป็น UUID
+# อยู่ใน app/storage.py ทั้งหมด — ที่นี่ทำแค่รับไฟล์และคุมสิทธิ์ตอนดาวน์โหลด
 from fastapi import File, UploadFile
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, Response
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+from app.storage import (
+    UPLOAD_DIR,  # noqa: F401 — คงชื่อไว้ให้โค้ด/สคริปต์เดิมที่อ้าง main.UPLOAD_DIR
+    is_inline_viewable,
+    is_servable_upload_name,
+    local_upload_path,
+    mime_for_name,
+    read_cloud_upload,
+    save_upload,
+    verify_upload_signature,
+)
+
 
 @app.post("/api/uploads", status_code=201)
+@limiter.limit("30/minute")
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
-    user: Optional[User] = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user),
 ):
-    """อัปโหลดรูปภาพ (สูงสุด 10MB) — ใช้กับฟอร์มแจ้งซ่อม + PM
-    โหมด local: เขียน disk + mount /uploads  |  โหมด cloud (S3): upload + คืน URL เต็ม"""
-    from app.storage import save_upload
+    """อัปโหลดไฟล์แนบ (jpg/png/pdf/webp/gif/heic) — ใช้กับฟอร์มแจ้งซ่อม + PM
+
+    ไฟล์ถูกเปลี่ยนชื่อเป็น UUID และ URL ที่คืนไปมีลายเซ็นกำกับ (§41 Access)
+    โหมด local: เขียน disk แล้วเสิร์ฟผ่าน GET /uploads/{name}
+    ต้องล็อกอินก่อนอัปโหลด เพื่อกันการใช้พื้นที่เก็บไฟล์เป็นช่องทาง public upload
+    """
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="ไฟล์เกิน 10 MB")
-    return save_upload(content, file.filename or "image.jpg")
+    return save_upload(content, file.filename or "image.jpg", file.content_type)
+
+
+@app.get("/uploads/{name}")
+def download_upload(
+    name: str,
+    s: Optional[str] = Query(None),
+):
+    """ส่งไฟล์แนบ (โหมด local) — §41 Access: ตรวจสิทธิ์ก่อนดาวน์โหลด
+
+    ต้องมีลายเซ็น ?s= ที่ถูกต้องจาก URL ที่ระบบออกให้ (ใช้ใน <img> และใน LINE ได้)
+    """
+    if not is_servable_upload_name(name):
+        raise HTTPException(status_code=404, detail="ไม่พบไฟล์")
+    if not verify_upload_signature(name, s):
+        raise HTTPException(status_code=403, detail="ไม่มีสิทธิ์เข้าถึงไฟล์นี้")
+    disposition = "inline" if is_inline_viewable(name) else "attachment"
+    if os.environ.get("STORAGE_BACKEND", "local").lower() == "cloud":
+        content = read_cloud_upload(name)
+        if content is None:
+            raise HTTPException(status_code=404, detail="ไม่พบไฟล์")
+        return Response(
+            content=content,
+            media_type=mime_for_name(name),
+            headers={
+                "Content-Disposition": f'{disposition}; filename="{name}"',
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private, max-age=3600",
+            },
+        )
+    path = local_upload_path(name)
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="ไม่พบไฟล์")
+    # pdf บังคับดาวน์โหลด ไม่ให้เปิดใน origin เดียวกับเว็บ; รูปแสดง inline ได้
+    return FileResponse(
+        path,
+        media_type=mime_for_name(name),
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{name}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
 
 
 # ─── Knowledge Base (KB — TOR 1.5.5 / 5.6) ────────────────────────────

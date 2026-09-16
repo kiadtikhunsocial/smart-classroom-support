@@ -81,13 +81,19 @@ LINE_CHANNEL_TOKEN=
 
 > หมายเหตุ: backend อ่าน env จาก `.env` (ผ่าน `env_file` ใน compose) — ถ้าแก้โค้ดต้อง `docker compose build` ใหม่ (ภาพไม่ mount source) + `up -d --force-recreate`
 
-## บัญชีเริ่มต้น
+## บัญชีสำหรับ local development
 
-สร้างด้วย `backend/scripts/seed_admin.py` (สคริปต์นี้ **ล้างข้อมูลทั้งฐาน** — สำรองก่อน)
+Docker Compose จะสร้างบัญชี local แบบไม่ลบ/ไม่ทับข้อมูลให้ครั้งแรกโดยอัตโนมัติ:
 
 | บทบาท | username | password |
 |---|---|---|
-| `super_admin` | `iwasuperadmin` | ตั้งผ่าน env `SEED_ADMIN_PASSWORD` ตอนรันสคริปต์ (ค่าเริ่มต้น `IwaScr2026!admin`) |
+| `super_admin` | `admin` | `local-admin-change-me` |
+
+เปลี่ยน `LOCAL_ADMIN_USERNAME` และ `LOCAL_ADMIN_PASSWORD` ใน `.env` ก่อนเริ่มระบบได้ บัญชีนี้ทำงานเฉพาะ `ENVIRONMENT=development`; production จะปฏิเสธการ start หากเปิด `BOOTSTRAP_LOCAL_ADMIN` ไว้
+
+`backend/scripts/seed_admin.py` ยังมีไว้สำหรับการ reset ฐานข้อมูลโดยตั้งใจเท่านั้น (สคริปต์นี้ **ล้างข้อมูลทั้งฐาน** — สำรองก่อน)
+
+หากเคยเริ่มฐานข้อมูลก่อนเพิ่มบัญชี local ให้ restart backend หนึ่งครั้ง: `docker compose up -d --build backend` แล้วล็อกอินที่ `http://localhost:5173` ด้วยค่าด้านบน
 
 bash
 cd backend

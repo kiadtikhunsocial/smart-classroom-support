@@ -17,7 +17,6 @@ services:
     envVars:
       # Pin Python 3.11 — โค้ดทดสอบบน 3.11 และ Pillow 12.3.0 (ใน requirements.txt) มี wheel cp311
       # Pillow 12.x ต้องการ Python >= 3.10 — ถ้าจะเลื่อนเวอร์ชัน Python ให้เช็ค wheel ก่อนทุกครั้ง
-=======
       - key: PYTHON_VERSION
         value: "3.11.9"
       - key: ENVIRONMENT
@@ -53,11 +52,11 @@ services:
         sync: false
       - key: S3_ENDPOINT
         sync: false
-      - key: S3_PUBLIC_BASE
-        sync: false
       - key: S3_ACCESS_KEY
         sync: false
       - key: S3_SECRET_KEY
+        sync: false
+      - key: UPLOAD_URL_SECRET
         sync: false
 
 # หมายเหตุ: บล็อก databases ด้านล่างไม่ได้ใช้งานแล้ว (ระบบใช้ Neon เป็นฐานข้อมูลจริง)
