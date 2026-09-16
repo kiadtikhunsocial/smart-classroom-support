@@ -18,16 +18,22 @@ import threading
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.kb_loader import invalidate_kb_cache
+# Audit Log (§40) + Preventive Maintenance (§38) — โมเดลที่เพิ่มใหม่
+from app import pm_rules
+from app.models import AuditLog, DeviceHealthFlag, PMPlan, PMTask
 from app.models import (
     Base,
     Building,
@@ -73,9 +79,8 @@ def verify_password(password: str, stored: Optional[str]) -> bool:
 
 # ---------------------------------------------------------------------------
 # Token (JWT-like) — HMAC-SHA256 ลงนาม, stdlib เท่านั้น
+# (base64 / hmac / hashlib import ไว้ด้านบนของไฟล์แล้ว — ไม่ import ซ้ำ)
 # ---------------------------------------------------------------------------
-import base64
-import hmac
 import json
 import time
 
@@ -436,33 +441,82 @@ class StatusUpdateRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Status transition rules
+# Status transition rules — ย้ายไป app/ticket_state.py (source of truth เดียว)
 # ---------------------------------------------------------------------------
 
-STATUS_TRANSITIONS: dict[str, set[str]] = {
-    "new": {"assigned", "cancelled"},
-    "assigned": {"in_progress", "new", "cancelled"},
-    "in_progress": {"pending", "waiting_parts", "waiting_user", "resolved", "cancelled"},
-    "pending": {"in_progress", "cancelled"},
-    "waiting_parts": {"in_progress", "pending", "resolved", "cancelled"},
-    "waiting_user": {"in_progress", "pending", "resolved", "cancelled"},
-    "resolved": {"closed", "in_progress"},
-    "closed": set(),
-    "cancelled": set(),
-}
+from app.ticket_state import STATUS_TRANSITIONS, apply_transition
 
 
-def generate_ticket_id(db: Session, organization_id: int) -> str:
-    """Generate TK-YYYYMM-XXXX style ticket ID (TOR 3.5). ใช้ MAX(ลำดับ)+1 (กันเลขซ้ำหลังลบ)"""
+def write_audit(
+    db: Session,
+    *,
+    action: str,
+    user: Optional[User] = None,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    old_value=None,
+    new_value=None,
+    request: Optional[Request] = None,
+) -> None:
+    """บันทึก Audit Log (Blueprint §40) — ไม่ commit เอง ให้ caller commit พร้อม transaction เดิม
+
+    เก็บเฉพาะเหตุการณ์สำคัญตาม §40: Login, เปลี่ยนสิทธิ์, สร้าง/แก้/ลบ Asset,
+    Assign งาน, เปลี่ยน Status, ปิดงาน, แก้ KB และ System Settings
+    """
+    def _dump(v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v
+        try:
+            return json.dumps(v, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            return str(v)
+
+    ip = None
+    ua = None
+    if request is not None:
+        ip = request.headers.get("x-forwarded-for") or (
+            request.client.host if request.client else None
+        )
+        if ip:
+            ip = ip.split(",")[0].strip()[:64]
+        ua = (request.headers.get("user-agent") or "")[:255] or None
+
+    db.add(AuditLog(
+        user_id=getattr(user, "id", None),
+        # โมเดล User ของระบบนี้ไม่มี full_name/username — ใช้ชื่อที่แสดงจาก LINE เป็นหลัก
+        user_name=getattr(user, "line_display_name", None) or getattr(user, "line_user_id", None),
+        user_role=getattr(user, "role", None),
+        action=action,
+        entity_type=entity_type,
+        entity_id=str(entity_id) if entity_id is not None else None,
+        old_value=_dump(old_value),
+        new_value=_dump(new_value),
+        ip_address=ip,
+        user_agent=ua,
+    ))
+
+
+def generate_ticket_id(db: Session, organization_id: Optional[int] = None) -> str:
+    """Generate SC-YYYY-NNNNNN style ticket ID (Blueprint §11). ใช้ MAX(ลำดับ)+1 (กันเลขซ้ำหลังลบ)
+
+    หมายเหตุ: เลขรันต่อปีเป็นลำดับ "ทั้งระบบ" ไม่แยกตามโรงเรียน เพราะ ticket_id
+    ต้อง unique ทั้งตาราง repair_tickets (ถ้าแยกต่อ org จะเกิด SC-YYYY-000001 ซ้ำกัน)
+
+    Ticket เดิมรูปแบบ TK-YYYYMM-XXXX ยังค้นหา/เปิดดูได้ตามปกติ เพราะ lookup
+    ใช้ค่า ticket_id ตรงตัว ไม่ผูกกับ prefix
+    พารามิเตอร์ organization_id คงไว้เพื่อความเข้ากันได้ของ call site เดิมเท่านั้น
+    """
     now = datetime.now(timezone.utc)
-    prefix = f"TK-{now.year}{now.month:02d}-"
+    prefix = f"SC-{now.year}-"
     row = db.execute(
-        text("SELECT MAX(CAST(SUBSTRING(ticket_id FROM 'TK-\\d{6}-(\\d{4})') AS INTEGER)) "
+        text("SELECT MAX(CAST(SUBSTRING(ticket_id FROM 'SC-\\d{4}-(\\d{6})') AS INTEGER)) "
              "FROM repair_tickets WHERE ticket_id LIKE :p"),
         {"p": f"{prefix}%"},
     ).scalar_one()
     nxt = (row or 0) + 1
-    return f"{prefix}{nxt:04d}"
+    return f"{prefix}{nxt:06d}"
 
 
 # ---------------------------------------------------------------------------
@@ -487,14 +541,25 @@ def _is_business_hour(dt: datetime) -> bool:
     return BUSINESS_START[0] * 60 + BUSINESS_START[1] <= mins < BUSINESS_END[0] * 60 + BUSINESS_END[1]
 
 def _next_business_start(dt: datetime) -> datetime:
-    """ข้ามไปเวลาทำการถัดไป (ถ้าอยู่นอกเวลาทำการ/วันหยุด)"""
+    """เวลาเริ่มทำการ "ถัดไป" ที่ >= dt เสมอ (ห้ามคืนเวลาย้อนหลัง)
+
+    เดิมฟังก์ชันนี้คืน 08:00 ของ "วันเดียวกัน" ทำให้เคสแจ้งซ่อมหลังเลิกงาน
+    (เช่น พุธ 18:00) ได้ sla_due_at ย้อนหลังไปเป็นพุธ 10:00 → เกินกำหนดทันที
+    """
     candidate = dt.replace(hour=BUSINESS_START[0], minute=BUSINESS_START[1], second=0, microsecond=0)
-    while candidate.weekday() >= 5:
+    if candidate <= dt:
+        # dt อยู่ในเวลาทำการหรือเลยเวลาเลิกงานของวันนี้ไปแล้ว → ขยับไปเช้าวันถัดไป
+        candidate += timedelta(days=1)
+    while candidate.weekday() >= 5:  # ข้ามเสาร์/อาทิตย์
         candidate += timedelta(days=1)
     return candidate
 
 def add_business_minutes(start: datetime, minutes: int) -> datetime:
-    """บวกเวลาทำการ (นาที) เข้ากับ start — ข้ามนอกเวลา/วันหยุด"""
+    """บวกเวลาทำการ (นาที) เข้ากับ start — ข้ามนอกเวลา/วันหยุด
+
+    _next_business_start เลื่อนไปข้างหน้าเองแล้ว จึงไม่ต้องบวก timedelta(days=1)
+    ก่อนเรียก (ของเดิมทำให้ข้ามวันทำการทิ้งไป 1 วัน)
+    """
     cur = start
     remaining = minutes
     while remaining > 0:
@@ -505,12 +570,12 @@ def add_business_minutes(start: datetime, minutes: int) -> datetime:
         end_today = cur.replace(hour=BUSINESS_END[0], minute=BUSINESS_END[1], second=0, microsecond=0)
         avail = int((end_today - cur).total_seconds() // 60)
         if avail <= 0:
-            cur = _next_business_start(cur + timedelta(days=1))
+            cur = _next_business_start(cur)
             continue
         if remaining <= avail:
             return cur + timedelta(minutes=remaining)
         remaining -= avail
-        cur = _next_business_start(cur + timedelta(days=1))
+        cur = _next_business_start(cur)
     return cur
 
 def calc_sla_due(created_at: datetime, priority: str) -> datetime:
@@ -587,15 +652,20 @@ def generate_device_id(db: Session, org: Organization, room: Optional[Room], dev
     room_code = (room.code or "R000") if room else "R000"
     type_code = _device_type_code(device_type)
     prefix = f"{org_code}-{building}-{room_code}-{type_code}-"
+    # ใช้ MAX(ลำดับ)+1 ไม่ใช่ COUNT(*)+1 — ถ้าลบอุปกรณ์กลางลำดับไป COUNT จะคืนเลขที่
+    # มีอยู่แล้วและชน unique constraint ของ device_id
+    # เทียบ prefix ด้วย LEFT(...) แทน LIKE/regex เพื่อไม่ให้อักขระพิเศษในรหัสห้อง
+    # (_ % . ( ) ) ถูกตีความเป็น wildcard หรือ regex
     row = db.execute(
         text("""
-            SELECT COUNT(*) + 1 FROM devices
-            WHERE device_id LIKE :p
-              AND device_id ~ ('^' || :p || '[0-9]+$')
+            SELECT MAX(CAST(SUBSTRING(device_id FROM CHAR_LENGTH(:prefix) + 1) AS INTEGER))
+            FROM devices
+            WHERE LEFT(device_id, CHAR_LENGTH(:prefix)) = :prefix
+              AND SUBSTRING(device_id FROM CHAR_LENGTH(:prefix) + 1) ~ '^[0-9]+$'
         """),
-        {"p": f"{prefix}"},
+        {"prefix": prefix},
     ).scalar_one()
-    return f"{prefix}{row:02d}"
+    return f"{prefix}{(row or 0) + 1:02d}"
 
 
 # ---------------------------------------------------------------------------
@@ -607,10 +677,53 @@ def generate_device_id(db: Session, org: Organization, room: Optional[Room], dev
 async def lifespan(app: FastAPI):
     init_db()
     # Seed KB 30 หัวข้อ (ถ้าตารางว่าง) + สร้าง PM plans ตั้งต้น
-    from app.models import SessionLocal
     db = SessionLocal()
     try:
         seeded = seed_kb_articles(db)
+        # Seed แผน PM ตั้งต้น 4 แผน (§38) — ถ้าตาราง pm_plans ยังว่าง
+        if db.execute(select(func.count()).select_from(PMPlan)).scalar_one() == 0:
+            db.add_all([
+                PMPlan(
+                    name="บำรุงรักษาจอ Interactive รายไตรมาส",
+                    device_type="Interactive Display", interval_days=90, is_active=True,
+                    checklist=json.dumps([
+                        {"order": 1, "item": "ทำความสะอาดหน้าจอและกรอบ", "type": "boolean"},
+                        {"order": 2, "item": "ทดสอบระบบสัมผัสทุกมุมจอ", "type": "boolean"},
+                        {"order": 3, "item": "ตรวจสอบสายสัญญาณและสายไฟ", "type": "boolean"},
+                        {"order": 4, "item": "ทดสอบเสียงลำโพง", "type": "boolean"},
+                        {"order": 5, "item": "อุณหภูมิเครื่อง (°C)", "type": "number"},
+                    ], ensure_ascii=False),
+                ),
+                PMPlan(
+                    name="บำรุงรักษาคอมพิวเตอร์ราย 6 เดือน",
+                    device_type="Computer Desktop", interval_days=180, is_active=True,
+                    checklist=json.dumps([
+                        {"order": 1, "item": "ทำความสะอาดพัดลมและช่องระบายอากาศ", "type": "boolean"},
+                        {"order": 2, "item": "อัปเดตระบบปฏิบัติการ", "type": "boolean"},
+                        {"order": 3, "item": "ตรวจสอบพื้นที่ว่างดิสก์", "type": "boolean"},
+                        {"order": 4, "item": "ตรวจสอบแบตเตอรี่ CMOS", "type": "boolean"},
+                    ], ensure_ascii=False),
+                ),
+                PMPlan(
+                    name="บำรุงรักษา Router/AP ราย 6 เดือน",
+                    device_type="Router", interval_days=180, is_active=True,
+                    checklist=json.dumps([
+                        {"order": 1, "item": "ตรวจสัญญาณ Wi-Fi แต่ละจุด", "type": "boolean"},
+                        {"order": 2, "item": "อัปเดต Firmware", "type": "boolean"},
+                        {"order": 3, "item": "ทำความสะอาดฝุ่น", "type": "boolean"},
+                        {"order": 4, "item": "ตรวจสอบสาย LAN และ PoE", "type": "boolean"},
+                    ], ensure_ascii=False),
+                ),
+                PMPlan(
+                    name="บำรุงรักษาระบบเสียงรายไตรมาส",
+                    device_type="Speaker", interval_days=90, is_active=True,
+                    checklist=json.dumps([
+                        {"order": 1, "item": "ทดสอบเสียงลำโพงทุกตัว", "type": "boolean"},
+                        {"order": 2, "item": "ตรวจสายและขั้วต่อ", "type": "boolean"},
+                        {"order": 3, "item": "ตรวจไมโครโฟนไร้สาย", "type": "boolean"},
+                    ], ensure_ascii=False),
+                ),
+            ])
         # Seed ค่า Settings เริ่มต้น (TOR 5.11) — ถ้ายังไม่มี key นั้น
         default_settings = {
             "sla_hours": {"critical": 2, "high": 8, "normal": 24, "low": 72},
@@ -638,9 +751,75 @@ app = FastAPI(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
+# ─── Error contract §35: {success, data, error: {code, message}} ──────────────
+# ยังคง key "detail" รูปแบบเดิมไว้ในทุก response เพราะฝั่งที่เรียกใช้อ่านจาก detail จริง:
+#   - frontend/src/api/client.ts → parsed?.detail และ detail.code
+#   - backend/test_line_create_ticket.py → res.json()["detail"]
+#   - n8n workflow (ข้อความแจ้งกลับเข้า LINE)
+# ถ้าตัด detail ออก ข้อความ error บน UI และใน LINE จะกลายเป็น "HTTP 4xx" ทั้งระบบ
+_ERROR_CODE_BY_STATUS = {
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    405: "METHOD_NOT_ALLOWED",
+    409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
+    422: "VALIDATION_ERROR",
+    429: "RATE_LIMITED",
+    500: "INTERNAL_ERROR",
+    503: "SERVICE_UNAVAILABLE",
+}
+
+
+def _error_envelope(status_code: int, detail, fallback_message: Optional[str] = None) -> dict:
+    """แปลง detail ของ exception เป็น envelope §35 โดยไม่ทิ้ง detail เดิม
+
+    - detail เป็น dict (เช่น DUPLICATE_OPEN_TICKET) → ใช้ code/message ที่มีอยู่
+      และคงฟิลด์เสริม (existing_ticket_no, existing_status) ไว้ใน error
+    - detail เป็น str → code มาจาก status code, message คือข้อความไทยเดิม
+    - detail เป็น list (pydantic validation) → ใช้ fallback_message เป็น message
+    """
+    default_code = _ERROR_CODE_BY_STATUS.get(status_code, f"HTTP_{status_code}")
+    if isinstance(detail, dict):
+        error = dict(detail)
+        error.setdefault("code", default_code)
+        error.setdefault("message", fallback_message or default_code)
+    elif isinstance(detail, str) and detail.strip():
+        error = {"code": default_code, "message": detail}
+    else:
+        error = {"code": default_code, "message": fallback_message or default_code}
+    return {"success": False, "data": None, "error": error, "detail": detail}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """ครอบทั้ง fastapi.HTTPException (เป็น subclass) และ 404/405 ของ router"""
+    body = _error_envelope(exc.status_code, exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=jsonable_encoder(body),
+        headers=getattr(exc, "headers", None),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request: Request, exc: RequestValidationError):
+    """422 ของ pydantic — detail ยังเป็น list ของ errors เหมือน default ของ FastAPI"""
+    body = _error_envelope(
+        422,
+        exc.errors(),
+        "ข้อมูลที่ส่งมาไม่ถูกต้อง กรุณาตรวจสอบฟิลด์ที่จำเป็น",
+    )
+    return JSONResponse(status_code=422, content=jsonable_encoder(body))
+
+
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(status_code=429, content={"detail": "มีการร้องขอมากเกินไป กรุณารอสักครู่ก่อนลองใหม่"})
+    return JSONResponse(
+        status_code=429,
+        content=_error_envelope(429, "มีการร้องขอมากเกินไป กรุณารอสักครู่ก่อนลองใหม่"),
+    )
 
 _cors_origins = [o.strip() for o in os.environ.get(
     "CORS_ORIGINS",
@@ -655,7 +834,7 @@ app.add_middleware(
 )
 
 # ─── Logging (ข้อ 7: logging เพียงพอ + ไม่ leak sensitive data) ───────────────
-import logging
+# (logging import ไว้ด้านบนของไฟล์แล้ว)
 import time as _time
 
 logging.basicConfig(
@@ -695,7 +874,10 @@ async def _access_log_middleware(request: Request, call_next):
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     """คืนข้อความ generic — ไม่ leak stack trace / schema / path ให้ client"""
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=500, content={"detail": "เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่หรือแจ้งผู้ดูแล"})
+    return JSONResponse(
+        status_code=500,
+        content=_error_envelope(500, "เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่หรือแจ้งผู้ดูแล"),
+    )
 
 
 
@@ -758,6 +940,7 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/tickets", response_model=TicketOut, status_code=201)
+@limiter.limit("10/minute")
 def create_ticket(
     payload: TicketCreate,
     request: Request,
@@ -895,7 +1078,8 @@ DEVICE_TYPE_LABELS = [
 
 
 @app.get("/api/public/options", response_model=PublicOptionsOut)
-def public_options(db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def public_options(request: Request, db: Session = Depends(get_db)):
     """ข้อมูลสำหรับ dropdown หน้าแจ้งซ่อมสาธารณะ (ไม่ต้อง auth):
     - device_types: ประเภทอุปกรณ์ที่เลือกได้
     - devices: รายการอุปกรณ์ที่ลงทะเบียนไว้แล้ว (device_id, room, org...)
@@ -909,15 +1093,14 @@ def public_options(db: Session = Depends(get_db)):
     ).all()
     devices: list[DeviceInfo] = []
     for device, room, org in rows:
+        # endpoint นี้เปิดสาธารณะ (ไม่ต้อง auth) — ต้องไม่ส่งข้อมูลอ่อนไหวออกไป
+        # ห้ามส่ง: qr_token / qr_url (ใช้สร้างลิงก์สแกนของทุกห้องได้),
+        #          serial_number, firmware_version, warranty_until, notes (ข้อมูลทรัพย์สินภายใน)
         devices.append(DeviceInfo(
             device_id=device.device_id,
             device_type=device.device_type,
             brand=device.brand,
             model=device.model,
-            serial_number=device.serial_number,
-            qr_token=device.qr_token,
-            qr_url=(f"/scan?t={device.qr_token}" if device.qr_token else f"/scan?device={device.device_id}"),
-            firmware_version=device.firmware_version,
             status=device.status,
             room_code=room.code if room else None,
             room_name=room.name if room else None,
@@ -926,8 +1109,6 @@ def public_options(db: Session = Depends(get_db)):
             organization_code=org.code,
             organization_name=org.name,
             organization_id=device.organization_id,
-            warranty_until=device.warranty_until,
-            notes=device.notes,
         ))
     return PublicOptionsOut(device_types=DEVICE_TYPE_LABELS, devices=devices)
 
@@ -1187,7 +1368,7 @@ def list_devices(
 
 
 @app.post("/api/devices", response_model=DeviceInfo, status_code=201)
-def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def create_device(payload: DeviceCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """เพิ่มอุปกรณ์ใหม่ — บังคับ org ตาม scope ของบทบาท"""
     check_org_access(user, payload.organization_id)
     org = db.execute(select(Organization).where(Organization.id == payload.organization_id)).scalar_one_or_none()
@@ -1232,6 +1413,21 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
         warranty_until=payload.warranty_until,
     )
     db.add(device)
+    # §40: สร้าง Asset ต้องบันทึก Audit Log (commit พร้อม transaction เดียวกัน)
+    write_audit(
+        db, action="device_create", user=user, entity_type="device", entity_id=device_id,
+        new_value={
+            "device_id": device_id,
+            "organization_id": payload.organization_id,
+            "room_id": room_id,
+            "device_type": payload.device_type,
+            "brand": payload.brand,
+            "model": payload.model,
+            "serial_number": payload.serial_number,
+            "status": payload.status,
+        },
+        request=request,
+    )
     db.commit()
     db.refresh(device)
 
@@ -1261,7 +1457,7 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
 
 
 @app.patch("/api/devices/{device_id}", response_model=DeviceInfo)
-def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def update_device(device_id: str, payload: DeviceUpdate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """แก้ไขข้อมูลอุปกรณ์ — ตรวจว่า device อยู่ใน scope"""
     device = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if not device:
@@ -1278,8 +1474,16 @@ def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(g
             data["room_id"] = room.id
     data.pop("room_code", None)
 
+    # §40: เก็บค่าก่อนแก้ เพื่อบันทึกทั้ง old_value และ new_value
+    old_value = {k: getattr(device, k, None) for k in data}
     for k, v in data.items():
         setattr(device, k, v)
+    if data:
+        write_audit(
+            db, action="device_update", user=user, entity_type="device",
+            entity_id=device.device_id, old_value=old_value, new_value=data,
+            request=request,
+        )
     db.commit()
     db.refresh(device)
 
@@ -1309,7 +1513,7 @@ def update_device(device_id: str, payload: DeviceUpdate, db: Session = Depends(g
 
 
 @app.delete("/api/devices/{device_id}")
-def delete_device(device_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def delete_device(device_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ลบอุปกรณ์ (ต้องไม่มี ticket ผูกอยู่) — ตรวจว่า device อยู่ใน scope"""
     device = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if not device:
@@ -1323,6 +1527,19 @@ def delete_device(device_id: str, db: Session = Depends(get_db), user: User = De
         raise HTTPException(status_code=400, detail=f"ไม่สามารถลบได้ — อุปกรณ์มี {ticket_count} ticket ผูกอยู่")
 
     db.execute(text("DELETE FROM scan_logs WHERE device_id=:d"), {"d": device_id})
+    # §40: ลบ Asset — ต้องเก็บค่าเดิมก่อนลบ เพราะหลังลบอ่านย้อนไม่ได้
+    write_audit(
+        db, action="device_delete", user=user, entity_type="device", entity_id=device_id,
+        old_value={
+            "device_id": device.device_id,
+            "organization_id": device.organization_id,
+            "room_id": device.room_id,
+            "device_type": device.device_type,
+            "serial_number": device.serial_number,
+            "status": device.status,
+        },
+        request=request,
+    )
     db.delete(device)
     db.commit()
     return {"message": "Device deleted", "device_id": device_id}
@@ -1353,7 +1570,7 @@ def list_users(db: Session = Depends(get_db), user: User = Depends(require_roles
 
 
 @app.post("/api/users", response_model=UserOut, status_code=201)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     exists = db.execute(select(User).where(User.line_user_id == payload.line_user_id)).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=400, detail="line_user_id ซ้ำ")
@@ -1381,6 +1598,18 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User =
         password_hash=hash_password(payload.password) if payload.password else None,
     )
     db.add(new_user)
+    db.flush()  # ต้องได้ id ก่อน จึงอ้างอิงใน Audit Log ได้
+    # §40: สร้างผู้ใช้ = การให้สิทธิ์ (ห้ามบันทึกรหัสผ่านหรือแฮชลง log)
+    write_audit(
+        db, action="user_create", user=user, entity_type="user", entity_id=new_user.id,
+        new_value={
+            "line_user_id": new_user.line_user_id,
+            "organization_id": new_user.organization_id,
+            "role": new_user.role,
+            "is_active": new_user.is_active,
+        },
+        request=request,
+    )
     db.commit()
     db.refresh(new_user)
     return UserOut(
@@ -1397,7 +1626,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User =
 
 
 @app.delete("/api/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+def delete_user(user_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     """ลบผู้ใช้ — admin_school ลบได้เฉพาะ user ในรรตัวเอง"""
     target = db.get(User, user_id)
     if not target:
@@ -1408,13 +1637,24 @@ def delete_user(user_id: int, db: Session = Depends(get_db), user: User = Depend
         raise HTTPException(status_code=403, detail="ไม่สามารถลบผู้ใช้ Owner ได้")
     if target.role == "owner" and target.id == user.id:
         raise HTTPException(status_code=403, detail="ไม่สามารถลบบัญชี Owner เองได้")
+    # §40: ลบผู้ใช้ = เพิกถอนสิทธิ์ ต้องบันทึกก่อนลบ
+    write_audit(
+        db, action="user_delete", user=user, entity_type="user", entity_id=user_id,
+        old_value={
+            "line_user_id": target.line_user_id,
+            "organization_id": target.organization_id,
+            "role": target.role,
+            "is_active": target.is_active,
+        },
+        request=request,
+    )
     db.delete(target)
     db.commit()
     return {"message": "User deleted", "user_id": user_id}
 
 
 @app.patch("/api/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1436,10 +1676,23 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
             raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนไม่สามารถย้ายผู้ใช้ข้ามโรงเรียนได้")
 
     password = data.pop("password", None)
+    # §40: เปลี่ยนบทบาท/สถานะ/สังกัด ต้องบันทึก — รหัสผ่านบันทึกเพียงว่ามีการเปลี่ยน
+    audited_fields = {k: v for k, v in data.items()
+                      if k in ("role", "is_active", "organization_id")}
+    old_value = {k: getattr(target, k, None) for k in audited_fields}
+    new_value = dict(audited_fields)
     if password:
         target.password_hash = hash_password(password)
+        new_value["password"] = "changed"
     for k, v in data.items():
         setattr(target, k, v)
+    if new_value:
+        write_audit(
+            db,
+            action="user_role_change" if "role" in audited_fields else "user_update",
+            user=user, entity_type="user", entity_id=user_id,
+            old_value=old_value or None, new_value=new_value, request=request,
+        )
     db.commit()
     db.refresh(target)
     return UserOut(
@@ -1464,11 +1717,32 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         select(User).where(User.line_user_id == payload.username)
     ).scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
+        # §40/§39: บันทึก login ที่ล้มเหลว ไว้ตรวจพฤติกรรมเดารหัสผ่าน
+        write_audit(
+            db, action="login_failed", user=user, entity_type="user",
+            entity_id=getattr(user, "id", None),
+            new_value={"username": payload.username[:128],
+                       "reason": "user_not_found" if not user else "bad_password"},
+            request=request,
+        )
+        db.commit()
         raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
     if not user.is_active:
+        # §40: บัญชีถูกปิดแล้วยังพยายามเข้า — ถือเป็นเหตุการณ์ที่ต้องตรวจสอบ
+        write_audit(
+            db, action="login_failed", user=user, entity_type="user", entity_id=user.id,
+            new_value={"username": payload.username[:128], "reason": "inactive"},
+            request=request,
+        )
+        db.commit()
         raise HTTPException(status_code=403, detail="บัญชีถูกปิดใช้งาน")
 
     user.last_login_at = datetime.now(timezone.utc)
+    write_audit(
+        db, action="login", user=user, entity_type="user", entity_id=user.id,
+        new_value={"role": user.role, "organization_id": user.organization_id},
+        request=request,
+    )
     db.commit()
 
     org = db.get(Organization, user.organization_id) if user.organization_id else None
@@ -1935,6 +2209,7 @@ def get_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depen
 def update_ticket_status(
     ticket_id: str,
     payload: StatusUpdateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     user: Optional[User] = Depends(get_current_user_optional),
     x_n8n_secret: Optional[str] = Header(None),
@@ -1958,16 +2233,10 @@ def update_ticket_status(
     current = ticket.status
     target = payload.status
 
-    if target not in STATUS_TRANSITIONS:
-        raise HTTPException(status_code=400, detail=f"Unknown ticket status: {target}")
+    apply_transition(db, ticket, target, force=payload.force,
+                     author_name=payload.author_name,
+                     author_role=payload.author_role, note=payload.note)
 
-    if not payload.force and target not in STATUS_TRANSITIONS.get(current, set()):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid transition: {current} → {target}",
-        )
-
-    ticket.status = target
     if target in (TicketStatus.RESOLVED, TicketStatus.CLOSED, TicketStatus.CANCELLED):
         if ticket.closed_at is None:
             ticket.closed_at = datetime.now(timezone.utc)
@@ -1976,15 +2245,18 @@ def update_ticket_status(
     if target == TicketStatus.ASSIGNED and not ticket.assigned_to:
         ticket.assigned_to = payload.author_name or ("n8n automation" if is_n8n else "Unassigned")
 
-    update = TicketUpdate(
-        ticket=ticket,
-        from_status=current,
-        to_status=target,
-        note=payload.note,
-        author_name=payload.author_name,
-        author_role=payload.author_role,
+    # §40: เปลี่ยน Status / ปิดงาน ต้องบันทึก (เรียกจาก n8n จะไม่มี user → user=None)
+    write_audit(
+        db,
+        action=("ticket_close"
+                if target in (TicketStatus.CLOSED, TicketStatus.CANCELLED)
+                else "ticket_status_change"),
+        user=user, entity_type="ticket", entity_id=ticket.ticket_id,
+        old_value={"status": current},
+        new_value={"status": target, "note": payload.note,
+                   "via": "n8n" if is_n8n else "user"},
+        request=request,
     )
-    db.add(update)
     db.commit()
     db.refresh(ticket)
 
@@ -2065,8 +2337,9 @@ def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_
     if scope is not None and not scope:
         return {
             "total_tickets": 0, "total_devices": 0, "open": 0, "assigned": 0, "in_progress": 0,
-            "pending": 0, "resolved": 0, "closed": 0, "cancelled": 0, "new": 0,
-            "low": 0, "normal": 0, "medium": 0, "high": 0, "critical": 0,
+            "pending": 0, "waiting_parts": 0, "waiting_user": 0,
+            "resolved": 0, "closed": 0, "cancelled": 0, "new": 0,
+            "low": 0, "normal": 0, "high": 0, "critical": 0,
             "by_type": {}, "by_status": {}, "by_priority": {}, "devices_by_status": {},
             "self_service_total": 0, "recent_tickets": [],
         }
@@ -2142,13 +2415,14 @@ def get_stats(db: Session = Depends(get_db), user: Optional[User] = Depends(get_
         "assigned": st("assigned"),
         "in_progress": st("in_progress"),
         "pending": st("pending"),
+        "waiting_parts": st("waiting_parts"),
+        "waiting_user": st("waiting_user"),
         "resolved": st("resolved"),
         "closed": st("closed"),
         "cancelled": st("cancelled"),
         "new": st("new"),
         "low": by_priority.get("low", 0),
         "normal": by_priority.get("normal", 0),
-        "medium": by_priority.get("medium", 0),
         "high": by_priority.get("high", 0),
         "critical": by_priority.get("critical", 0),
         "by_type": by_type,
@@ -2272,7 +2546,7 @@ def get_kb_article(kb_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/kb/articles", response_model=KBArticleOut, status_code=201)
-def create_kb_article(payload: KBArticleCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+def create_kb_article(payload: KBArticleCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     # สร้าง kb_id ใหม่จากเลขสูงสุดที่มีอยู่ (count+1 ผิดเมื่อมีการลบบทความ)
     last = db.execute(
         select(func.max(KBArticle.kb_id))
@@ -2292,13 +2566,23 @@ def create_kb_article(payload: KBArticleCreate, db: Session = Depends(get_db), u
         steps=json.dumps(payload.steps or [], ensure_ascii=False),
         is_published=payload.is_published,
     )
-    db.add(a); db.commit(); db.refresh(a)
+    db.add(a)
+    db.flush()  # ต้องได้แถวจริงก่อน จึงอ้างอิงใน Audit Log ได้
+    # §40: สร้างบทความ KB
+    write_audit(
+        db, action="kb_create", user=user, entity_type="kb_article", entity_id=a.kb_id,
+        new_value={"kb_id": a.kb_id, "title": a.title, "device_type": a.device_type,
+                   "organization_id": a.organization_id, "is_published": a.is_published},
+        request=request,
+    )
+    db.commit()
+    db.refresh(a)
     invalidate_kb_cache()
     return _kb_to_out(a)
 
 
 @app.patch("/api/kb/articles/{kb_id}", response_model=KBArticleOut)
-def update_kb_article(kb_id: str, payload: KBArticleUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+def update_kb_article(kb_id: str, payload: KBArticleUpdate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     a = db.execute(select(KBArticle).where(KBArticle.kb_id == kb_id)).scalar_one_or_none()
     if not a:
         raise HTTPException(status_code=404, detail="KB article not found")
@@ -2313,15 +2597,23 @@ def update_kb_article(kb_id: str, payload: KBArticleUpdate, db: Session = Depend
         data["symptom_tags"] = json.dumps(data["symptom_tags"], ensure_ascii=False)
     if "steps" in data and data["steps"] is not None:
         data["steps"] = json.dumps(data["steps"], ensure_ascii=False)
+    # §40: เก็บค่าก่อนแก้ เพื่อบันทึกทั้ง old_value และ new_value
+    old_value = {k: getattr(a, k, None) for k in data}
     for k, v in data.items():
         setattr(a, k, v)
-    db.commit(); db.refresh(a)
+    if data:
+        write_audit(
+            db, action="kb_update", user=user, entity_type="kb_article", entity_id=a.kb_id,
+            old_value=old_value, new_value=data, request=request,
+        )
+    db.commit()
+    db.refresh(a)
     invalidate_kb_cache()
     return _kb_to_out(a)
 
 
 @app.delete("/api/kb/articles/{kb_id}")
-def delete_kb_article(kb_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+def delete_kb_article(kb_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
     a = db.execute(select(KBArticle).where(KBArticle.kb_id == kb_id)).scalar_one_or_none()
     if not a:
         raise HTTPException(status_code=404, detail="KB article not found")
@@ -2330,7 +2622,15 @@ def delete_kb_article(kb_id: str, db: Session = Depends(get_db), user: User = De
             raise HTTPException(status_code=403, detail="คุณลบได้เฉพาะบทความของโรงเรียนตนเองเท่านั้น")
     elif a.organization_id is not None:
         raise HTTPException(status_code=403, detail="บทความนี้เป็นของโรงเรียนเฉพาะ — ผู้ดูแลบริษัทลบได้เฉพาะบทความหลัก")
-    db.delete(a); db.commit()
+    # §40: ลบบทความ KB — ต้องเก็บค่าเดิมก่อนลบ เพราะหลังลบอ่านย้อนไม่ได้
+    write_audit(
+        db, action="kb_delete", user=user, entity_type="kb_article", entity_id=a.kb_id,
+        old_value={"kb_id": a.kb_id, "title": a.title, "device_type": a.device_type,
+                   "organization_id": a.organization_id, "is_published": a.is_published},
+        request=request,
+    )
+    db.delete(a)
+    db.commit()
     invalidate_kb_cache()
     return {"message": "KB article deleted", "kb_id": kb_id}
 
@@ -2820,7 +3120,497 @@ def sla_check(db: Session = Depends(get_db), _: None = Depends(require_n8n_secre
     return {"checked_at": now.isoformat(), "overdue_count": len(overdue), "escalated": escalated}
 
 
-# ─── Preventive Maintenance (TOR 1.5.10 / 5.9) ───────────────────────
+# ─── Preventive Maintenance (Blueprint §38 / TOR 1.5.10, 5.9) ────────
+
+class PMPlanCreate(BaseModel):
+    name: str = Field(..., min_length=3, max_length=255)
+    device_type: Optional[str] = None
+    interval_days: int = Field(90, ge=1, le=3650)
+    checklist: Optional[list] = None
+    is_active: bool = True
+
+
+def _pm_plan_out(p: PMPlan) -> dict:
+    return {
+        "id": p.id,
+        "name": p.name,
+        "device_type": p.device_type,
+        "interval_days": p.interval_days,
+        "checklist": json.loads(p.checklist) if p.checklist else [],
+        "is_active": p.is_active,
+    }
+
+
+@app.get("/api/pm/plans")
+def list_pm_plans(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """แผน PM ทั้งหมด (§38)"""
+    rows = db.execute(select(PMPlan).order_by(PMPlan.name)).scalars().all()
+    return [_pm_plan_out(p) for p in rows]
+
+
+@app.post("/api/pm/plans", status_code=201)
+def create_pm_plan(
+    payload: PMPlanCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin")),
+):
+    """สร้างแผน PM ใหม่ — admin ขึ้นไป"""
+    plan = PMPlan(
+        name=payload.name,
+        device_type=payload.device_type,
+        interval_days=payload.interval_days,
+        checklist=json.dumps(payload.checklist or [], ensure_ascii=False),
+        is_active=payload.is_active,
+    )
+    db.add(plan)
+    db.flush()
+    write_audit(
+        db, action="pm_plan_create", user=user, entity_type="pm_plan",
+        entity_id=plan.id, new_value=_pm_plan_out(plan), request=request,
+    )
+    db.commit()
+    db.refresh(plan)
+    return _pm_plan_out(plan)
+
+
+def _gen_pm_task_no(db: Session) -> str:
+    """PM-YYYYMM-NNNN — ใช้ MAX(ลำดับ)+1 กันเลขซ้ำหลังลบงาน"""
+    now = datetime.now(timezone.utc)
+    prefix = f"PM-{now.year}{now.month:02d}-"
+    row = db.execute(
+        text("SELECT MAX(CAST(SUBSTRING(task_no FROM 'PM-\\d{6}-(\\d{4})') AS INTEGER)) "
+             "FROM pm_tasks WHERE task_no LIKE :p"),
+        {"p": f"{prefix}%"},
+    ).scalar_one()
+    return f"{prefix}{(row or 0) + 1:04d}"
+
+
+@app.post("/api/pm/generate")
+def pm_generate(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """สร้างงาน PM ล่วงหน้าให้อุปกรณ์ที่ถึงรอบ + ปรับงานเลยกำหนดเป็น overdue"""
+    now = datetime.now(timezone.utc)
+
+    # งานค้างที่เลยกำหนดแล้ว → overdue (§38 ปฏิทิน PM)
+    stale = db.execute(
+        select(PMTask).where(
+            PMTask.status == "pending",
+            PMTask.due_date.is_not(None),
+            PMTask.due_date < now,
+        )
+    ).scalars().all()
+    for t in stale:
+        t.status = "overdue"
+
+    plans = db.execute(select(PMPlan).where(PMPlan.is_active.is_(True))).scalars().all()
+    generated = 0
+    skipped = 0
+    tasks = []
+    for plan in plans:
+        stmt = select(Device).where(Device.status == "active")
+        if plan.device_type:
+            stmt = stmt.where(Device.device_type == plan.device_type)
+        devices = db.execute(stmt).scalars().all()
+        for d in devices:
+            # ข้ามถ้ามีงานค้าง (pending/overdue) ของแผนเดียวกันอยู่แล้ว
+            existing = db.execute(
+                select(PMTask.id).where(
+                    PMTask.plan_id == plan.id,
+                    PMTask.device_id == d.device_id,
+                    PMTask.status.in_(["pending", "overdue"]),
+                ).limit(1)
+            ).scalar_one_or_none()
+            if existing:
+                skipped += 1
+                continue
+
+            # รอบถัดไปนับจากงานที่ทำเสร็จล่าสุด ถ้าไม่มีให้ตั้ง due ใน 7 วัน
+            last_done = db.execute(
+                select(PMTask.done_at).where(
+                    PMTask.plan_id == plan.id,
+                    PMTask.device_id == d.device_id,
+                    PMTask.status == "done",
+                ).order_by(PMTask.done_at.desc()).limit(1)
+            ).scalar_one_or_none()
+            due = (
+                last_done + timedelta(days=plan.interval_days)
+                if last_done else now + timedelta(days=7)
+            )
+
+            task = PMTask(
+                task_no=_gen_pm_task_no(db),
+                plan_id=plan.id,
+                device_id=d.device_id,
+                organization_id=d.organization_id,
+                due_date=due,
+                status="pending",
+            )
+            db.add(task)
+            db.flush()
+            tasks.append({
+                "task_no": task.task_no,
+                "device_id": d.device_id,
+                "plan_name": plan.name,
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+            })
+            generated += 1
+
+    write_audit(
+        db, action="pm_generate", user=user, entity_type="pm_task",
+        new_value={"generated": generated, "skipped": skipped, "marked_overdue": len(stale)},
+        request=request,
+    )
+    db.commit()
+    return {
+        "generated": generated,
+        "skipped_duplicate": skipped,
+        "marked_overdue": len(stale),
+        "tasks": tasks,
+    }
+
+
+@app.get("/api/pm/tasks")
+def list_pm_tasks(
+    status: Optional[str] = Query(None),
+    device_id: Optional[str] = Query(None),
+    organization_id: Optional[int] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """รายการงาน PM + checklist ของแผนที่ผูกไว้"""
+    stmt = select(PMTask).order_by(PMTask.due_date)
+    if status:
+        stmt = stmt.where(PMTask.status == status)
+    if device_id:
+        stmt = stmt.where(PMTask.device_id == device_id)
+    if organization_id:
+        stmt = stmt.where(PMTask.organization_id == organization_id)
+    rows = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
+
+    result = []
+    for t in rows:
+        plan = db.get(PMPlan, t.plan_id) if t.plan_id else None
+        dev = (
+            db.execute(select(Device).where(Device.device_id == t.device_id)).scalar_one_or_none()
+            if t.device_id else None
+        )
+        result.append({
+            "id": t.id,
+            "task_no": t.task_no,
+            "plan_id": t.plan_id,
+            "plan_name": plan.name if plan else None,
+            "device_id": t.device_id,
+            "device_type": dev.device_type if dev else None,
+            "organization_id": t.organization_id,
+            "due_date": t.due_date,
+            "status": t.status,
+            "result": json.loads(t.result) if t.result else [],
+            "photos": json.loads(t.photos) if t.photos else [],
+            "done_by": t.done_by,
+            "done_at": t.done_at,
+            "next_due": t.next_due,
+            "ticket_id": t.ticket_id,
+            "skip_reason": t.skip_reason,
+            "checklist": json.loads(plan.checklist) if plan and plan.checklist else [],
+        })
+    return result
+
+
+class PMSubmitRequest(BaseModel):
+    result: Optional[list] = None
+    photos: Optional[list[str]] = None
+
+
+class PMSkipRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+@app.post("/api/pm/tasks/{task_id}/submit")
+def pm_submit(
+    task_id: int,
+    payload: PMSubmitRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """ส่งผลตรวจ PM — รายการที่ไม่ผ่านจะเปิด Ticket ให้อัตโนมัติ (§38)"""
+    task = db.get(PMTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"ไม่พบงาน PM รหัส {task_id}")
+    if task.status in ("done", "skipped"):
+        raise HTTPException(status_code=409, detail=f"งาน PM นี้ปิดแล้ว (สถานะ {task.status})")
+
+    now = datetime.now(timezone.utc)
+    old_status = task.status
+    plan = db.get(PMPlan, task.plan_id) if task.plan_id else None
+
+    task.status = "done"
+    task.result = json.dumps(payload.result or [], ensure_ascii=False)
+    task.photos = json.dumps(payload.photos or [], ensure_ascii=False)
+    task.done_by = getattr(user, "full_name", None) or getattr(user, "username", None)
+    task.done_at = now
+    task.next_due = now + timedelta(days=(plan.interval_days if plan else 90))
+
+    # รายการ "ไม่ผ่าน" → เปิด Ticket อัตโนมัติ พร้อมคิด SLA ตามปกติ
+    failed = [
+        r for r in (payload.result or [])
+        if isinstance(r, dict) and r.get("value") in (False, "false", "fail", "ไม่ผ่าน")
+    ]
+    auto_ticket = None
+    if failed and task.device_id:
+        dev = db.execute(
+            select(Device).where(Device.device_id == task.device_id)
+        ).scalar_one_or_none()
+        if dev:
+            notes = " | ".join(
+                str(r.get("item") or r.get("note") or "") for r in failed
+            ).strip(" |")
+            ticket = RepairTicket(
+                ticket_id=generate_ticket_id(db, dev.organization_id),
+                organization_id=dev.organization_id,
+                device_id=dev.device_id,
+                title=f"PM พบปัญหา: {notes or task.task_no}"[:255],
+                description=f"งาน PM {task.task_no} ตรวจพบรายการไม่ผ่าน: {notes or '-'}",
+                priority=Priority.NORMAL,
+                status=TicketStatus.NEW,
+                channel="pm",
+                reporter_name=task.done_by,
+                reporter_type="technician",
+                sla_due_at=calc_sla_due(now, Priority.NORMAL),
+            )
+            db.add(ticket)
+            db.flush()
+            task.ticket_id = ticket.ticket_id
+            auto_ticket = ticket.ticket_id
+
+    write_audit(
+        db, action="pm_task_submit", user=user, entity_type="pm_task",
+        entity_id=task.task_no,
+        old_value={"status": old_status},
+        new_value={"status": "done", "failed_items": len(failed), "auto_ticket": auto_ticket},
+        request=request,
+    )
+    db.commit()
+    return {
+        "id": task.id,
+        "task_no": task.task_no,
+        "status": task.status,
+        "done_at": task.done_at,
+        "next_due": task.next_due,
+        "failed_items": len(failed),
+        "auto_ticket_id": auto_ticket,
+    }
+
+
+@app.post("/api/pm/tasks/{task_id}/skip")
+def pm_skip(
+    task_id: int,
+    payload: PMSkipRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """ข้ามงาน PM พร้อมเหตุผล (§38 — ต้องบันทึกเหตุผลไว้ตรวจย้อนหลัง)"""
+    task = db.get(PMTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"ไม่พบงาน PM รหัส {task_id}")
+    if task.status in ("done", "skipped"):
+        raise HTTPException(status_code=409, detail=f"งาน PM นี้ปิดแล้ว (สถานะ {task.status})")
+
+    old_status = task.status
+    task.status = "skipped"
+    task.skip_reason = payload.reason
+    task.done_by = getattr(user, "full_name", None) or getattr(user, "username", None)
+    task.done_at = datetime.now(timezone.utc)
+    write_audit(
+        db, action="pm_task_skip", user=user, entity_type="pm_task",
+        entity_id=task.task_no,
+        old_value={"status": old_status},
+        new_value={"status": "skipped", "reason": payload.reason},
+        request=request,
+    )
+    db.commit()
+    return {"id": task.id, "task_no": task.task_no, "status": task.status,
+            "skip_reason": task.skip_reason}
+
+
+# ─── PM Rule Engine (Blueprint §38) ───────────────────────────────────
+# Rule 1 REPEATED_FAILURE | Rule 2 WARRANTY_EXPIRING | Rule 3 REPLACEMENT_CANDIDATE
+# ตัวกฎอยู่ใน app/pm_rules.py — ที่นี่ทำหน้าที่เปิดให้เรียก/อ่านผล + RBAC
+
+class HealthFlagUpdate(BaseModel):
+    status: str = Field(..., pattern="^(acknowledged|resolved)$")
+
+
+def _health_flag_out(f: DeviceHealthFlag) -> dict:
+    return {
+        "id": f.id,
+        "device_id": f.device_id,
+        "organization_id": f.organization_id,
+        "rule_code": f.rule_code,
+        "severity": f.severity,
+        "message": f.message,
+        "detail": f.detail,
+        "status": f.status,
+        "acknowledged_by": f.acknowledged_by,
+        "resolved_at": f.resolved_at,
+        "created_at": f.created_at,
+    }
+
+
+def _pm_rule_scope(user: User, organization_id: Optional[int]) -> Optional[int]:
+    """แปลงคำขอเป็น organization_id ที่รันกฎได้จริงตามสิทธิ์ (None = ทุกโรงเรียน)"""
+    scope = visible_org_ids(user)
+    if organization_id is not None:
+        check_org_access(user, organization_id)
+        return organization_id
+    if scope is None:
+        return None  # global scope → รันทุกโรงเรียน
+    if not scope:
+        raise HTTPException(status_code=403, detail="บัญชีนี้ยังไม่ได้ผูกกับโรงเรียน")
+    return next(iter(scope))
+
+
+@app.post("/api/pm/rules/run")
+def pm_rules_run(
+    request: Request,
+    organization_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """รัน PM Rule Engine ทั้งสามกฎ (§38) — คืนจำนวน flag ที่สร้างใหม่
+
+    กันแจ้งซ้ำในตัว: อุปกรณ์ที่มี flag ของกฎเดิมสถานะ open อยู่แล้วจะถูกข้าม
+    """
+    target = _pm_rule_scope(user, organization_id)
+    result = pm_rules.run_all(db, organization_id=target)
+    write_audit(
+        db, action="pm_rules_run", user=user, entity_type="pm_rule",
+        entity_id=str(target) if target is not None else "all",
+        new_value={"created": result["created"], "by_rule": result["by_rule"]},
+        request=request,
+    )
+    db.commit()
+    return result
+
+
+@app.get("/api/pm/flags")
+def list_health_flags(
+    status: Optional[str] = Query(None),
+    rule_code: Optional[str] = Query(None),
+    device_id: Optional[str] = Query(None),
+    organization_id: Optional[int] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """รายการ flag จาก Rule Engine เรียงใหม่ก่อน — จำกัดตาม scope ของผู้ใช้"""
+    stmt = select(DeviceHealthFlag).order_by(
+        DeviceHealthFlag.created_at.desc(), DeviceHealthFlag.id.desc()
+    )
+    if status:
+        stmt = stmt.where(DeviceHealthFlag.status == status)
+    if rule_code:
+        stmt = stmt.where(DeviceHealthFlag.rule_code == rule_code)
+    if device_id:
+        stmt = stmt.where(DeviceHealthFlag.device_id == device_id)
+    if organization_id is not None:
+        check_org_access(user, organization_id)
+        stmt = stmt.where(DeviceHealthFlag.organization_id == organization_id)
+    else:
+        scope = visible_org_ids(user)
+        if scope is not None:
+            stmt = stmt.where(DeviceHealthFlag.organization_id.in_(scope or {-1}))
+    rows = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
+    return [_health_flag_out(f) for f in rows]
+
+
+@app.patch("/api/pm/flags/{flag_id}")
+def update_health_flag(
+    flag_id: int,
+    payload: HealthFlagUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """รับทราบ/ปิด flag — ปิดแล้วกฎเดิมจะสร้าง flag ใหม่ได้เมื่อเงื่อนไขเกิดอีก"""
+    flag = db.get(DeviceHealthFlag, flag_id)
+    if not flag:
+        raise HTTPException(status_code=404, detail=f"ไม่พบรายการแจ้งเตือนรหัส {flag_id}")
+    check_org_access(user, flag.organization_id)
+    if flag.status == payload.status:
+        return _health_flag_out(flag)
+
+    old_status = flag.status
+    flag.status = payload.status
+    flag.acknowledged_by = (
+        getattr(user, "full_name", None) or getattr(user, "username", None)
+    )
+    flag.resolved_at = datetime.now(timezone.utc) if payload.status == "resolved" else None
+    write_audit(
+        db, action="pm_flag_update", user=user, entity_type="device_health_flag",
+        entity_id=str(flag.id),
+        old_value={"status": old_status},
+        new_value={"status": flag.status, "device_id": flag.device_id,
+                   "rule_code": flag.rule_code},
+        request=request,
+    )
+    db.commit()
+    db.refresh(flag)
+    return _health_flag_out(flag)
+
+
+# ─── Audit Log (Blueprint §40) ────────────────────────────────────────
+
+@app.get("/api/audit-logs")
+def list_audit_logs(
+    action: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
+    entity_id: Optional[str] = Query(None),
+    user_id: Optional[int] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin")),
+):
+    """ประวัติการกระทำสำคัญ เรียงใหม่ก่อน — admin ขึ้นไปเท่านั้น (§40)"""
+    stmt = select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+    if action:
+        stmt = stmt.where(AuditLog.action == action)
+    if entity_type:
+        stmt = stmt.where(AuditLog.entity_type == entity_type)
+    if entity_id:
+        stmt = stmt.where(AuditLog.entity_id == str(entity_id))
+    if user_id:
+        stmt = stmt.where(AuditLog.user_id == user_id)
+    rows = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
+    return [
+        {
+            "id": r.id,
+            "user_id": r.user_id,
+            "user_name": r.user_name,
+            "user_role": r.user_role,
+            "action": r.action,
+            "entity_type": r.entity_type,
+            "entity_id": r.entity_id,
+            "old_value": json.loads(r.old_value) if r.old_value and r.old_value.startswith(("{", "[")) else r.old_value,
+            "new_value": json.loads(r.new_value) if r.new_value and r.new_value.startswith(("{", "[")) else r.new_value,
+            "ip_address": r.ip_address,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
 
 
 # ─── QR Service (TOR 1.5.4 / 5.3) ─────────────────────────────────────
@@ -3082,40 +3872,60 @@ def _add_update(db: Session, t: RepairTicket, from_s: Optional[str], to_s: Optio
     db.add(TicketUpdate(ticket=t, from_status=from_s, to_status=to_s, note=note, author_name=author, author_role=role))
 
 @app.post("/api/tickets/{ticket_id}/assign", status_code=200)
-def ticket_assign(ticket_id: str, payload: TicketAssignReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
+def ticket_assign(ticket_id: str, payload: TicketAssignReq, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
     """มอบหมายงานให้ช่าง (admin/super_admin)"""
     t = _get_ticket_or_404(db, ticket_id)
     old = t.status
+    old_assignee = t.assigned_to  # §40: เก็บผู้รับผิดชอบเดิมก่อนถูกเขียนทับ
     t.assigned_to = payload.assignee
     if old == "new":
-        t.status = "assigned"
-    _add_update(db, t, old, t.status, payload.note or f"มอบหมายให้ {payload.assignee}", user.line_display_name or "Admin", user.role)
+        apply_transition(db, t, "assigned", force=True,
+                         author_name=user.line_display_name or "Admin",
+                         author_role=user.role,
+                         note=payload.note or f"มอบหมายให้ {payload.assignee}")
+    else:
+        _add_update(db, t, old, t.status, payload.note or f"มอบหมายให้ {payload.assignee}", user.line_display_name or "Admin", user.role)
+    # §40: มอบหมายงานให้ช่าง
+    write_audit(
+        db, action="ticket_assign", user=user, entity_type="ticket", entity_id=t.ticket_id,
+        old_value={"status": old, "assigned_to": old_assignee},
+        new_value={"status": t.status, "assigned_to": payload.assignee,
+                   "note": payload.note},
+        request=request,
+    )
     db.commit()
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 @app.post("/api/tickets/{ticket_id}/accept", status_code=200)
-def ticket_accept(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def ticket_accept(ticket_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ช่างรับงาน — assigned/new → in_progress"""
     t = _get_ticket_or_404(db, ticket_id)
+    old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     check_ticket_access(db, user, t)
     if t.status not in ("assigned", "new"):
         raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": f"สถานะปัจจุบันคือ {t.status} — ไม่สามารถรับงานได้"})
-    old = t.status
-    t.status = "in_progress"
     t.assigned_to = t.assigned_to or (user.line_display_name or "ช่าง")
-    _add_update(db, t, old, t.status, "รับงานแล้ว กำลังดำเนินการ", user.line_display_name or "Technician", user.role)
+    apply_transition(db, t, "in_progress", force=True,
+                     author_name=user.line_display_name or "Technician",
+                     author_role=user.role, note="รับงานแล้ว กำลังดำเนินการ")
+    # §40: ช่างรับงาน = เปลี่ยน Status
+    write_audit(
+        db, action="ticket_accept", user=user, entity_type="ticket", entity_id=t.ticket_id,
+        old_value={"status": old_status},
+        new_value={"status": t.status, "assigned_to": t.assigned_to},
+        request=request,
+    )
     db.commit()
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 @app.post("/api/tickets/{ticket_id}/resolve", status_code=200)
-def ticket_resolve(ticket_id: str, payload: TicketResolveReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def ticket_resolve(ticket_id: str, payload: TicketResolveReq, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """บันทึกผลการซ่อม — resolved + บันทึกสาเหตุ/วิธีแก้/รูปหลังซ่อม"""
     t = _get_ticket_or_404(db, ticket_id)
+    old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     check_ticket_access(db, user, t)
     if not payload.solution.strip():
         raise HTTPException(status_code=400, detail="ต้องกรอกวิธีแก้ไข (solution)")
-    old = t.status
-    t.status = "resolved"
     t.root_cause = payload.root_cause
     t.solution = payload.solution
     t.parts_used = json.dumps(payload.parts_used or [], ensure_ascii=False) if payload.parts_used else None
@@ -3124,54 +3934,89 @@ def ticket_resolve(ticket_id: str, payload: TicketResolveReq, db: Session = Depe
     if payload.after_photos:
         for url in payload.after_photos:
             db.add(TicketAttachment(ticket_id=t.ticket_id, file_url=url, phase="after", uploaded_by=user.line_display_name))
-    _add_update(db, t, old, "resolved", "ซ่อมเสร็จ: " + payload.solution[:150], user.line_display_name or "Technician", user.role)
+    apply_transition(db, t, "resolved", force=True,
+                     author_name=user.line_display_name or "Technician",
+                     author_role=user.role, note="ซ่อมเสร็จ: " + payload.solution[:150])
+    # §40: บันทึกผลการซ่อม = เปลี่ยน Status (เก็บสาเหตุ/วิธีแก้แบบย่อ)
+    write_audit(
+        db, action="ticket_resolve", user=user, entity_type="ticket", entity_id=t.ticket_id,
+        old_value={"status": old_status},
+        new_value={"status": t.status, "root_cause": payload.root_cause,
+                   "solution": payload.solution[:500]},
+        request=request,
+    )
     db.commit()
     return {"ticket_id": t.ticket_id, "status": t.status, "resolved_at": t.resolved_at, "sla_met": t.sla_met}
 
 @app.post("/api/tickets/{ticket_id}/close", status_code=200)
-def ticket_close(ticket_id: str, payload: TicketCloseReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def ticket_close(ticket_id: str, payload: TicketCloseReq, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ผู้แจ้ง/admin ปิดงาน + ให้คะแนน (resolved → closed)"""
     t = _get_ticket_or_404(db, ticket_id)
+    old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     check_ticket_access(db, user, t)
     if t.status != "resolved":
         raise HTTPException(status_code=409, detail={"code": "INVALID_STATUS_TRANSITION", "message": f"ต้องเป็นสถานะ resolved ก่อนปิด (ปัจจุบัน: {t.status})"})
-    old = t.status
-    t.status = "closed"
     t.closed_at = datetime.now(timezone.utc)
     if payload.rating is not None:
         t.rating = payload.rating
     if payload.feedback:
         t.feedback = payload.feedback
-    _add_update(db, t, old, "closed", payload.feedback or "ผู้แจ้งยืนยันปิดงาน", user.line_display_name or "User", user.role)
+    apply_transition(db, t, "closed", force=True,
+                     author_name=user.line_display_name or "User",
+                     author_role=user.role, note=payload.feedback or "ผู้แจ้งยืนยันปิดงาน")
+    # §40: ปิดงาน (พร้อมคะแนนความพึงพอใจ)
+    write_audit(
+        db, action="ticket_close", user=user, entity_type="ticket", entity_id=t.ticket_id,
+        old_value={"status": old_status},
+        new_value={"status": t.status, "rating": payload.rating,
+                   "feedback": payload.feedback},
+        request=request,
+    )
     db.commit()
     return {"ticket_id": t.ticket_id, "status": t.status, "closed_at": t.closed_at, "rating": t.rating}
 
 @app.post("/api/tickets/{ticket_id}/reopen", status_code=200)
-def ticket_reopen(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def ticket_reopen(ticket_id: str, payload: TicketCommentReq, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """เปิดงานใหม่กรณีปัญหากลับมา (closed → in_progress)"""
     t = _get_ticket_or_404(db, ticket_id)
+    old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     check_ticket_access(db, user, t)
     if t.status != "closed":
         raise HTTPException(status_code=409, detail={"code": "INVALID_STATUS_TRANSITION", "message": f"เฉพาะงานที่ปิดแล้วเท่านั้นที่เปิดใหม่ได้ (ปัจจุบัน: {t.status})"})
-    old = t.status
-    t.status = "in_progress"
     t.closed_at = None
     t.resolved_at = None
-    _add_update(db, t, old, "in_progress", payload.note or "เปิดงานใหม่ (ปัญหากลับมาเกิดซ้ำ)", user.line_display_name or "User", user.role)
+    apply_transition(db, t, "in_progress", force=True,
+                     author_name=user.line_display_name or "User",
+                     author_role=user.role, note=payload.note or "เปิดงานใหม่ (ปัญหากลับมาเกิดซ้ำ)")
+    # §40: เปิดงานใหม่ — ต้องตรวจย้อนได้ว่าใครเปิดงานที่ปิดแล้ว
+    write_audit(
+        db, action="ticket_reopen", user=user, entity_type="ticket", entity_id=t.ticket_id,
+        old_value={"status": old_status},
+        new_value={"status": t.status, "note": payload.note},
+        request=request,
+    )
     db.commit()
     return {"ticket_id": t.ticket_id, "status": t.status}
 
 @app.post("/api/tickets/{ticket_id}/cancel", status_code=200)
-def ticket_cancel(ticket_id: str, payload: TicketCommentReq, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def ticket_cancel(ticket_id: str, payload: TicketCommentReq, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ยกเลิกงานพร้อมเหตุผล"""
     t = _get_ticket_or_404(db, ticket_id)
+    old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     check_ticket_access(db, user, t)
     if t.status in ("closed", "cancelled"):
         raise HTTPException(status_code=409, detail={"code": "INVALID_STATUS_TRANSITION", "message": f"สถานะ {t.status} ไม่สามารถยกเลิกได้"})
-    old = t.status
-    t.status = "cancelled"
     t.closed_at = datetime.now(timezone.utc)
-    _add_update(db, t, old, "cancelled", payload.note or "ยกเลิก", user.line_display_name or "User", user.role)
+    apply_transition(db, t, "cancelled", force=True,
+                     author_name=user.line_display_name or "User",
+                     author_role=user.role, note=payload.note or "ยกเลิก")
+    # §40: ยกเลิกงาน — บันทึกเหตุผลไว้ตรวจสอบ
+    write_audit(
+        db, action="ticket_cancel", user=user, entity_type="ticket", entity_id=t.ticket_id,
+        old_value={"status": old_status},
+        new_value={"status": t.status, "note": payload.note},
+        request=request,
+    )
     db.commit()
     return {"ticket_id": t.ticket_id, "status": t.status}
 
@@ -3238,19 +4083,31 @@ def get_settings(db: Session = Depends(get_db), user: User = Depends(require_rol
     }
 
 @app.patch("/api/settings")
-def update_settings(payload: dict, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
+def update_settings(payload: dict, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
     """ปรับค่า SLA / working hours / auto-close / AI threshold — ไม่ต้อง deploy ใหม่"""
     allowed = {"sla_hours", "working_hours", "auto_close_days", "ai_confidence_threshold"}
     updated = []
+    old_values = {}  # §40: ค่าก่อนแก้ ใช้เทียบย้อนหลังว่าใครเปลี่ยน SLA/เวลาทำงาน
+    new_values = {}
     for key, value in payload.items():
         if key not in allowed:
             continue
         row = db.execute(select(Setting).where(Setting.key == key)).scalar_one_or_none()
         if row:
+            old_values[key] = row.value
             row.value = json.dumps(value)
         else:
+            old_values[key] = None
             db.add(Setting(key=key, value=json.dumps(value)))
+        new_values[key] = value
         updated.append(key)
+    if updated:
+        # §40: เปลี่ยนค่าระบบต้องบันทึก (entity_id จำกัด 64 ตัวอักษรตามคอลัมน์)
+        write_audit(
+            db, action="settings_update", user=user, entity_type="setting",
+            entity_id=",".join(updated)[:64],
+            old_value=old_values, new_value=new_values, request=request,
+        )
     db.commit()
     return {"updated": updated, "message": "Settings updated"}
 
@@ -3668,27 +4525,58 @@ class N8nTicketIn(BaseModel):
 
 @app.post("/api/line/create-ticket", status_code=201)
 def line_create_ticket(payload: N8nTicketIn, db: Session = Depends(get_db), _: None = Depends(require_n8n_secret)):
-    """รับ payload จาก n8n → resolve device (หรือ default) → สร้าง repair_ticket.
+    """รับ payload จาก n8n → resolve device (ต้องระบุได้แน่ชัด) → สร้าง repair_ticket.
     คืน {ticket_no, ticket_id, success} ให้ n8n นำไป notify ต่อ"""
     from datetime import datetime, timezone as _tz
     device_id = payload.deviceId.strip()
-    # resolve device: ตรง device_id / ห้อง / ตัวแรกของ org ไหนก็ได้ → default TEST1-00001
+    # guardrail: ห้าม fallback ไป "อุปกรณ์ตัวแรกในระบบ" หรือ default TEST1 —
+    # ticket จะผูก organization_id ขององค์กรอื่น (ข้อมูลข้ามองค์กร) และช่างถูกส่งผิดห้อง
+    # ตรงหลายเครื่อง = กำกวม ต้องให้ผู้แจ้งระบุรหัสเอง (เหมือน chatbot_core._create_ticket_from_fields)
+    from app.chatbot_core import _looks_like_device_code
+    # resolve device: รหัสตรงตัว → ไม่สนตัวพิมพ์ → รหัสบางส่วน (เฉพาะที่ดูเป็นรหัสอุปกรณ์) → ห้อง
     dev = None
     if device_id:
         dev = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
+        if not dev:
+            row = db.execute(text(
+                "SELECT id FROM devices WHERE lower(device_id) = lower(:d) LIMIT 1"
+            ), {"d": device_id}).mappings().first()
+            if row:
+                dev = db.get(Device, row["id"])
+        if not dev and _looks_like_device_code(device_id):
+            code_rows = db.execute(text(
+                "SELECT id, device_id FROM devices WHERE device_id ILIKE '%' || :d || '%' LIMIT 3"
+            ), {"d": device_id}).mappings().all()
+            if len(code_rows) == 1:
+                dev = db.get(Device, code_rows[0]["id"])
+            elif len(code_rows) > 1:
+                codes = ", ".join(str(r["device_id"]) for r in code_rows)
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"พบอุปกรณ์หลายเครื่องที่ตรงกับ '{device_id}' ({codes}) "
+                           "กรุณาระบุรหัสอุปกรณ์บนสติกเกอร์ QR ให้ชัดเจน",
+                )
     if not dev and payload.room:
         # ลอง match ห้อง
         dev = db.execute(text(
-            "SELECT d.* FROM devices d JOIN rooms r ON r.id=d.room_id "
-            "WHERE r.code ILIKE :rc OR r.name ILIKE :rc LIMIT 1"
-        ), {"rc": f"%{payload.room}%"}).mappings().first()
+            "SELECT d.id, d.device_id FROM devices d JOIN rooms r ON r.id=d.room_id "
+            "WHERE r.code ILIKE :rc OR r.name ILIKE :rc LIMIT 3"
+        ), {"rc": f"%{payload.room}%"}).mappings().all()
         if dev:
-            dev = db.get(Device, dev["id"])
+            if len(dev) > 1:
+                codes = ", ".join(str(r["device_id"]) for r in dev)
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"ห้อง '{payload.room}' มีอุปกรณ์หลายเครื่อง ({codes}) "
+                           "กรุณาระบุรหัสอุปกรณ์บนสติกเกอร์ QR ให้ชัดเจน",
+                )
+            dev = db.get(Device, dev[0]["id"])
     if not dev:
-        # default: ตัวแรก หรือ TEST1
-        dev = db.execute(select(Device).order_by(Device.id).limit(1)).scalar_one_or_none()
-    if not dev:
-        return {"success": False, "error": "ไม่มีอุปกรณ์ในระบบ — เพิ่มอุปกรณ์ก่อน"}
+        raise HTTPException(
+            status_code=422,
+            detail=f"ไม่พบอุปกรณ์ที่ตรงกับ deviceId='{device_id or '-'}' / ห้อง='{payload.room or '-'}' "
+                   "กรุณาส่งรหัสอุปกรณ์บนสติกเกอร์ QR (ระบบไม่สร้างใบงานผูกอุปกรณ์ขององค์กรอื่น)",
+        )
     org_id = dev.organization_id
     prio_map = {"low":"low","Low":"low","medium":"normal","Medium":"normal","normal":"normal","Normal":"normal",
                 "high":"high","High":"high","critical":"critical","Critical":"critical"}

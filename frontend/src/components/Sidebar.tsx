@@ -81,6 +81,26 @@ const menuItems: MenuItem[] = [
     ),
   },
   {
+    id: 'pm',
+    label: 'บำรุงรักษา (PM)',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="4" width="18" height="17" rx="2"/>
+        <path d="M3 10h18M8 2v4M16 2v4M9 15l2 2 4-4"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'audit',
+    label: 'ประวัติการใช้งาน',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <path d="M14 2v6h6M9 13h6M9 17h6"/>
+      </svg>
+    ),
+  },
+  {
     id: 'users',
     label: 'Users',
     icon: (
@@ -147,12 +167,14 @@ const adminMenuItems = menuItems.filter((i) => i.id === 'schools');
 // admin         : จัดการรร ตัวเอง (อุปกรณ์/ติcket/user/รายงาน) — ไม่เห็นโรงเรียนอื่น/ตั้งค่าระบบ
 // it_support    : ทำงานซ่อม (อุปกรณ์/สแกน/ticket/รายงาน) — ไม่จัดการ user/ตั้งค่า
 // teacher/student: แจ้งซ่อม + ติดตาม — เห็นแค่ Dashboard/สแกน/Tickets ของตัวเอง
+// หมายเหตุสิทธิ์ฝั่ง backend: /api/pm/* → owner/super_admin/admin/it_support,
+// /api/audit-logs → owner/super_admin/admin เท่านั้น (admin_school จึงไม่เห็นสองเมนูนี้)
 const ROLE_MENUS: Record<string, string[]> = {
-  owner: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
-  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'],
-  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'users', 'reports', 'settings', 'profile'],
+  owner: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'users', 'reports', 'audit', 'settings', 'profile'],
+  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'users', 'reports', 'audit', 'settings', 'profile'],
+  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'users', 'reports', 'audit', 'settings', 'profile'],
   admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'users', 'reports', 'settings', 'profile'],
-  it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'reports', 'settings', 'profile'],
+  it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'reports', 'settings', 'profile'],
   teacher: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
   student: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
 };
@@ -170,7 +192,7 @@ export function visibleMenusForRole(role: string | undefined, organizationId?: n
 export { ROLE_MENUS };
 
 // เรียงเมนูตามลำดับเดิมใน menuItems
-const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'sales', 'schools', 'users', 'reports', 'settings', 'profile'];
+const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'users', 'reports', 'audit', 'settings', 'profile'];
 
 function visibleMenusFor(role: string | undefined, organizationId?: number | null): MenuItem[] {
   const allowed = visibleMenusForRole(role, organizationId);

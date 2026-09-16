@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""seed_db.py — ใส่ข้อมูลอุปกรณ์ตัวอย่างจาก DOCX into SQLite
+"""seed_db.py — ใส่ข้อมูลอุปกรณ์ตัวอย่าง (องค์กร/ห้อง/อุปกรณ์) ลง PostgreSQL
 ใช้: python scripts/seed_db.py
+ปลายทางคือ DATABASE_URL ของ app.models (ค่าเริ่มต้น: postgres@localhost:5432/smart_classroom)
 """
 
 import os
 import sys
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
-os.chdir(os.path.join(os.path.dirname(__file__), ".."))
+# สคริปต์อยู่ที่ backend/scripts/ → path ที่ต้องเพิ่มคือ backend/ (พาเรนต์) ไม่ใช่ backend/backend
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, _BACKEND_DIR)
+os.chdir(_BACKEND_DIR)
 
 from app.models import (
     Device,
@@ -20,9 +23,6 @@ from app.models import (
     engine,
     SessionLocal,
 )
-
-DB_PATH = "data/smart_classroom.db"
-
 
 def seed() -> None:
     init_db()

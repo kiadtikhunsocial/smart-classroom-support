@@ -1,5 +1,5 @@
 """app/models.py — Database models for Smart Classroom Support System
-SQLite (dev) / PostgreSQL (prod) — switch via DATABASE_URL env
+PostgreSQL only — connection string มาจาก env DATABASE_URL
 """
 import os
 from datetime import datetime, timezone
@@ -30,16 +30,16 @@ from sqlalchemy.orm import (
 # Database
 # ---------------------------------------------------------------------------
 
-# ใช้ path สัมบูรณ์จากตำแหน่งไฟล์ models.py
-# models.py อยู่ที่ backend/app/models.py -> ขึ้นไป 3 level ได้ project root
-_base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_db_path = os.path.join(_base_dir, "data", "smart_classroom.db")
-DATABASE_URL = os.getenv("DATABASE_URL", f"postgresql+psycopg2://postgres:postgres@localhost:5432/smart_classroom{_db_path}")
+# โปรเจกต์นี้ผูกกับ PostgreSQL: models ใช้ JSONB และ query ใน main.py ใช้ ILIKE /
+# SUBSTRING(... FROM 'regex') ซึ่ง SQLite ไม่รองรับ — จึงไม่มี fallback เป็นไฟล์ .db
+# production (Render/Neon) ตั้งค่าผ่าน env DATABASE_URL เสมอ
+DEFAULT_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/smart_classroom"
+DATABASE_URL = os.getenv("DATABASE_URL") or DEFAULT_DATABASE_URL
 
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    pool_pre_ping=True,
 )
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -54,7 +54,6 @@ def get_db():
 
 def init_db():
     """สร้างตารางทั้งหมด — เรียกตอนแอปสตาร์ท"""
-    os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
 
 
@@ -217,6 +216,10 @@ class Device(Base):
     )
     qr_code_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     qr_token: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    # วันที่จัดซื้อ — ใช้คิดอายุอุปกรณ์ใน PM Rule 3 (§38); ไม่มีค่าจะ fallback ไป created_at
+    purchase_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     warranty_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -608,6 +611,116 @@ class ChatbotFAQ(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
+# ─── Audit Log (Blueprint §32 / §40) ──────────────────────────────────
+class AuditLog(Base):
+    """ประวัติการกระทำสำคัญ — Login, เปลี่ยนสิทธิ์, สร้าง/แก้ Asset, Assign งาน,
+    เปลี่ยน Status, ปิดงาน, แก้ KB และ System Settings (§40)
+    """
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    user_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    user_role: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    entity_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    old_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string
+    new_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string
+    ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
+# ─── Preventive Maintenance (Blueprint §32 / §38) ─────────────────────
+class PMPlan(Base):
+    """แผนบำรุงรักษาเชิงป้องกัน — ประเภทอุปกรณ์ + รอบ (วัน) + checklist"""
+
+    __tablename__ = "pm_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    device_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    interval_days: Mapped[int] = mapped_column(Integer, default=90, nullable=False)
+    checklist: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PMTask(Base):
+    """งาน PM รายครั้ง — ผูกอุปกรณ์ + ผลตรวจ + ticket ที่สร้างอัตโนมัติเมื่อไม่ผ่าน"""
+
+    __tablename__ = "pm_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_no: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    plan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("pm_plans.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    device_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("devices.device_id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    due_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    # pending | overdue | done | skipped
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
+    result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list ผลแต่ละข้อ
+    photos: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list URL
+    done_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    done_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_due: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ticket_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    skip_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ─── PM Rule Engine flags (Blueprint §38) ─────────────────────────────
+class DeviceHealthFlag(Base):
+    """ผลจาก PM Rule Engine (§38) — REPEATED_FAILURE / WARRANTY_EXPIRING /
+    REPLACEMENT_CANDIDATE
+
+    หนึ่งอุปกรณ์มี flag ของ rule เดียวกันที่ ``status='open'`` ได้ครั้งเดียว
+    (pm_rules._has_open_flag ใช้เงื่อนไขนี้กันแจ้งซ้ำ)
+    """
+
+    __tablename__ = "device_health_flags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("devices.device_id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # REPEATED_FAILURE | WARRANTY_EXPIRING | REPLACEMENT_CANDIDATE
+    rule_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # info | warning | critical
+    severity: Mapped[str] = mapped_column(String(16), default="warning", nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    # open | acknowledged | resolved
+    status: Mapped[str] = mapped_column(String(16), default="open", nullable=False, index=True)
+    acknowledged_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
 

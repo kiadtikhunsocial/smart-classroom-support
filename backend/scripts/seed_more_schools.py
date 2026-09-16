@@ -51,7 +51,7 @@ def seed() -> None:
                 ],
                 "tickets": [
                     dict(title="จอภาพไม่ติด", description="เปิดจอแล้วไม่มีภาพ", priority=Priority.HIGH, status=TicketStatus.IN_PROGRESS, reporter_name="ครูอารยา", device_id="DEV-2025-00101"),
-                    dict(title="Wi-Fi ในห้องคอมไม่เข้า", description="นักเรียนเชื่อมต่อไม่ได้", priority=Priority.MEDIUM, status=TicketStatus.OPEN, reporter_name="ครูสมชาย", device_id="DEV-2025-00202"),
+                    dict(title="Wi-Fi ในห้องคอมไม่เข้า", description="นักเรียนเชื่อมต่อไม่ได้", priority=Priority.NORMAL, status=TicketStatus.NEW, reporter_name="ครูสมชาย", device_id="DEV-2025-00202"),
                 ],
             },
             {
@@ -66,7 +66,7 @@ def seed() -> None:
                     dict(device_id="DEV-2025-01002", room_code="A101", device_type=DeviceType.UPS, brand="Vertiv", model="GXT3 1kVA", serial_number="VTX-1K-01002"),
                 ],
                 "tickets": [
-                    dict(title="เครื่องเสียงไม่ดัง", description="ลำโพงไม่มีเสียงออก", priority=Priority.CRITICAL, status=TicketStatus.OPEN, reporter_name="ครูมาลี", device_id="DEV-2025-01001"),
+                    dict(title="เครื่องเสียงไม่ดัง", description="ลำโพงไม่มีเสียงออก", priority=Priority.CRITICAL, status=TicketStatus.NEW, reporter_name="ครูมาลี", device_id="DEV-2025-01001"),
                 ],
             },
         ]

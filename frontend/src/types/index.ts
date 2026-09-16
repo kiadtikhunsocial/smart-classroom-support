@@ -86,14 +86,12 @@ export interface Stats {
   in_progress: number;
   waiting_parts: number;
   waiting_user: number;
-  completed: number;
   resolved: number;
   closed: number;
   cancelled: number;
   pending: number;
   low: number;
   normal: number;
-  medium: number;
   high: number;
   critical: number;
   by_type: Record<string, number>;

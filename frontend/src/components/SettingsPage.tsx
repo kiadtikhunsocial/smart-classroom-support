@@ -113,7 +113,7 @@ export default function SettingsPage({ onBack, user }: { onBack: () => void; use
           {[
             ['เวอร์ชันระบบ', 'Smart Classroom v1.0'],
             ['ฐานความรู้', '31 บทความ · อัปเดตอัตโนมัติ'],
-            ['รูปแบบ Ticket', 'TK-YYYYMM-XXXX'],
+            ['รูปแบบ Ticket', 'SC-YYYY-NNNNNN'],
             ['เวลาทำการ', 'จ–ศ 08:00–16:30 น.'],
             ['แจ้งเตือน LINE', 'กำลังพัฒนา (รอเชื่อมต่อ OA)'],
           ].map(([k, v]) => (

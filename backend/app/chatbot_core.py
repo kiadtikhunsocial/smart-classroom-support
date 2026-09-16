@@ -617,6 +617,24 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     return _answer_out_of_scope()
 
 
+def _looks_like_device_code(value: str) -> bool:
+    """ข้อความนี้พอจะเป็น "รหัสอุปกรณ์" ได้หรือไม่
+
+    ต้องมีตัวอักษรปนอยู่และยาวพอ — ตัวเลขล้วนอย่าง "301" ถือเป็นเลขห้อง ไม่ใช่รหัสอุปกรณ์
+    ถ้าเอาไป substring match กับ devices.device_id มันจะไปตรงกับ DEV-2024-00301
+    ซึ่งเป็นอุปกรณ์คนละห้อง (Router ห้อง 201) แล้ว ticket จะผูกผิดเครื่อง/ผิดห้อง
+    """
+    v = (value or "").strip()
+    return len(v) >= 3 and any(ch.isalpha() for ch in v)
+
+
+def _ambiguous_device_error(matches) -> str:
+    """ข้อความเมื่อตรงหลายเครื่อง — ต้องถามผู้ใช้ ห้ามเลือกเครื่องให้เอง"""
+    codes = ", ".join(str(m["device_id"]) for m in matches[:3])
+    return (f"พบอุปกรณ์หลายเครื่องที่ตรงกับข้อมูลนี้ ({codes}) "
+            "รบกวนระบุรหัสอุปกรณ์บนสติกเกอร์ QR ให้ชัดเจนอีกครั้งนะคะ")
+
+
 def _create_ticket_from_fields(fields: dict):
     """สร้าง ticket ผ่าน DB ตรง (ใช้ helper ของ main) — คืน (ticket_no, err)"""
     from app.models import Device, Organization, RepairTicket, TicketUpdate, TicketStatus, get_db
@@ -628,54 +646,47 @@ def _create_ticket_from_fields(fields: dict):
         symptom = (fields.get("symptom") or "").strip()
         if not device_id and not symptom:
             return None, "ไม่พบข้อมูลอุปกรณ์หรืออาการ"
-        matched_note = None
-        # 1) ค้นตรงรหัสอุปกรณ์
+        # 1) ค้นแบบตรงตัวก่อน (case-insensitive) — ปลอดภัยที่สุด
         dev = None
         if device_id:
             dev = db.execute(text(
-                "SELECT * FROM devices WHERE device_id=:d OR device_id ILIKE '%'||:d||'%' LIMIT 1"
+                "SELECT * FROM devices WHERE lower(device_id) = lower(:d) LIMIT 1"
             ), {"d": device_id}).mappings().first()
-        # 2) ถ้าระบุห้อง ให้ค้นจาก rooms.code/name เฉพาะกรณีมี device เดียวในห้อง
+        # 2) ค้นบางส่วนของรหัสอุปกรณ์ — ทำได้เฉพาะเมื่อข้อความ "ดูเหมือนรหัสอุปกรณ์"
+        #    ห้ามทำกับตัวเลขล้วน เช่น "301": ILIKE '%301%' ไปตรงกับ DEV-2024-00301
+        #    ซึ่งอยู่ห้อง 201 → ticket ผูกผิดเครื่อง ช่างถูกส่งไปผิดห้อง
+        #    และถ้าตรงหลายเครื่องคือกำกวม ต้องถามผู้ใช้ ห้ามหยิบเครื่องแรกมาใช้
+        if not dev and device_id and _looks_like_device_code(device_id):
+            code_matches = db.execute(text(
+                "SELECT * FROM devices WHERE device_id ILIKE '%'||:d||'%' LIMIT 3"
+            ), {"d": device_id}).mappings().all()
+            if len(code_matches) == 1:
+                dev = code_matches[0]
+            elif len(code_matches) > 1:
+                return None, _ambiguous_device_error(code_matches)
+        # 3) ระบุเป็นห้อง → ใช้ได้เฉพาะกรณีห้องนั้นมีอุปกรณ์เครื่องเดียว
         if not dev and device_id:
-            room = db.execute(text(
+            in_room = db.execute(text(
                 "SELECT d.* FROM devices d JOIN rooms r ON r.id=d.room_id "
-                "WHERE r.code ILIKE :q OR r.name ILIKE :q LIMIT 2"
+                "WHERE r.code ILIKE :q OR r.name ILIKE :q LIMIT 3"
             ), {"q": f"%{device_id}%"}).mappings().all()
-            if len(room) == 1:
-                dev = room[0]
-        # 3) ลูกค้าเขียนชื่อเครื่องแบบคนทั่วไป (จอ/touch/คอม/โปรเจก...) → หาเครื่องประเภทเดียวกัน
+            if len(in_room) == 1:
+                dev = in_room[0]
+            elif len(in_room) > 1:
+                return None, _ambiguous_device_error(in_room)
+        # 4) หาไม่เจอ → หยุด ห้ามเดาเครื่องให้
+        # ห้ามใส่ fallback แบบ "เอาเครื่องชนิดเดียวกัน" หรือ "เอาเครื่องแรกในระบบ" กลับมา:
+        # มันสร้าง ticket ผูกกับอุปกรณ์/โรงเรียนที่ไม่ใช่ของผู้แจ้ง ช่างจะถูกส่งไปผิดห้อง
+        # และข้อมูลข้ามองค์กร (guardrail: test_unknown_device_never_falls_back_to_test_device)
         if not dev:
-            q = (device_id + " " + symptom).lower()
-            _TYPE_KW = [
-                (["touch", "จอ", "interactive", "display", "สมาร์ทบอร์ด", "smart board", "aiboard", "ทีวี"], "interactive display"),
-                (["คอม", "computer", "โน้ตบุ๊ก", "laptop", "notebook", "pc", "พีซี"], "computer"),
-                (["โปรเจก", "projector"], "projector"),
-                (["wifi", "wi-fi", "router", "เราเตอร์", "เน็ต", "อินเทอร์เน็ต", "access point", "ap "], "router"),
-                (["ลำโพง", "speaker"], "speaker"),
-                (["ไมค์", "ไมโครโฟน", "microphone"], "microphone"),
-                (["กล้อง", "camera"], "camera"),
-                (["เครื่องพิมพ์", "printer", "ปริ้น"], "printer"),
-            ]
-            for kw, dtype in _TYPE_KW:
-                if any(k in q for k in kw):
-                    cand = db.execute(text(
-                        "SELECT * FROM devices WHERE LOWER(device_type::text) LIKE :t ORDER BY id LIMIT 1"
-                    ), {"t": f"%{dtype}%"}).mappings().first()
-                    if cand:
-                        dev = cand
-                        matched_note = (f"ลูกค้าระบุ '{device_id or symptom[:40]}' → ผูกกับเครื่อง "
-                                        f"'{cand['device_id']}' (ชนิด {dtype}) เพื่อให้งานผ่าน เจ้าหน้าที่โปรดยืนยันเครื่องจริง")
-                        break
-        # 4) fallback สุดท้าย: ใช้เครื่องแรกสุดในระบบ เพื่อให้งานไม่ตกหล่น (ฝ่ายดูแลยืนยันทีหลัง)
-        if not dev:
-            dev = db.execute(text("SELECT * FROM devices ORDER BY id LIMIT 1")).mappings().first()
-            if not dev:
-                return None, "ระบบยังไม่มีอุปกรณ์ลงทะเบียน"
-            matched_note = (f"ลูกค้าระบุ '{device_id or symptom[:40]}' → ยังไม่พบเครื่องตรง ผูกกับ "
-                            f"'{dev['device_id']}' ชั่วคราวเพื่อให้งานผ่าน โปรดยืนยัน/แก้เครื่องจริง")
+            return None, f"ไม่พบอุปกรณ์ที่ตรงกับ '{device_id or symptom[:40]}'"
         did = dev["device_id"]
         org_id = dev["organization_id"]
         now = datetime.now(timezone.utc)
+        # priority ต้องเป็นค่าใน priority_enum เท่านั้น (low/normal/high/critical)
+        # "urgent" ไม่มีใน enum → PostgreSQL จะ error และ calc_sla_due จะ fallback เป็น normal
+        _is_safety_critical = fields.get("urgency") == "safety_critical"
+        _priority = "critical" if _is_safety_critical else "normal"
         ticket = RepairTicket(
             ticket_id=generate_ticket_id(db, org_id),
             organization_id=org_id,
@@ -684,24 +695,24 @@ def _create_ticket_from_fields(fields: dict):
             description=fields.get("symptom", ""),
             reporter_name=fields.get("name", "ผู้ใช้ LINE"),
             reporter_phone=fields.get("phone"),
-            priority="urgent" if fields.get("urgency") == "safety_critical" else "normal",
-            escalation_level=1 if fields.get("urgency") == "safety_critical" else 0,
+            priority=_priority,
+            escalation_level=1 if _is_safety_critical else 0,
             status=TicketStatus.NEW,
             channel="line",
-            sla_due_at=calc_sla_due(now, "urgent" if fields.get("urgency") == "safety_critical" else "normal"),
+            sla_due_at=calc_sla_due(now, _priority),
         )
         db.add(ticket)
         db.flush()
-        _note = "สร้างจาก LINE chatbot"
-        if matched_note:
-            _note += " · " + matched_note
         db.add(TicketUpdate(ticket=ticket, from_status=None, to_status="new",
-                            note=_note, author_name=fields.get("name"), author_role="reporter"))
+                            note="สร้างจาก LINE chatbot", author_name=fields.get("name"),
+                            author_role="reporter"))
         db.commit()
         return ticket.ticket_id, None
     except Exception as e:
         db.rollback()
-        return None, str(e)
+        # log ของจริงไว้ที่ server เท่านั้น — ข้อความที่คืนไปจะถูกนำไปแสดงต่อผู้ใช้ LINE
+        print(f"[chatbot] _create_ticket_from_fields failed: {e!r}")
+        return None, "ระบบขัดข้องระหว่างสร้างใบงาน"
     finally:
         db.close()
 
@@ -1354,7 +1365,7 @@ def _answer_track(user_id: str, user_msg: str) -> str:
                 return f"ยังไม่พบงานซ่อมของอุปกรณ์ **{lookup_label}** ในระบบนะคะ"
         else:
             if sess.get("track_pending"):
-                return "กรุณาพิมพ์ **เลข Ticket** หรือรหัสอุปกรณ์ เช่น TK-202609-0001 / TEST1-00001 ค่ะ"
+                return "กรุณาพิมพ์ **เลข Ticket** หรือรหัสอุปกรณ์ เช่น SC-2026-000001 / TEST1-00001 ค่ะ"
             save_session(user_id, {**sess, "phase": "track_pending", "track_pending": True})
             return "📋 อยากเช็คสถานะงานใช่ไหมคะ? กรุณาพิมพ์ **เลข Ticket** หรือ **รหัสอุปกรณ์** แล้วส่งมาได้เลยค่ะ"
 

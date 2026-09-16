@@ -183,6 +183,85 @@ export const api = {
   // ─── SLA ───────────────────────────────────────────────────────────
   slaCheck: () => request<any>('/internal/sla/check'),
 
+  // ─── Preventive Maintenance (Blueprint §38) ────────────────────────
+  listPMPlans: () => request<any[]>('/pm/plans'),
+  createPMPlan: (data: {
+    name: string;
+    device_type?: string;
+    interval_days?: number;
+    checklist?: any[];
+    is_active?: boolean;
+  }) => request<any>('/pm/plans', { method: 'POST', body: JSON.stringify(data) }),
+  generatePMTasks: () => request<any>('/pm/generate', { method: 'POST' }),
+  listPMTasks: (params?: {
+    status?: string;
+    device_id?: string;
+    organization_id?: number;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.device_id) qs.set('device_id', params.device_id);
+    if (params?.organization_id !== undefined) qs.set('organization_id', String(params.organization_id));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.offset) qs.set('offset', String(params.offset));
+    const q = qs.toString();
+    return request<any[]>(`/pm/tasks${q ? '?' + q : ''}`);
+  },
+  submitPMTask: (taskId: number, data: { result?: any[]; photos?: string[] }) =>
+    request<any>(`/pm/tasks/${taskId}/submit`, { method: 'POST', body: JSON.stringify(data) }),
+  skipPMTask: (taskId: number, reason: string) =>
+    request<any>(`/pm/tasks/${taskId}/skip`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+  // ─── PM Rule Engine (Blueprint §38 — Rule 1/2/3) ───────────────────
+  runPMRules: (organizationId?: number) => {
+    const qs = new URLSearchParams();
+    if (organizationId !== undefined) qs.set('organization_id', String(organizationId));
+    const q = qs.toString();
+    return request<any>(`/pm/rules/run${q ? '?' + q : ''}`, { method: 'POST' });
+  },
+  listHealthFlags: (params?: {
+    status?: string;
+    rule_code?: string;
+    device_id?: string;
+    organization_id?: number;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.rule_code) qs.set('rule_code', params.rule_code);
+    if (params?.device_id) qs.set('device_id', params.device_id);
+    if (params?.organization_id !== undefined) qs.set('organization_id', String(params.organization_id));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.offset) qs.set('offset', String(params.offset));
+    const q = qs.toString();
+    return request<any[]>(`/pm/flags${q ? '?' + q : ''}`);
+  },
+  updateHealthFlag: (flagId: number, status: 'acknowledged' | 'resolved') =>
+    request<any>(`/pm/flags/${flagId}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+
+  // ─── Audit Log (Blueprint §40) ─────────────────────────────────────
+  listAuditLogs: (params?: {
+    action?: string;
+    entity_type?: string;
+    entity_id?: string;
+    user_id?: number;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.action) qs.set('action', params.action);
+    if (params?.entity_type) qs.set('entity_type', params.entity_type);
+    if (params?.entity_id) qs.set('entity_id', params.entity_id);
+    if (params?.user_id !== undefined) qs.set('user_id', String(params.user_id));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.offset) qs.set('offset', String(params.offset));
+    const q = qs.toString();
+    return request<any[]>(`/audit-logs${q ? '?' + q : ''}`);
+  },
+
   // ─── QR ────────────────────────────────────────────────────────────
   qrResolve: (token: string) => request<any>(`/qr/resolve/${token}`),
   qrRotate: (deviceId: string) =>

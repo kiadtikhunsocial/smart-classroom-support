@@ -94,7 +94,8 @@ print("TEST 7: Stats")
 r = client.get("/api/stats")
 print(f"  Status: {r.status_code}")
 stats = r.json()
-print(f"  Total: {stats['total_tickets']}, Open: {stats['open']}, In Progress: {stats['in_progress']}, Completed: {stats['completed']}, Cancelled: {stats['cancelled']}")
+assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text[:200]}"
+print(f"  Total: {stats['total_tickets']}, Open: {stats['open']}, In Progress: {stats['in_progress']}, Resolved: {stats['resolved']}, Cancelled: {stats['cancelled']}")
 
 print()
 print("=" * 60)

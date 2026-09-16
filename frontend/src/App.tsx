@@ -17,6 +17,8 @@ import ProfilePage from './components/ProfilePage';
 import KBPage from './components/KBPage';
 import QRBatchPage from './components/QRBatchPage';
 import SalesPage from './components/SalesPage';
+import PMPage from './components/PMPage';
+import AuditLogPage from './components/AuditLogPage';
 import PrivacyPage from './components/PrivacyPage';
 import { roleLabel } from './roleLabels';
 import {
@@ -189,7 +191,7 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
   const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault();
     const no = tNo.trim().toUpperCase();
-    if (!no) { setTErr('กรอกหมายเลข Ticket (เช่น TK-202609-0001)'); return; }
+    if (!no) { setTErr('กรอกหมายเลข Ticket (เช่น SC-2026-000001)'); return; }
     setTLoading(true); setTErr(null); setTRes(null);
     try {
       const r = await api.trackTicket(no);
@@ -320,7 +322,7 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
               <form onSubmit={handleTrack} style={{ display: 'flex', gap: 8 }}>
                 <input
                   className="form-input"
-                  placeholder="TK-202609-0001"
+                  placeholder="SC-2026-000001"
                   value={tNo}
                   onChange={(e) => setTNo(e.target.value)}
                   style={{ flex: 1, textTransform: 'uppercase' }}
@@ -1572,7 +1574,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
       };
 
       const result = await api.createTicket(payload);
-      setTicketId(result.ticket_id || 'TK-xxxx');
+      setTicketId(result.ticket_id || '-');
       setSubmitted(true);
     } catch (err: any) {
       // กันแจ้งซ้ำ: อุปกรณ์มี ticket ค้างอยู่ (409 DUPLICATE_OPEN_TICKET)
@@ -2121,7 +2123,7 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
                 <div className="form-label">ความเร่งด่วน</div>
                 <div style={{ fontSize: '0.85rem' }}>
                   <span className={`badge badge-priority badge-${ticket.priority}`}>
-                    {ticket.priority === 'critical' ? '🔥 เร่งด่วนมาก' : ticket.priority === 'high' ? 'High' : ticket.priority === 'low' ? 'Low' : 'Medium'}
+                    {ticket.priority === 'critical' ? '🔥 เร่งด่วนมาก' : ticket.priority === 'high' ? 'High' : ticket.priority === 'low' ? 'Low' : 'Normal'}
                   </span>
                 </div>
               </div>
@@ -2327,8 +2329,10 @@ function AppInner() {
       tickets: 'Tickets',
       kb: 'ฐานความรู้',
       qrbatch: 'พิมพ์ QR',
+      pm: 'บำรุงรักษา (PM)',
       users: 'Users',
       reports: 'Reports',
+      audit: 'ประวัติการใช้งาน',
       schools: 'โรงเรียน',
       settings: 'การตั้งค่า',
       profile: 'โปรไฟล์',
@@ -2466,6 +2470,14 @@ function AppInner() {
               {menu === 'qrbatch' && (
                 <QRBatchPage onBack={() => handleMenuChange('dashboard')} />
               )}
+              {menu === 'pm' && (
+                <PMPage
+                  onBack={() => handleMenuChange('dashboard')}
+                  userRole={role}
+                  isGlobalScope={globalScope}
+                  currentOrgId={currentOrgId}
+                />
+              )}
               {menu === 'scan' && (
                 <ScanPage
                   onScanDevice={openRepairPanel}
@@ -2489,6 +2501,9 @@ function AppInner() {
               )}
               {menu === 'reports' && (
                 <ReportsPage onBack={() => handleMenuChange('dashboard')} />
+              )}
+              {menu === 'audit' && (
+                <AuditLogPage onBack={() => handleMenuChange('dashboard')} />
               )}
               {menu === 'sales' && (
                 <SalesPage onBack={() => handleMenuChange('dashboard')} userRole={auth.user?.role} />

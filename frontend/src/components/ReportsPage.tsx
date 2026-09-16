@@ -328,7 +328,7 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
         </div>
         <div className="section-body">
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input className="input" placeholder="กรอก Ticket ID เช่น TK-202609-0001" value={historyTicket}
+            <input className="input" placeholder="กรอก Ticket ID เช่น SC-2026-000001" value={historyTicket}
               onChange={(e) => setHistoryTicket(e.target.value)}
               style={{ maxWidth: 280 }} />
             <button className="btn btn-primary" onClick={() => fetchHistory()}>ดึงประวัติ</button>

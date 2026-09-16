@@ -87,7 +87,7 @@ export default function PublicNoLoginReportView() {
 
     try {
       const result = await api.publicReport(payload);
-      setTicketId(result.ticket_id || 'TK-xxxx');
+      setTicketId(result.ticket_id || '-');
       setResultDevice(result);
       setSubmitted(true);
     } catch (err: any) {
