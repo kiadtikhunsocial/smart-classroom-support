@@ -406,7 +406,30 @@ export const api = {
     request<any>('/public/report', { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── Sales Leads + Chatbot Logs ──────────────────────────────────
-  listSalesLeads: () => request<any[]>('/sales/leads'),
+  listSalesLeads: (offset = 0) =>
+    request<import('../types/sales').SalesLead[]>(`/sales/leads?limit=200&offset=${offset}`),
+  listSalesRecords: (offset = 0) =>
+    request<import('../types/sales').SalesRecord[]>(`/sales/records?limit=200&offset=${offset}`),
+  getSalesSummary: () => request<import('../types/sales').SalesSummary>('/sales/summary'),
+  getSalesIntegrations: () => request<{ google_sheet_configured: boolean; line_group_configured: boolean }>('/sales/integrations'),
+  createSalesRecord: (data: {
+    lead_id: number;
+    kind: import('../types/sales').SalesRecordKind;
+    product: string;
+    quantity: number;
+    amount_thb?: string;
+    note?: string;
+  }) => request<import('../types/sales').SalesRecord>('/sales/records', {
+    method: 'POST', body: JSON.stringify(data),
+  }),
+  updateSalesRecord: (id: number, status: string) =>
+    request<import('../types/sales').SalesRecord>(`/sales/records/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ status }),
+    }),
+  retrySalesRecordSheetSync: (id: number) =>
+    request<{ queued: boolean }>(`/sales/records/${id}/sync-sheet`, { method: 'POST' }),
+  retrySalesLeadSheetSync: (id: number) =>
+    request<{ queued: boolean }>(`/sales/leads/${id}/sync-sheet`, { method: 'POST' }),
   // สมัครสมาชิกลูกค้าจากหน้าเว็บ — ไม่ต้อง login, บันทึกเป็น lead ช่องทาง WEB
   publicCustomerSignup: (data: {
     full_name: string;
@@ -416,6 +439,7 @@ export const api = {
     interest?: string;
     products?: string;
     note?: string;
+    ref?: string;
     consent: boolean;
   }) =>
     request<{ id: number; duplicate: boolean; message: string }>(

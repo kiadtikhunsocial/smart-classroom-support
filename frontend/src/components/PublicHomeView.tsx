@@ -7,6 +7,7 @@ import '../styles/public-theme.css';
 import '../styles/public-warranty.css';
 // เลเยอร์ยกระดับดีไซน์ (glassmorphism + neon) — ต้องโหลดท้ายสุดเพื่อทับของเดิม
 import '../styles/public-premium.css';
+import '../styles/public-refresh.css';
 import PublicThemeToggle from './PublicThemeToggle';
 
 /** ป้ายสถานะภาษาไทย — ใช้ชุดเดียวกับหน้าอื่น เพื่อไม่ให้ผู้แจ้งเห็นคำเรียกต่างกัน */
@@ -565,6 +566,7 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
         </a>
         <div className="ph-topbar-right">
           <LivePill>ระบบพร้อมรับแจ้ง</LivePill>
+          <a className="ph-customer-link" href="/?customer=1">สำหรับลูกค้า</a>
           <PublicThemeToggle />
           <a className="ph-login-link" href="/?login=1">
             เข้าสู่ระบบเจ้าหน้าที่
@@ -574,16 +576,32 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
 
       <main className="ph-main">
         <section className="ph-hero">
-          <span className="ph-eyebrow">SMART CLASSROOM OPERATIONS</span>
-          <h1 className="ph-hero-title">
-            แจ้งซ่อมและติดตามงาน<span className="ph-hero-accent">ได้เอง</span>
-            <br />
-            ไม่ต้องเข้าสู่ระบบ
-          </h1>
-          <p className="ph-hero-sub">
-            สแกน QR ที่ตัวอุปกรณ์เพื่อแจ้งปัญหา หรือกรอกเลขใบงานเพื่อดูว่าเรื่องของคุณถึงขั้นไหนแล้ว
-            ทุกการอัปเดตจากเจ้าหน้าที่จะปรากฏบนไทม์ไลน์เดียวกัน
-          </p>
+          <div className="ph-hero-grid">
+            <div className="ph-hero-copy">
+              <span className="ph-eyebrow">IWA SMART CLASSROOM SUPPORT</span>
+              <h1 className="ph-hero-title">
+                ดูแลอุปกรณ์ห้องเรียน
+                <br /><span className="ph-hero-accent">ในที่เดียว</span>
+              </h1>
+              <p className="ph-hero-sub">
+                แจ้งซ่อม ติดตามงาน และตรวจสอบประกันได้ด้วยตัวเอง
+                ไม่ต้องเข้าสู่ระบบ ส่วนเจ้าหน้าที่มีพื้นที่ทำงานแยกต่างหาก
+              </p>
+              <div className="ph-hero-cta">
+                <a href="/?publicreport=1" className="ph-cta-primary">แจ้งซ่อมอุปกรณ์ <ArrowIcon /></a>
+                <button type="button" className="ph-cta-secondary" onClick={focusTrack}>ติดตามงานซ่อม</button>
+              </div>
+            </div>
+            <div className="ph-hero-panel" aria-label="ขั้นตอนการใช้งาน">
+              <span className="ph-panel-kicker">เริ่มใช้งานง่าย ๆ</span>
+              <h2>จากแจ้งปัญหา<br />ถึงติดตามผล</h2>
+              <ol>
+                <li><strong>01</strong><span>สแกน QR หรือกรอกรหัสอุปกรณ์เพื่อแจ้งปัญหา</span></li>
+                <li><strong>02</strong><span>รับเลขใบงานทันที ใช้ค้นสถานะได้ตลอด</span></li>
+                <li><strong>03</strong><span>ดูความคืบหน้าจากเจ้าหน้าที่ในหน้าเดียว</span></li>
+              </ol>
+            </div>
+          </div>
 
           <div className="ph-actions">
             <a className="ph-action-card ph-action-primary" href="/?publicreport=1">
@@ -610,14 +628,15 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
               </span>
               <ArrowIcon />
             </a>
-            <a className="ph-action-card" href="/?customer=1">
-              <span className="ph-action-icon"><PlusIcon /></span>
-              <span className="ph-action-body">
-                <strong>สมัครสมาชิกลูกค้า</strong>
-                <small>ฝากชื่อและเบอร์ไว้ ทีมขายติดต่อกลับเรื่องสินค้า ราคา และโปรโมชั่น</small>
-              </span>
-              <ArrowIcon />
-            </a>
+          </div>
+
+          <div className="ph-customer-band">
+            <div>
+              <span className="ph-panel-kicker">สำหรับผู้สนใจสินค้าและบริการ</span>
+              <h2>ต้องการข้อมูลสินค้า ราคา หรือให้ทีมงานติดต่อกลับ?</h2>
+              <p>ลงทะเบียนลูกค้าแยกจากบัญชีเจ้าหน้าที่ ข้อมูลจะส่งตรงถึงทีมขาย</p>
+            </div>
+            <a href="/?customer=1" className="ph-customer-cta">สมัครสมาชิกลูกค้า <ArrowIcon /></a>
           </div>
 
           <ul className="ph-highlights">

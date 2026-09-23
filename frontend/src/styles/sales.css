@@ -1,0 +1,64 @@
+.sales-record-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.sales-record-kpis > span {
+  display: grid;
+  gap: 5px;
+  padding: 13px 15px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+}
+
+.sales-record-kpis strong {
+  color: var(--color-text-primary);
+  font-size: 1.15rem;
+}
+
+.sales-record-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.sales-record-caution {
+  padding: 10px 13px;
+  border-radius: 9px;
+  background: var(--color-warning-light, #fffbeb);
+  color: var(--color-text-primary);
+  font-size: 0.83rem;
+}
+
+.sales-record-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin: 16px 0 24px;
+}
+
+.sales-record-form label { display: grid; gap: 6px; font-size: 0.8rem; font-weight: 600; }
+.sales-record-form .sales-record-note { grid-column: span 3; }
+.sales-record-form .btn { min-height: 40px; }
+.sales-record-notice { color: var(--status-resolved, #047857); }
+.sales-record-error { color: var(--color-danger, #b91c1c); }
+.sales-record-subnote { display: block; color: var(--color-text-tertiary); margin-top: 4px; }
+.sales-dashboard-widget { margin: 16px 0 22px; }
+.sales-dashboard-widget .sales-record-kpis { margin-bottom: 0; }
+.sales-dashboard-recent { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.sales-dashboard-recent > span {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--color-bg-subtle, #f3f4f6);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 900px) {
+  .sales-record-form { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+  .sales-record-form .sales-record-note { grid-column: span 2; }
+}
+
+@media (max-width: 580px) {
+  .sales-record-form { grid-template-columns: 1fr; }
+  .sales-record-form .sales-record-note { grid-column: auto; }
+}

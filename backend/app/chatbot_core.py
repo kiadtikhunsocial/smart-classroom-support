@@ -1064,7 +1064,8 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     from app.chatbot_helpers import (detect_intent, detect_ambiguous, log_conversation,
                                      get_profile, save_profile, get_product_hint,
                                      save_lead, notify_sales_group, get_cached_faq_reply,
-                                     record_faq_interaction, format_chatbot_reply)
+                                     record_faq_interaction, format_chatbot_reply,
+                                     customer_signup_link, recent_customer_purchases)
     session = get_session(user_id)
     phase = session.get("phase", "new")
     intent = detect_intent(text)
@@ -1333,12 +1334,15 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
         save_session(user_id, {"phase": "lead_collect",
                                "lead": {"name": "", "phone": "", "interest": text,
                                         "products": hint, "_ts": time.time()}})
+        signup_url = customer_signup_link(user_id if not group else "", text, hint)
         if hint:
             return _finish(f"🛍️ คุณสนใจ **{', '.join(hint)}** ใช่ไหมคะ?\n"
-                           "ขอ **ชื่อ-นามสกุล** เพื่อให้ทีมขายติดต่อกลับพร้อมรายละเอียดราคานะคะ 😊",
-                           intent_used="buy")
-        return _finish("ขอบคุณที่สนใจสินค้าของเราค่ะ 🛍️ ขอ **ชื่อของคุณ** เพื่อให้ทีมขายติดต่อกลับพร้อมรายละเอียดนะคะ",
-                       intent_used="buy")
+                           f"สมัครสมาชิกลูกค้าและฝากข้อมูลให้ทีมขายได้ที่ {signup_url}\n"
+                           "หรือส่ง **ชื่อ-นามสกุล** ในแชทนี้เพื่อให้ทีมขายติดต่อกลับค่ะ 😊",
+                           intent_used="buy", faq_cacheable=False)
+        return _finish(f"ขอบคุณที่สนใจสินค้าของเราค่ะ 🛍️ สมัครสมาชิกลูกค้าได้ที่ {signup_url}\n"
+                       "หรือส่ง **ชื่อของคุณ** ในแชทนี้เพื่อให้ทีมขายติดต่อกลับค่ะ",
+                       intent_used="buy", faq_cacheable=False)
 
     # ── HUMAN: ลูกค้าอยากคุยกับคนจริง → เก็บชื่อ/เบอร์ แล้วแจ้งทีมใน LINE group (วิธีที่เลือก) ──
     if intent == "human" and phase not in ("collecting", "confirm", "lead_collect"):
@@ -1351,7 +1355,10 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     # ── GREETING personalized (F) ──
     if intent == "greeting":
         greet = f"สวัสดีค่ะ คุณ{name_known} 👋" if name_known else "สวัสดีค่ะ 👋"
+        purchases = recent_customer_purchases(user_id) if not group else []
+        purchase_note = f"\n📦 เคยซื้อ: {', '.join(purchases)}" if purchases else ""
         return _finish(greet + " วันนี้มีอะไรให้ช่วยไหมคะ? 😊\n"
+                       + purchase_note + ("\n" if purchase_note else "") +
                        "🛍️ อยากดูสินค้า/บริการ พิมพ์ 'สินค้า' หรือชื่อสินค้า เช่น 'Iwa AiBoard' 'หลักสูตรภาษาอังกฤษ'\n"
                        "🔧 เจอปัญหาอุปกรณ์ พิมพ์ 'แจ้งซ่อม' หรือบอกอาการ เช่น 'จอไม่ติด'\n"
                        "📞 สนใจติดต่อทีมงาน พิมพ์ 'ติดต่อ' ได้เลยนะคะ",

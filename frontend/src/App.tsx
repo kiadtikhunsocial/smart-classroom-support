@@ -19,6 +19,7 @@ import ProfilePage from './components/ProfilePage';
 import KBPage from './components/KBPage';
 import QRBatchPage from './components/QRBatchPage';
 import SalesPage from './components/SalesPage';
+import SalesDashboardWidget from './components/SalesDashboardWidget';
 import PMPage from './components/PMPage';
 import AuditLogPage from './components/AuditLogPage';
 import RegistrationsPage from './components/RegistrationsPage';
@@ -673,6 +674,7 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
 // ─── Dashboard Content ─────────────────────────────────────────────────────
 function DashboardContent({ 
   onOpenRepairPanel,
+  onOpenSales,
   stats,
   tickets,
   devices,
@@ -682,6 +684,7 @@ function DashboardContent({
   userRole,
 }: { 
   onOpenRepairPanel: (deviceId?: string) => void;
+  onOpenSales: () => void;
   stats: Stats | null;
   tickets: Ticket[];
   devices: DeviceInfo[];
@@ -962,6 +965,10 @@ function DashboardContent({
           <span className="dsh-chip">อุปกรณ์ {stats?.total_devices ?? 0}</span>
         </div>
       </div>
+
+      {['owner', 'super_admin', 'admin', 'it_support'].includes(userRole || '') && (
+        <SalesDashboardWidget onOpenSales={onOpenSales} />
+      )}
 
       {/* KPI Stat Cards — ทันสมัย */}
       <div className="dsh-kpi-grid">
@@ -2964,6 +2971,7 @@ function AppInner() {
               {menu === 'dashboard' && (
                 <DashboardContent
                   onOpenRepairPanel={openRepairPanel}
+                  onOpenSales={() => handleMenuChange('sales')}
                   stats={stats}
                   tickets={tickets}
                   devices={devices}
@@ -3032,7 +3040,10 @@ function AppInner() {
                 <AuditLogPage onBack={() => handleMenuChange('dashboard')} />
               )}
               {menu === 'registrations' && (
-                <RegistrationsPage onBack={() => handleMenuChange('dashboard')} />
+                <RegistrationsPage
+                  onBack={() => handleMenuChange('dashboard')}
+                  onOpenSales={() => handleMenuChange('sales')}
+                />
               )}
               {menu === 'sales' && (
                 <SalesPage onBack={() => handleMenuChange('dashboard')} userRole={auth.user?.role} />

@@ -10,17 +10,67 @@ import json
 import logging
 import os
 import re
+import secrets
 import threading
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from app.models import ChatbotFAQ, ChatbotProfile, SessionLocal
+from app.models import ChatbotFAQ, ChatbotProfile, CustomerSignupInvite, SessionLocal
 from app.company_catalog import ALL_PRODUCTS
 
 
 logger = logging.getLogger(__name__)
+
+
+def customer_signup_link(user_id: str, interest: str = "", products: list[str] | None = None) -> str:
+    """Issue a one-time, 24-hour signup link without exposing the LINE user id."""
+    base = (os.environ.get("CUSTOMER_SIGNUP_URL") or (
+        "https://iwasmart-service.vercel.app/?customer=1"
+        if os.environ.get("ENVIRONMENT", "development").lower() in {"production", "prod"}
+        else "http://localhost:5173/?customer=1"
+    )).strip()
+    if not user_id:
+        return base
+    token = secrets.token_urlsafe(24)
+    db = SessionLocal()
+    try:
+        db.add(CustomerSignupInvite(
+            token_hash=hashlib.sha256(token.encode()).hexdigest(),
+            line_user_id=user_id[:128],
+            interest=(interest or "")[:200] or None,
+            products=", ".join(products or [])[:500] or None,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        ))
+        db.commit()
+        return f"{base}{'&' if '?' in base else '?'}ref={token}"
+    except Exception:
+        db.rollback()
+        logger.exception("Could not create customer signup link")
+        return base
+    finally:
+        db.close()
+
+
+def recent_customer_purchases(user_id: str) -> list[str]:
+    """Return products from staff-confirmed won deals for this LINE customer."""
+    if not user_id:
+        return []
+    db = SessionLocal()
+    try:
+        rows = db.execute(text(
+            "SELECT r.product FROM sales_records r "
+            "JOIN sales_leads l ON l.id = r.lead_id "
+            "WHERE l.user_id = :uid AND r.kind = 'deal' AND r.status = 'won' "
+            "ORDER BY r.created_at DESC, r.id DESC LIMIT 3"
+        ), {"uid": user_id}).all()
+        return [row[0] for row in rows]
+    except Exception:
+        logger.exception("Could not read customer purchase history")
+        return []
+    finally:
+        db.close()
 
 try:
     FAQ_CACHE_TTL_SECONDS = max(0, int(os.environ.get("FAQ_CACHE_TTL_SECONDS", "604800")))
@@ -29,7 +79,7 @@ except (TypeError, ValueError):
 
 # Only stable knowledge answers are replayed from this table. Repair, lead,
 # tracking, and confirmation replies contain user/session-specific data.
-FAQ_CACHEABLE_INTENTS = {"product", "buy", "service", "company", "catalog"}
+FAQ_CACHEABLE_INTENTS = {"product", "service", "company", "catalog"}
 
 # ── เจตนา (finer than business/repair) ──
 INTENTS = {
@@ -251,7 +301,7 @@ def _sync_lead_to_sheet(lead_id: int, user_id: str, name: str, phone: str, inter
 
     def _push() -> None:
         try:
-            if not google_sheets.append_lead_row(payload):
+            if not google_sheets.sync_lead_row(payload):
                 logger.warning("Google Sheet: ส่ง lead #%s ขึ้นชีตไม่สำเร็จ", lead_id)
         except Exception:
             logger.exception("Google Sheet: ส่ง lead #%s ขึ้นชีตผิดพลาด", lead_id)

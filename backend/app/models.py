@@ -3,6 +3,7 @@ PostgreSQL only — connection string มาจาก env DATABASE_URL
 """
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -655,6 +656,42 @@ class SalesLead(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class CustomerSignupInvite(Base):
+    """One-time opaque link from a LINE conversation to the customer form."""
+    __tablename__ = "customer_signup_invites"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    line_user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    interest: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    products: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SalesRecord(Base):
+    """Staff-managed deal or payment enquiry; never stores card/payment credentials."""
+    __tablename__ = "sales_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lead_id: Mapped[int] = mapped_column(
+        ForeignKey("sales_leads.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    product: Mapped[str] = mapped_column(String(255), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    amount_thb: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now())
 
 
 class ChatbotProfile(Base):

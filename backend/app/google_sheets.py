@@ -36,6 +36,7 @@ TOKEN_URI_DEFAULT = "https://oauth2.googleapis.com/token"
 SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets"
 DEFAULT_RANGE = "Members!A1"
 DEFAULT_LEAD_RANGE = "Leads!A1"
+DEFAULT_SALES_RANGE = "Sales!A1"
 HTTP_TIMEOUT = 10.0
 
 #: หัวตารางที่คาดหวังในชีต (แถวแรก) — เรียงตรงกับ _membership_values()
@@ -53,6 +54,7 @@ MEMBERSHIP_HEADER: tuple[str, ...] = (
 )
 
 _lock = threading.Lock()
+_lead_lock = threading.Lock()
 _token_cache: dict[str, Any] = {"access_token": None, "expires_at": 0.0}
 
 
@@ -179,7 +181,9 @@ def append_row(values: list[Any], sheet_range: Optional[str] = None) -> bool:
         resp = httpx.post(
             url,
             timeout=HTTP_TIMEOUT,
-            params={"valueInputOption": "USER_ENTERED", "insertDataOption": "INSERT_ROWS"},
+            # RAW prevents a customer-supplied name/note beginning with '=' from
+            # becoming a spreadsheet formula.
+            params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
             headers={"Authorization": f"Bearer {token}"},
             json={"values": [row]},
         )
@@ -264,8 +268,121 @@ def _lead_values(lead: dict) -> list[Any]:
     ]
 
 
+def _read_or_create_tab(sheet_id: str, tab: str, token: str) -> list[list[Any]]:
+    """Read tab rows; create a missing named tab on first sync only."""
+    base = f"{SHEETS_API}/{quote(sheet_id, safe='')}"
+    headers = {"Authorization": f"Bearer {token}"}
+    response = httpx.get(
+        base + "/values/" + quote(f"{tab}!A:J", safe=""),
+        headers=headers, timeout=HTTP_TIMEOUT,
+    )
+    if response.status_code == 400 and "Unable to parse range" in response.text:
+        created = httpx.post(
+            base + ":batchUpdate", headers=headers, timeout=HTTP_TIMEOUT,
+            json={"requests": [{"addSheet": {"properties": {"title": tab}}}]},
+        )
+        created.raise_for_status()
+        return []
+    response.raise_for_status()
+    return response.json().get("values", [])
+
+
 def append_lead_row(lead: dict, sheet_range: Optional[str] = None) -> bool:
     """ส่ง sales lead 1 รายการขึ้นชีต — ไม่โยน exception ออกมา"""
     if not _sheet_id():
         return False
     return append_row(_lead_values(lead), sheet_range=sheet_range or _lead_range())
+
+
+def sync_lead_row(lead: dict) -> bool:
+    """Mirror a lead by stable ID, updating its existing row instead of duplicating it."""
+    sheet_id = _sheet_id()
+    if not sheet_id or not lead.get("id"):
+        return False
+    token = _access_token()
+    if not token:
+        return False
+    tab = _lead_range().split("!", 1)[0]
+    base = f"{SHEETS_API}/{quote(sheet_id, safe='')}/values/"
+    headers = {"Authorization": f"Bearer {token}"}
+    values = ["" if v is None else str(v) for v in _lead_values(lead)]
+    with _lead_lock:
+        try:
+            rows = _read_or_create_tab(sheet_id, tab, token)
+            if not rows:
+                if not append_row(list(LEAD_HEADER), sheet_range=_lead_range()):
+                    return False
+            row_number = next(
+                (index for index, row in enumerate(rows, start=1)
+                 if len(row) > 1 and str(row[1]) == str(lead["id"])),
+                None,
+            )
+            if row_number is None:
+                return append_row(values, sheet_range=_lead_range())
+            target = quote(f"{tab}!A{row_number}:J{row_number}", safe="")
+            response = httpx.put(
+                base + target,
+                headers=headers,
+                params={"valueInputOption": "RAW"},
+                json={"values": [values]},
+                timeout=HTTP_TIMEOUT,
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPStatusError as exc:
+            logger.warning("Google Sheet: sync lead ไม่สำเร็จ (HTTP %s)", exc.response.status_code)
+        except Exception as exc:
+            logger.warning("Google Sheet: sync lead ไม่สำเร็จ (%s)", exc.__class__.__name__)
+    return False
+
+
+SALES_HEADER: tuple[str, ...] = (
+    "วันที่", "เลขบันทึก", "เลข Lead", "ชื่อลูกค้า", "หมวด",
+    "สินค้า/บริการ", "จำนวน", "มูลค่า (บาท)", "สถานะ", "หมายเหตุ",
+)
+
+
+def sync_sales_record_row(record: dict) -> bool:
+    """Mirror a staff-managed deal/payment enquiry to the Sales tab by record ID."""
+    sheet_id = _sheet_id()
+    if not sheet_id or not record.get("id"):
+        return False
+    token = _access_token()
+    if not token:
+        return False
+    target_range = _env("GOOGLE_SHEET_SALES_RANGE") or DEFAULT_SALES_RANGE
+    tab = target_range.split("!", 1)[0]
+    values = [
+        _iso(record.get("created_at")), record.get("id"), record.get("lead_id"),
+        record.get("lead_name"), record.get("kind"), record.get("product"),
+        record.get("quantity"), record.get("amount_thb"),
+        record.get("status"), record.get("note"),
+    ]
+    values = ["" if value is None else str(value) for value in values]
+    base = f"{SHEETS_API}/{quote(sheet_id, safe='')}/values/"
+    headers = {"Authorization": f"Bearer {token}"}
+    with _lead_lock:
+        try:
+            rows = _read_or_create_tab(sheet_id, tab, token)
+            if not rows:
+                if not append_row(list(SALES_HEADER), sheet_range=target_range):
+                    return False
+            row_number = next(
+                (index for index, row in enumerate(rows, start=1)
+                 if len(row) > 1 and str(row[1]) == str(record["id"])),
+                None,
+            )
+            if row_number is None:
+                return append_row(values, sheet_range=target_range)
+            response = httpx.put(
+                base + quote(f"{tab}!A{row_number}:J{row_number}", safe=""),
+                headers=headers, params={"valueInputOption": "RAW"},
+                json={"values": [values]}, timeout=HTTP_TIMEOUT,
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPStatusError as exc:
+            logger.warning("Google Sheet: sync sales record ไม่สำเร็จ (HTTP %s)", exc.response.status_code)
+        except Exception as exc:
+            logger.warning("Google Sheet: sync sales record ไม่สำเร็จ (%s)", exc.__class__.__name__)
+    return False

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import type { SalesLead } from '../types/sales';
+import SalesRecordsPanel from './SalesRecordsPanel';
+import '../styles/sales.css';
 
 /**
  * สีของ badge สถานะ lead — ใช้เป็น CSS property (background) จึงอ้าง var() ได้ตรง ๆ
@@ -28,12 +31,21 @@ function fmtDate(iso?: string | null): string {
 }
 
 export default function SalesPage({ onBack, userRole }: { onBack: () => void; userRole?: string }) {
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState<SalesLead[]>([]);
+  const [integrations, setIntegrations] = useState<{ google_sheet_configured: boolean; line_group_configured: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
 
-  const loadLeads = () => api.listSalesLeads().then(setLeads);
+  const loadLeads = async () => {
+    const all: SalesLead[] = [];
+    while (true) {
+      const page = await api.listSalesLeads(all.length);
+      all.push(...page);
+      if (page.length < 200) break;
+    }
+    setLeads(all);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -41,6 +53,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
     loadLeads()
       .catch((e) => setError(e?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
+    api.getSalesIntegrations().then(setIntegrations).catch(() => setIntegrations(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -52,7 +65,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
       .finally(() => setBusy(null));
   };
 
-  const canDelete = userRole === 'super_admin' || userRole === 'admin';
+  const canDelete = userRole === 'owner' || userRole === 'super_admin' || userRole === 'admin';
   const removeLead = (id: number, name: string) => {
     if (!window.confirm(`ลบ lead "${name}" ทิ้ง? (ข้อมูลเทส/ซ้ำ)`)) return;
     setBusy(id);
@@ -98,6 +111,9 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
           </div>
         </div>
         <div className="top-bar-actions">
+          <a className="btn btn-primary" href="/?customer=1" target="_blank" rel="noopener noreferrer">
+            ฟอร์มสมัครสมาชิกลูกค้า
+          </a>
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => { setLoading(true); loadLeads().catch((e) => setError(e.message)).finally(() => setLoading(false)); }}
@@ -115,6 +131,16 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
       {error && (
         <div style={{ padding: '10px 14px', background: 'var(--color-danger-light)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', marginBottom: 16 }}>
           {error}
+        </div>
+      )}
+
+      {integrations && (!integrations.google_sheet_configured || !integrations.line_group_configured) && (
+        <div role="status" className="sales-record-caution" style={{ marginBottom: 16 }}>
+          ช่องทางแจ้งสำรองที่ยังไม่ได้ตั้งค่า: {' '}
+          {!integrations.google_sheet_configured && 'Google Sheet'}
+          {!integrations.google_sheet_configured && !integrations.line_group_configured && ' · '}
+          {!integrations.line_group_configured && 'กลุ่ม LINE เจ้าหน้าที่'}
+          {' '}— ข้อมูลยังบันทึกในฐานข้อมูลตามปกติ
         </div>
       )}
 
@@ -150,6 +176,8 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
           </div>
         </div>
       )}
+
+  <SalesRecordsPanel leads={leads} canSyncSheet={Boolean(integrations?.google_sheet_configured && canDelete)} />
 
       <div className="page-section">
         <div className="section-header">
@@ -204,6 +232,17 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                               </button>
                             ) : (
                               <span style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>ติดต่อแล้ว</span>
+                            )}
+                            {canDelete && (
+                              <button
+                                className="btn"
+                                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                                disabled={busy === l.id || !integrations?.google_sheet_configured}
+                                onClick={() => api.retrySalesLeadSheetSync(l.id)
+                                  .then(() => alert('ส่งงานซิงก์ Google Sheet อีกครั้งแล้ว'))
+                                  .catch((e) => alert(e?.message || 'ซิงก์ชีตไม่สำเร็จ'))}
+                                title="ส่งรายการนี้ไป Google Sheet อีกครั้ง"
+                              >ชีต</button>
                             )}
                             {canDelete && (
                               <button

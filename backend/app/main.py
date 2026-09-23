@@ -15,7 +15,8 @@ import hmac
 import logging
 import os
 import threading
-from typing import Optional
+from typing import Literal, Optional
+from decimal import Decimal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
@@ -37,6 +38,7 @@ from app.models import AuditLog, DeviceHealthFlag, PMPlan, PMTask
 from app.models import (
     Base,
     Building,
+    CustomerSignupInvite,
     Device,
     KBArticle,
     KBSuggestion,
@@ -49,6 +51,8 @@ from app.models import (
     Priority,
     RepairTicket,
     Room,
+    SalesLead,
+    SalesRecord,
     ScanLog,
     SelfServiceCase,
     SessionLocal,
@@ -6213,14 +6217,15 @@ def _row_to_iso(v):
 @app.get("/api/sales/leads")
 def list_sales_leads(
     limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
 ):
     """รายการ lead การขาย (จาก LINE) เรียงล่าสุดก่อน"""
     rows = db.execute(
         text("SELECT id, user_id, name, phone, interest, products, source, note, status, created_at "
-             "FROM sales_leads ORDER BY created_at DESC, id DESC LIMIT :lim"),
-        {"lim": limit},
+             "FROM sales_leads ORDER BY created_at DESC, id DESC LIMIT :lim OFFSET :off"),
+        {"lim": limit, "off": offset},
     ).mappings().all()
     return [
         {
@@ -6243,6 +6248,22 @@ class LeadStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(new|contacted|closed)$")
 
 
+def _sync_sales_lead_async(lead: SalesLead) -> None:
+    """Best-effort Sheet mirror; database is authoritative if the service is down."""
+    if not google_sheets.is_configured():
+        return
+    snapshot = {
+        "id": lead.id, "user_id": lead.user_id, "name": lead.name,
+        "phone": lead.phone, "interest": lead.interest,
+        "products": lead.products, "source": lead.source,
+        "status": lead.status, "note": lead.note, "created_at": lead.created_at,
+    }
+    threading.Thread(
+        target=google_sheets.sync_lead_row,
+        args=(snapshot,), name=f"sheet-lead-{lead.id}", daemon=True,
+    ).start()
+
+
 @app.patch("/api/sales/leads/{lead_id}")
 def update_sales_lead_status(
     lead_id: int,
@@ -6251,18 +6272,28 @@ def update_sales_lead_status(
     user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
 ):
     """ทำเครื่องหมาย lead ว่าติดต่อแล้ว (status = contacted)"""
-    row = db.execute(
-        text("SELECT id, name, status FROM sales_leads WHERE id = :lid"),
-        {"lid": lead_id},
-    ).mappings().first()
-    if not row:
+    lead = db.get(SalesLead, lead_id)
+    if not lead:
         raise HTTPException(status_code=404, detail=f"Lead {lead_id} ไม่พบ")
-    db.execute(
-        text("UPDATE sales_leads SET status = :s WHERE id = :lid"),
-        {"s": payload.status, "lid": lead_id},
-    )
+    lead.status = payload.status
     db.commit()
-    return {"id": lead_id, "status": payload.status, "name": row["name"]}
+    _sync_sales_lead_async(lead)
+    return {"id": lead_id, "status": payload.status, "name": lead.name}
+
+
+@app.post("/api/sales/leads/{lead_id}/sync-sheet")
+def retry_sales_lead_sheet_sync(
+    lead_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin")),
+):
+    lead = db.get(SalesLead, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=404, detail="ไม่พบลูกค้า")
+    if not google_sheets.is_configured():
+        raise HTTPException(status_code=503, detail="ยังไม่ได้ตั้งค่า Google Sheet")
+    _sync_sales_lead_async(lead)
+    return {"queued": True, "lead_id": lead_id}
 
 
 @app.delete("/api/sales/leads/{lead_id}")
@@ -6278,9 +6309,187 @@ def delete_sales_lead(
     ).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail=f"Lead {lead_id} ไม่พบ")
+    if db.execute(select(SalesRecord.id).where(SalesRecord.lead_id == lead_id).limit(1)).first():
+        raise HTTPException(status_code=409, detail="ลูกค้านี้มีประวัติการขาย/คำขอชำระเงิน จึงลบไม่ได้")
     db.execute(text("DELETE FROM sales_leads WHERE id = :lid"), {"lid": lead_id})
     db.commit()
     return {"deleted": True, "id": lead_id, "name": row["name"]}
+
+
+SALES_RECORD_STATUSES = {
+    "deal": {"interested", "quoted", "won", "lost"},
+    "payment_request": {"requested", "reviewing", "resolved", "cancelled"},
+}
+
+
+class SalesRecordIn(BaseModel):
+    lead_id: int = Field(..., ge=1)
+    kind: Literal["deal", "payment_request"]
+    product: str = Field(..., min_length=1, max_length=255)
+    quantity: int = Field(1, ge=1, le=10000)
+    amount_thb: Optional[Decimal] = Field(None, ge=0)
+    note: Optional[str] = Field(None, max_length=2000)
+
+
+class SalesRecordUpdate(BaseModel):
+    status: str = Field(..., min_length=1, max_length=32)
+
+
+def _sales_record_out(row: SalesRecord, lead_name: str = "") -> dict:
+    return {
+        "id": row.id,
+        "lead_id": row.lead_id,
+        "lead_name": lead_name,
+        "kind": row.kind,
+        "product": row.product,
+        "quantity": row.quantity,
+        "amount_thb": str(row.amount_thb) if row.amount_thb is not None else None,
+        "status": row.status,
+        "note": row.note or "",
+        "created_by": row.created_by,
+        "created_at": _row_to_iso(row.created_at),
+        "updated_at": _row_to_iso(row.updated_at),
+    }
+
+
+def _sync_sales_record_async(record: SalesRecord, lead_name: str) -> None:
+    if not google_sheets.is_configured():
+        return
+    snapshot = _sales_record_out(record, lead_name)
+    threading.Thread(
+        target=google_sheets.sync_sales_record_row,
+        args=(snapshot,), name=f"sheet-sale-{record.id}", daemon=True,
+    ).start()
+
+
+@app.get("/api/sales/records")
+def list_sales_records(
+    limit: int = Query(200, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    rows = db.execute(
+        select(SalesRecord, SalesLead.name)
+        .join(SalesLead, SalesLead.id == SalesRecord.lead_id)
+        .order_by(SalesRecord.created_at.desc(), SalesRecord.id.desc())
+        .offset(offset).limit(limit)
+    ).all()
+    return [_sales_record_out(record, name or "") for record, name in rows]
+
+
+@app.post("/api/sales/records", status_code=201)
+def create_sales_record(
+    payload: SalesRecordIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    lead = db.get(SalesLead, payload.lead_id)
+    if lead is None:
+        raise HTTPException(status_code=404, detail="ไม่พบลูกค้าหรือผู้สนใจ")
+    product = payload.product.strip()
+    if not product:
+        raise HTTPException(status_code=422, detail="กรุณาระบุสินค้า/บริการ")
+    if payload.amount_thb is not None and (
+        payload.amount_thb > Decimal("9999999999.99")
+        or payload.amount_thb != payload.amount_thb.quantize(Decimal("0.01"))
+    ):
+        raise HTTPException(status_code=422, detail="มูลค่าต้องไม่เกิน 10 หลักและมีทศนิยมไม่เกิน 2 ตำแหน่ง")
+    record = SalesRecord(
+        lead_id=lead.id,
+        kind=payload.kind,
+        product=product,
+        quantity=payload.quantity,
+        amount_thb=payload.amount_thb,
+        status="interested" if payload.kind == "deal" else "requested",
+        note=(payload.note or "").strip() or None,
+        created_by=user.id,
+    )
+    db.add(record)
+    db.flush()
+    write_audit(
+        db, action="sales_record_create", user=user,
+        entity_type="sales_record", entity_id=str(record.id),
+        new_value={"kind": record.kind, "lead_id": lead.id, "status": record.status},
+        request=request,
+    )
+    db.commit()
+    db.refresh(record)
+    _sync_sales_record_async(record, lead.name or "")
+    return _sales_record_out(record, lead.name or "")
+
+
+@app.patch("/api/sales/records/{record_id}")
+def update_sales_record(
+    record_id: int,
+    payload: SalesRecordUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    record = db.get(SalesRecord, record_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="ไม่พบบันทึกการขาย")
+    if payload.status not in SALES_RECORD_STATUSES.get(record.kind, set()):
+        raise HTTPException(status_code=422, detail="สถานะไม่ตรงกับหมวดบันทึก")
+    old_status = record.status
+    record.status = payload.status
+    write_audit(
+        db, action="sales_record_status", user=user,
+        entity_type="sales_record", entity_id=str(record.id),
+        old_value={"status": old_status}, new_value={"status": record.status},
+        request=request,
+    )
+    db.commit()
+    db.refresh(record)
+    lead = db.get(SalesLead, record.lead_id)
+    _sync_sales_record_async(record, lead.name if lead else "")
+    return _sales_record_out(record, lead.name if lead else "")
+
+
+@app.post("/api/sales/records/{record_id}/sync-sheet")
+def retry_sales_record_sheet_sync(
+    record_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin")),
+):
+    record = db.get(SalesRecord, record_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="ไม่พบบันทึกการขาย")
+    if not google_sheets.is_configured():
+        raise HTTPException(status_code=503, detail="ยังไม่ได้ตั้งค่า Google Sheet")
+    lead = db.get(SalesLead, record.lead_id)
+    _sync_sales_record_async(record, lead.name if lead else "")
+    return {"queued": True, "record_id": record_id}
+
+
+@app.get("/api/sales/summary")
+def sales_summary(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    rows = db.execute(
+        text("SELECT kind, status, COUNT(*) AS count, "
+             "COALESCE(SUM(amount_thb), 0) AS amount FROM sales_records GROUP BY kind, status")
+    ).mappings().all()
+    return {
+        "lead_count": db.execute(select(func.count(SalesLead.id))).scalar_one(),
+        "open_deals": sum(r["count"] for r in rows if r["kind"] == "deal" and r["status"] in {"interested", "quoted"}),
+        "won_deals": sum(r["count"] for r in rows if r["kind"] == "deal" and r["status"] == "won"),
+        "won_amount_thb": str(sum((r["amount"] for r in rows if r["kind"] == "deal" and r["status"] == "won"), Decimal("0"))),
+        "payment_requests": sum(r["count"] for r in rows if r["kind"] == "payment_request" and r["status"] in {"requested", "reviewing"}),
+    }
+
+
+@app.get("/api/sales/integrations")
+def sales_integrations(
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    return {
+        "google_sheet_configured": google_sheets.is_configured(),
+        "line_group_configured": bool(os.environ.get("LINE_GROUP_ID") and os.environ.get("LINE_CHANNEL_TOKEN")),
+    }
 
 
 # ─── สมัครสมาชิกลูกค้า (หน้าเว็บสาธารณะ /?customer=1) ──────────────────
@@ -6294,6 +6503,7 @@ class CustomerSignupIn(BaseModel):
     interest: Optional[str] = Field(None, max_length=200)
     products: Optional[str] = Field(None, max_length=500)
     note: Optional[str] = Field(None, max_length=500)
+    ref: Optional[str] = Field(None, max_length=128)
     consent: bool = False
 
 
@@ -6331,8 +6541,22 @@ def public_customer_signup(
     if email and ("@" not in email or "." not in email.rsplit("@", 1)[-1]):
         raise HTTPException(status_code=422, detail="รูปแบบอีเมลไม่ถูกต้อง")
 
-    interest = (payload.interest or "").strip() or "สมัครสมาชิกลูกค้า (เว็บ)"
-    products = (payload.products or "").strip()
+    invite = None
+    if payload.ref:
+        token = payload.ref.strip()
+        if not (20 <= len(token) <= 128) or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in token):
+            raise HTTPException(status_code=400, detail="ลิงก์สมัครสมาชิกไม่ถูกต้อง")
+        invite = db.execute(
+            select(CustomerSignupInvite)
+            .where(CustomerSignupInvite.token_hash == hashlib.sha256(token.encode()).hexdigest())
+            .with_for_update()
+        ).scalar_one_or_none()
+        if not invite or invite.consumed_at or invite.expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="ลิงก์สมัครสมาชิกหมดอายุหรือถูกใช้แล้ว")
+
+    interest = (payload.interest or "").strip() or (invite.interest if invite else None) or "สมัครสมาชิกลูกค้า (เว็บ)"
+    products = (payload.products or "").strip() or (invite.products if invite else None) or ""
+    line_user_id = invite.line_user_id if invite else None
     organization = (payload.organization or "").strip()
     note_parts: list[str] = []
     if email:
@@ -6345,13 +6569,23 @@ def public_customer_signup(
 
     # กันสมัครซ้ำ (ชื่อ+เบอร์เดิม) — ตอบข้อความเดียวกับที่ chatbot ใช้ ไม่สร้างแถวใหม่
     dup = db.execute(
-        text("SELECT id FROM sales_leads WHERE phone = :p AND name = :n "
-             "ORDER BY id DESC LIMIT 1"),
-        {"p": phone, "n": name},
-    ).mappings().first()
+        select(SalesLead).where(SalesLead.phone == phone, SalesLead.name == name)
+        .order_by(SalesLead.id.desc()).limit(1)
+    ).scalar_one_or_none()
     if dup:
+        if line_user_id and not dup.user_id:
+            dup.user_id = line_user_id
+        if invite:
+            invite.consumed_at = datetime.now(timezone.utc)
+        db.commit()
+        _sync_sales_lead_async(dup)
+        if line_user_id:
+            from app.chatbot_helpers import save_profile
+            from app.chat_session import clear_session
+            save_profile(line_user_id, {"name": name, "phone": phone, "interested": interest, "lead_id": dup.id})
+            clear_session(line_user_id)
         return {
-            "id": dup["id"],
+            "id": dup.id,
             "duplicate": True,
             "message": "เราได้รับข้อมูลของคุณไว้แล้ว ทีมงานจะติดต่อกลับโดยเร็วที่สุด",
         }
@@ -6360,10 +6594,12 @@ def public_customer_signup(
     inserted = db.execute(
         text("INSERT INTO sales_leads "
              "(user_id, name, phone, interest, products, note, source, status, created_at) "
-             "VALUES (NULL, :n, :p, :i, :pr, :note, 'WEB', 'new', :t) RETURNING id"),
-        {"n": name[:128], "p": phone[:32], "i": interest[:200],
+             "VALUES (:u, :n, :p, :i, :pr, :note, 'WEB', 'new', :t) RETURNING id"),
+        {"u": line_user_id, "n": name[:128], "p": phone[:32], "i": interest[:200],
          "pr": products[:500], "note": note, "t": created_at},
     ).mappings().first()
+    if invite:
+        invite.consumed_at = created_at
     db.commit()
     lead_id = inserted["id"] if inserted else None
 
@@ -6379,8 +6615,8 @@ def public_customer_signup(
     # และต้องไม่หน่วง response (Sheets API / LINE push มี timeout หลายวินาที)
     def _report_web_lead() -> None:
         try:
-            google_sheets.append_lead_row({
-                "id": lead_id, "user_id": "", "name": name, "phone": phone,
+            google_sheets.sync_lead_row({
+                "id": lead_id, "user_id": line_user_id or "", "name": name, "phone": phone,
                 "interest": interest, "products": products, "source": "WEB",
                 "status": "new", "note": note, "created_at": created_at,
             })
@@ -6398,6 +6634,12 @@ def public_customer_signup(
                          name=f"web-lead-report-{lead_id}", daemon=True).start()
     except Exception:
         pass
+
+    if line_user_id:
+        from app.chatbot_helpers import save_profile
+        from app.chat_session import clear_session
+        save_profile(line_user_id, {"name": name, "phone": phone, "interested": interest, "lead_id": lead_id})
+        clear_session(line_user_id)
 
     return {
         "id": lead_id,

@@ -1,0 +1,80 @@
+/* A clearer public landing hierarchy: support first, sales and staff distinct. */
+.ph-main { max-width: 1180px; padding-top: clamp(34px, 5vw, 68px); }
+.ph-hero { text-align: left; }
+.ph-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(290px, 0.82fr);
+  gap: clamp(22px, 4vw, 54px);
+  align-items: center;
+  margin-bottom: 28px;
+}
+.ph-hero-copy .ph-eyebrow { margin-bottom: 16px; }
+.ph-hero-copy .ph-hero-title { max-width: 14ch; font-size: clamp(2.35rem, 4.5vw, 4.5rem); line-height: 1.08; }
+.ph-hero-copy .ph-hero-sub { margin: 0 0 22px; max-width: 52ch; }
+.ph-hero-cta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ph-hero-cta a, .ph-hero-cta button, .ph-customer-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 10px 17px;
+  border-radius: 11px;
+  text-decoration: none;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.ph-cta-primary, .ph-customer-cta { background: var(--ph-blue); color: #fff; border: 1px solid transparent; }
+.ph-cta-secondary { background: var(--ph-glass-strong); color: var(--ph-text); border: 1px solid var(--ph-line); }
+.ph-hero-cta a:hover, .ph-hero-cta button:hover, .ph-customer-cta:hover { transform: translateY(-2px); box-shadow: var(--ph-shadow); }
+.ph-hero-panel {
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--ph-line-strong);
+  border-radius: 22px;
+  background: linear-gradient(135deg, var(--ph-glass-strong), var(--ph-glass));
+  box-shadow: var(--ph-shadow);
+}
+.ph-panel-kicker { color: var(--ph-accent-text, var(--ph-blue)); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; }
+.ph-hero-panel h2 { margin: 12px 0 22px; font-size: clamp(1.45rem, 2.5vw, 2.2rem); line-height: 1.2; }
+.ph-hero-panel ol { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.ph-hero-panel li { display: flex; gap: 14px; align-items: start; padding: 13px 0; border-top: 1px solid var(--ph-line); color: var(--ph-text-2); font-size: 0.86rem; line-height: 1.5; }
+.ph-hero-panel li strong { color: var(--ph-accent-text, var(--ph-blue)); font-size: 0.82rem; }
+.ph-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ph-action-card { min-height: 98px; }
+.ph-customer-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 26px;
+  margin-top: 22px;
+  border: 1px solid var(--ph-line);
+  border-radius: 18px;
+  background: var(--ph-glass-strong);
+}
+.ph-customer-band h2 { margin: 7px 0 4px; font-size: clamp(1rem, 1.5vw, 1.2rem); }
+.ph-customer-band p { margin: 0; color: var(--ph-text-2); font-size: 0.82rem; }
+.ph-customer-cta { flex-shrink: 0; }
+.ph-customer-link { color: var(--ph-text-2); font-size: 0.82rem; font-weight: 700; text-decoration: none; padding: 7px 9px; }
+.ph-customer-link:hover { color: var(--ph-blue); }
+
+@media (max-width: 850px) {
+  .ph-hero-grid { grid-template-columns: 1fr; }
+  .ph-hero-copy .ph-hero-title { max-width: none; }
+  .ph-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 610px) {
+  .ph-main { padding-top: 28px; }
+  .ph-actions { grid-template-columns: 1fr; }
+  .ph-customer-band { align-items: stretch; flex-direction: column; padding: 20px; }
+  .ph-customer-cta { width: 100%; box-sizing: border-box; }
+  .ph-hero-panel { padding: 20px; }
+  .ph-customer-link { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-hero-cta a, .ph-hero-cta button, .ph-customer-cta { transition: none; }
+}

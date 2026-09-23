@@ -59,6 +59,7 @@ const rowStyle: React.CSSProperties = {
  * ระบบบันทึกเป็น lead (ช่องทาง WEB) แล้วทีมขายติดต่อกลับ
  */
 export default function CustomerSignupPage() {
+  const signupRef = new URLSearchParams(window.location.search).get('ref') || undefined;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +108,7 @@ export default function CustomerSignupPage() {
         organization: form.organization.trim() || undefined,
         products: form.products.trim() || undefined,
         note: form.note.trim() || undefined,
+        ref: signupRef,
         consent: form.consent,
       });
       setDone({ message: res.message });
@@ -166,6 +168,11 @@ export default function CustomerSignupPage() {
           กรอกข้อมูลติดต่อไว้ ทีมขายจะติดต่อกลับพร้อมรายละเอียดสินค้า ราคา และโปรโมชั่น
           (ไม่ต้องตั้งรหัสผ่าน ไม่ใช่การเปิดบัญชีเจ้าหน้าที่)
         </p>
+        {signupRef && (
+          <p className="login-subtitle" style={{ color: 'var(--color-primary)', marginTop: 10 }}>
+            ลิงก์นี้เชื่อมกับบทสนทนา LINE ของคุณ ความสนใจที่แจ้งไว้จะถูกส่งให้ทีมขายพร้อมฟอร์ม
+          </p>
+        )}
 
         {error && (
           <div

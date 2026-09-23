@@ -21,6 +21,7 @@ interface MembershipApplication {
 
 interface RegistrationsPageProps {
   onBack: () => void;
+  onOpenSales: () => void;
 }
 
 /** บทบาทที่กำหนดให้ผู้สมัครได้ตอนอนุมัติ — backend ตรวจซ้ำอีกชั้น (validate_assignable_role) */
@@ -156,7 +157,7 @@ function MetaItem({ label, value, mono }: { label: string; value: React.ReactNod
  * โหลดคำขอทุกสถานะเป็นหน้า ๆ (API จำกัดครั้งละ 200) แล้วกรองในหน้า
  * เพื่อให้แท็บแสดงจำนวนจริงของแต่ละสถานะ และสลับแท็บ/ค้นหาได้ทันที
  */
-export default function RegistrationsPage({ onBack }: RegistrationsPageProps) {
+export default function RegistrationsPage({ onBack, onOpenSales }: RegistrationsPageProps) {
   const [rows, setRows] = useState<MembershipApplication[]>([]);
   const [status, setStatus] = useState('pending');
   const [query, setQuery] = useState('');
@@ -285,9 +286,9 @@ export default function RegistrationsPage({ onBack }: RegistrationsPageProps) {
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <h2 style={{ margin: 0, fontSize: '1.15rem' }}>อนุมัติสมาชิก</h2>
+          <h2 style={{ margin: 0, fontSize: '1.15rem' }}>อนุมัติบัญชีเจ้าหน้าที่</h2>
           <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--color-text-tertiary)' }}>
-            คำขอสมัครจากหน้าสาธารณะ — บัญชีจะถูกสร้างเมื่อกดอนุมัติ
+            เฉพาะคำขอเปิดบัญชีเจ้าหน้าที่ — บัญชีจะถูกสร้างเมื่อกดอนุมัติ
             {pendingCount > 0 ? ` · รออนุมัติ ${pendingCount} รายการ` : ' · ไม่มีคำขอค้าง'}
             {oldestPendingDays !== null && oldestPendingDays >= 3
               ? ` · ค้างนานสุด ${oldestPendingDays} วัน`
@@ -295,6 +296,9 @@ export default function RegistrationsPage({ onBack }: RegistrationsPageProps) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn" onClick={onOpenSales}>
+            ดูลูกค้าที่สมัคร / สนใจซื้อ →
+          </button>
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
             {loading ? 'กำลังโหลด...' : 'รีเฟรช'}
           </button>

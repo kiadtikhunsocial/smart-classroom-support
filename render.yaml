@@ -32,6 +32,18 @@ services:
         sync: false
       - key: REPORT_FORM_URL       # ลิงก์ฟอร์มแจ้งซ่อมสาธารณะ
         sync: false
+      - key: CUSTOMER_SIGNUP_URL
+        value: "https://iwasmart-service.vercel.app/?customer=1"
+      - key: GOOGLE_SHEET_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_SHEET_RANGE
+        value: "Members!A1"
+      - key: GOOGLE_SHEET_LEAD_RANGE
+        value: "Leads!A1"
+      - key: GOOGLE_SHEET_SALES_RANGE
+        value: "Sales!A1"
       - key: JWT_SECRET
         sync: false
       - key: N8N_SHARED_SECRET
