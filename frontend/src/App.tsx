@@ -2761,7 +2761,10 @@ function AppInner() {
   const loadGeneration = React.useRef(0);
 
   const { user } = auth;
-  const needsOrgFilter = user?.role !== 'super_admin';
+  // Owner/admin see every school; school-scoped roles only narrow further when
+  // they actually have an organization. The API remains the authority for ACL.
+  const needsOrgFilter = Boolean(user?.organization_id &&
+    !['owner', 'super_admin', 'admin'].includes(user.role));
   const currentOrgId = user?.organization_id;
 
   // โหลดข้อมูลทั้งหมด (ใช้ซ้ำตอน refresh / submit / ลบ)
