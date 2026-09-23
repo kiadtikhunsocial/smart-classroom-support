@@ -673,6 +673,16 @@ class CustomerSignupInvite(Base):
     )
 
 
+class DataImportMarker(Base):
+    """Records a one-time production data import without relying on local secrets."""
+    __tablename__ = "data_import_markers"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    applied_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class SalesRecord(Base):
     """Staff-managed deal or payment enquiry; never stores card/payment credentials."""
     __tablename__ = "sales_records"

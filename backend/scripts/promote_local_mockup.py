@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import os
+import secrets
 import sys
 
 from sqlalchemy import create_engine, select
@@ -92,7 +93,8 @@ def copy_data(target, data):
             raise RuntimeError(f"Device ID collision: {device.device_id}")
         if row is None:
             row = Device(**values(device, organization_id=org_id,
-                                  room_id=room_ids.get(device.room_id)))
+                                  room_id=room_ids.get(device.room_id),
+                                  qr_token=secrets.token_hex(16)))
             target.add(row)
             created["devices"] += 1
     target.flush()

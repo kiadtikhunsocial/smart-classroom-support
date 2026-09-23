@@ -31,9 +31,22 @@ This copies only `SCH-M01` through `SCH-M05`: schools, rooms, devices, repair
 tickets/history, PM plans/tasks and health flags. It does **not** copy test
 users/passwords, audit logs, LINE IDs or the separate sales demo leads.
 Production will visibly contain example schools, as requested. The import is
-additive/idempotent; it does not overwrite existing records.
+additive/idempotent; it does not overwrite existing records. The selected local
+rows are mechanically exported to `backend/scripts/demo_schools.json` with QR
+tokens removed. Render imports the pack using its existing private DATABASE_URL
+on startup. A database marker makes the operation **one-time**, including
+future service restarts. No database credential is read out of Render.
 
-Open **your own PowerShell** in the repository and run:
+Verify the Render deploy log contains `Committed demo pack:` with counts, or
+`Demo pack already applied; no changes`. After import, sign in to production
+as staff and check the five schools and their device/ticket counts. If import
+fails, the deployment fails rather than starting with partially copied data;
+the prior live deploy remains available.
+
+### Manual fallback only
+
+If the internal Render import cannot be used, open **your own PowerShell** in
+the repository and run:
 
 ```powershell
 cd C:\Users\nonam\smart-classroom-support
@@ -49,7 +62,5 @@ in a command argument, file, screenshot or chat. Keep Docker PostgreSQL running
 so the script can read local data. The script requires TLS to the remote DB and
 commits all selected records in one transaction; an error rolls them all back.
 
-After import, sign in to production as staff and check the five schools and
-their device/ticket counts, customer signup, separate deals/payment requests,
-and the integration indicators. Do not enter real card/account credentials in
-the payment-request notes.
+Then check customer signup, separate deals/payment requests, and the integration
+indicators. Do not enter real card/account credentials in payment-request notes.
