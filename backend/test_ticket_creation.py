@@ -22,9 +22,50 @@ from sqlalchemy import text as sa_text
 from app.chatbot_core import _create_ticket_from_fields
 from app.models import SessionLocal
 
-# อุปกรณ์ที่ seed_db.py สร้างไว้: Interactive Display ห้อง 301
-SEEDED_DEVICE_ID = "DEV-2024-00123"
+# ห้องที่ seed_db.py สร้างไว้ — มีอุปกรณ์หลายเครื่อง ใช้ทดสอบเคสระบุกำกวม
 SEEDED_ROOM_CODE = "301"
+
+
+def _lookup_seeded_device() -> str | None:
+    """รหัสอุปกรณ์ในห้อง 301 จากฐานข้อมูลจริง (None = ยังไม่ seed / ต่อ DB ไม่ได้)
+
+    รหัสอุปกรณ์ไม่ฮาร์ดโค้ดอีกแล้ว: รูปแบบใหม่ผูกกับโรงเรียน/อาคาร/ห้อง
+    (เช่น SCHDEMO-B3-301-DISP-01) และ scripts/seed_db.py ขอเลขจาก
+    generate_device_id ตอนรัน จึงเดารหัสล่วงหน้าไม่ได้
+
+    เลือกเครื่องที่ยังไม่มีใบงานค้างก่อน ไม่อย่างนั้นการแจ้งจะเข้าทางกันแจ้งซ้ำ
+    (TOR 1.5.2) แล้วได้เลขใบเดิมกลับมาแทนการเปิดใบใหม่ — ใช้รายชื่อสถานะจาก
+    app.main.OPEN_TICKET_STATUSES ตัวเดียวกับที่ find_open_ticket ใช้
+    """
+    from app.main import OPEN_TICKET_STATUSES
+
+    try:
+        db = SessionLocal()
+    except Exception:  # pragma: no cover - ขึ้นกับ environment
+        return None
+    try:
+        return db.execute(
+            sa_text(
+                "SELECT d.device_id FROM devices d "
+                "JOIN rooms r ON r.id = d.room_id "
+                "WHERE r.code = :room "
+                # EXISTS = false มาก่อน true ใน ORDER BY ASC → เครื่องที่ไม่มีใบค้างขึ้นก่อน
+                "ORDER BY EXISTS ("
+                "  SELECT 1 FROM repair_tickets t "
+                "  WHERE t.device_id = d.device_id "
+                "    AND t.status::text = ANY(:open)"
+                "), d.device_id "
+                "LIMIT 1"
+            ),
+            {"room": SEEDED_ROOM_CODE, "open": list(OPEN_TICKET_STATUSES)},
+        ).scalar()
+    except Exception:  # pragma: no cover - ขึ้นกับ environment
+        return None
+    finally:
+        db.close()
+
+
+SEEDED_DEVICE_ID = _lookup_seeded_device()
 
 
 @pytest.fixture
@@ -47,22 +88,9 @@ def created_tickets():
 
 def _require_seeded_device() -> None:
     """skip เทสต์ถ้าฐานข้อมูลยังไม่มีอุปกรณ์ตัวอย่าง หรือต่อ DB ไม่ได้"""
-    try:
-        db = SessionLocal()
-    except Exception as exc:  # pragma: no cover - ขึ้นกับ environment
-        pytest.skip(f"ต่อฐานข้อมูลไม่ได้: {exc!r}")
-    try:
-        row = db.execute(
-            sa_text("SELECT device_id FROM devices WHERE device_id = :d"),
-            {"d": SEEDED_DEVICE_ID},
-        ).first()
-    except Exception as exc:  # pragma: no cover - ขึ้นกับ environment
-        pytest.skip(f"อ่านตาราง devices ไม่ได้: {exc!r}")
-    finally:
-        db.close()
-    if row is None:
+    if not SEEDED_DEVICE_ID:
         pytest.skip(
-            f"ยังไม่มีอุปกรณ์ {SEEDED_DEVICE_ID} ในฐานข้อมูล "
+            f"ยังไม่มีอุปกรณ์ในห้อง {SEEDED_ROOM_CODE} หรือต่อฐานข้อมูลไม่ได้ "
             "— รัน `python scripts/seed_db.py` ก่อน"
         )
 
@@ -173,21 +201,138 @@ def test_safety_critical_sets_critical_priority(created_tickets):
     assert row['escalation_level'] == 1
 
 
+def _devices_without_open_ticket(count: int) -> list[str]:
+    """รหัสอุปกรณ์ที่ "ยังไม่มีใบงานค้าง" จำนวน count เครื่อง (skip ถ้าไม่พอ)
+
+    ใช้รายชื่อสถานะจาก app.main.OPEN_TICKET_STATUSES ตัวเดียวกับที่ find_open_ticket
+    ใช้ ไม่เดารายชื่อเอง เพราะถ้าเลือกเครื่องที่มีใบค้างมาทดสอบ ระบบจะเข้าทาง
+    กันแจ้งซ้ำ (TOR 1.5.2) แล้วคืนเลขใบของ seed data กลับมา — fixture cleanup
+    จะลบข้อมูลตั้งต้นของระบบทิ้ง
+    """
+    from app.main import OPEN_TICKET_STATUSES
+
+    try:
+        db = SessionLocal()
+    except Exception as exc:  # pragma: no cover - ขึ้นกับ environment
+        pytest.skip(f"ต่อฐานข้อมูลไม่ได้: {exc!r}")
+    try:
+        rows = db.execute(
+            sa_text(
+                "SELECT d.device_id FROM devices d "
+                "WHERE NOT EXISTS ("
+                "  SELECT 1 FROM repair_tickets t "
+                "  WHERE t.device_id = d.device_id "
+                "    AND t.status::text = ANY(:open)"
+                ") ORDER BY d.device_id LIMIT :n"
+            ),
+            {"open": list(OPEN_TICKET_STATUSES), "n": count},
+        ).scalars().all()
+    except Exception as exc:  # pragma: no cover - ขึ้นกับ environment
+        pytest.skip(f"อ่านฐานข้อมูลไม่ได้: {exc!r}")
+    finally:
+        db.close()
+
+    if len(rows) < count:
+        pytest.skip(
+            f"ต้องมีอุปกรณ์ที่ไม่มีใบงานค้างอย่างน้อย {count} เครื่อง แต่พบ {len(rows)} "
+            "— รัน `python scripts/seed_db.py` ก่อน"
+        )
+    return list(rows)
+
+
+def _count_tickets_of_device(device_id: str) -> int:
+    db = SessionLocal()
+    try:
+        return db.execute(
+            sa_text("SELECT count(*) FROM repair_tickets WHERE device_id = :d"),
+            {"d": device_id},
+        ).scalar_one()
+    finally:
+        db.close()
+
+
+def _count_reporter_notes(ticket_no: str) -> int:
+    """จำนวนบันทึก "แจ้งเพิ่ม" ของผู้แจ้งในใบงานนั้น (ไม่ใช่แถวเปลี่ยนสถานะ)"""
+    db = SessionLocal()
+    try:
+        return db.execute(
+            sa_text(
+                "SELECT count(*) FROM ticket_updates u "
+                "JOIN repair_tickets t ON t.id = u.ticket_id "
+                "WHERE t.ticket_id = :t AND u.note LIKE :p"
+            ),
+            {"t": ticket_no, "p": "[แจ้งเพิ่มจากผู้ใช้ LINE]%"},
+        ).scalar_one()
+    finally:
+        db.close()
+
+
 def test_ticket_numbers_are_unique(created_tickets):
-    """§11: Ticket Number ต้องไม่ซ้ำ แม้แจ้งอุปกรณ์เดียวกันติดกัน"""
+    """§11: ใบงานต่างใบต้องได้ Ticket Number ไม่ซ้ำกัน
+
+    เดิมเทสต์นี้แจ้ง "อุปกรณ์เดียวกัน" ติดกัน 2 ครั้งเพื่อให้ได้ 2 ใบ ซึ่งขัดกับ
+    กันแจ้งซ้ำ (TOR 1.5.2) ที่ตอนนี้ไม่เปิดใบใหม่ให้เครื่องที่มีใบค้างอยู่แล้ว
+    จึงเปลี่ยนมาสร้างจาก 2 เครื่องที่ยังไม่มีใบค้าง — ข้อกำหนดเรื่องเลขไม่ซ้ำ
+    ยังถูกตรวจเหมือนเดิม (ดูพฤติกรรมแจ้งซ้ำที่ test_duplicate_report_appends_to_open_ticket)
+    """
     _require_seeded_device()
+    devices = _devices_without_open_ticket(2)
 
     numbers = []
-    for i in range(2):
+    for i, device_id in enumerate(devices, 1):
         ticket_no, error = _create_ticket_from_fields({
-            'device_id': SEEDED_DEVICE_ID,
-            'name': f'ผู้แจ้งซ้ำ {i + 1} (เทสต์อัตโนมัติ)',
+            'device_id': device_id,
+            'name': f'ผู้แจ้ง {i} (เทสต์อัตโนมัติ)',
             'phone': '0811111111',
-            'symptom': f'ทดสอบเลข Ticket ไม่ซ้ำ ครั้งที่ {i + 1}',
+            'symptom': f'ทดสอบเลข Ticket ไม่ซ้ำ เครื่องที่ {i} ({device_id})',
         })
-        assert error is None, f"ครั้งที่ {i + 1} สร้างไม่สำเร็จ: {error}"
+        assert error is None, f"เครื่อง {device_id} สร้างไม่สำเร็จ: {error}"
         assert ticket_no
         created_tickets.append(ticket_no)
         numbers.append(ticket_no)
 
     assert len(set(numbers)) == len(numbers), f"Ticket Number ซ้ำ: {numbers}"
+
+
+def test_duplicate_report_appends_to_open_ticket(created_tickets):
+    """TOR 1.5.2: เครื่องที่มีใบงานค้างอยู่ แจ้งซ้ำต้องไม่เปิดใบใหม่
+
+    ต้องได้เลขใบเดิมกลับไปให้ผู้แจ้งติดตามต่อ และอาการที่แจ้งรอบสองต้องถูกบันทึก
+    เป็น ticket_updates ของใบเดิม (§13) ไม่ทับ description ของผู้แจ้งคนก่อน
+    """
+    _require_seeded_device()
+    device_id = _devices_without_open_ticket(1)[0]
+
+    first_no, error = _create_ticket_from_fields({
+        'device_id': device_id,
+        'name': 'ผู้แจ้งคนแรก (เทสต์อัตโนมัติ)',
+        'phone': '0811111111',
+        'symptom': 'จอไม่มีภาพ (ใบแรก)',
+    })
+    assert error is None, f"ใบแรกต้องสร้างได้: {error}"
+    assert first_no
+    created_tickets.append(first_no)
+
+    before = _count_tickets_of_device(device_id)
+
+    second_no, error2 = _create_ticket_from_fields({
+        'device_id': device_id,
+        'name': 'ผู้แจ้งคนที่สอง (เทสต์อัตโนมัติ)',
+        'phone': '0822222222',
+        'symptom': 'เสียงไม่ออกด้วย (แจ้งเพิ่ม)',
+    })
+
+    assert error2 is None, f"การแจ้งซ้ำต้องไม่เป็น error แต่ได้: {error2}"
+    assert second_no == first_no, (
+        f"ต้องคืนเลขใบเดิม {first_no} ไม่เปิดใบใหม่ แต่ได้ {second_no}"
+    )
+    if second_no != first_no:  # pragma: no cover - กันขยะค้าง DB ถ้า guardrail ถูกถอด
+        created_tickets.append(second_no)
+
+    assert _count_tickets_of_device(device_id) == before, (
+        "จำนวนใบงานของอุปกรณ์ต้องไม่เพิ่มขึ้นจากการแจ้งซ้ำ"
+    )
+    row = _fetch_ticket(first_no)
+    assert row is not None
+    assert row['description'] == 'จอไม่มีภาพ (ใบแรก)', "ห้ามทับอาการของผู้แจ้งคนแรก"
+    assert _count_reporter_notes(first_no) >= 1, "อาการที่แจ้งเพิ่มต้องถูกบันทึกเข้าใบเดิม"

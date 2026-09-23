@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import threading
 import unicodedata
 from datetime import datetime, timezone
 
@@ -220,6 +221,47 @@ def log_conversation(user_id: str, message: str, reply: str, intent: str, resolv
 
 
 # ═══════════════════ E. Lead + แจ้งทีมขาย ═══════════════════
+def _sync_lead_to_sheet(lead_id: int, user_id: str, name: str, phone: str, interest: str,
+                        product_names: list, note: str = "") -> None:
+    """ส่ง lead ขึ้น Google Sheet แบบ background — ล้มเหลวได้ ไม่กระทบข้อมูลใน DB
+
+    ต้องไม่บล็อกการตอบกลับ LINE (append_row มี timeout 10 วินาที) จึงยิงใน
+    daemon thread และกลืน exception ทั้งหมด
+    """
+    if not lead_id:
+        return
+    try:
+        from app import google_sheets
+        if not google_sheets.is_configured():
+            return
+    except Exception:
+        return
+
+    payload = {
+        "id": lead_id,
+        "user_id": user_id,
+        "name": name,
+        "phone": phone,
+        "interest": interest,
+        "products": list(product_names or []),
+        "source": "LINE",
+        "status": "new",
+        "note": note,
+    }
+
+    def _push() -> None:
+        try:
+            if not google_sheets.append_lead_row(payload):
+                logger.warning("Google Sheet: ส่ง lead #%s ขึ้นชีตไม่สำเร็จ", lead_id)
+        except Exception:
+            logger.exception("Google Sheet: ส่ง lead #%s ขึ้นชีตผิดพลาด", lead_id)
+
+    try:
+        threading.Thread(target=_push, name=f"sheet-lead-{lead_id}", daemon=True).start()
+    except Exception:
+        logger.exception("Could not start Google Sheet sync thread for lead %s", lead_id)
+
+
 def save_lead(user_id: str, name: str, phone: str, interest: str, product_names: list,
               note: str = "") -> int | None:
     """บันทึก sales lead ลง sales_leads → คืน id (หรือ None)"""
@@ -233,7 +275,10 @@ def save_lead(user_id: str, name: str, phone: str, interest: str, product_names:
         )
         db.commit()
         row = res.fetchone()
-        return row[0] if row else None
+        lead_id = row[0] if row else None
+        # ซิงก์ขึ้นชีตเป็น background thread — ไม่แตะ DB session นี้ และไม่หน่วงการตอบ LINE
+        _sync_lead_to_sheet(lead_id, user_id, name, phone, interest, product_names, note)
+        return lead_id
     except Exception:
         db.rollback()
         return None
@@ -242,7 +287,7 @@ def save_lead(user_id: str, name: str, phone: str, interest: str, product_names:
 
 
 def notify_sales_group(lead_id: int, name: str, phone: str, interest: str, products: str,
-                       human: bool = False):
+                       human: bool = False, source: str = "LINE"):
     """Push ข้อความแจ้งทีมขาย (LINE group) ว่ามี lead ใหม่ (human=True → ต้องการคุยกับคนจริง)"""
     try:
         from app.line_bot import send_line_push, LINE_GROUP_ID as GID
@@ -252,7 +297,7 @@ def notify_sales_group(lead_id: int, name: str, phone: str, interest: str, produ
     msg = (f"{header}\n"
            f"ชื่อ: {name or '-'}\nเบอร์: {phone or '-'}\n"
            f"สนใจ: {interest or '-'}\nสินค้า: {products or '-'}\n"
-           f"ช่องทาง: LINE\nติดต่อกลับด่วนค่ะ")
+           f"ช่องทาง: {source or 'LINE'}\nติดต่อกลับด่วนค่ะ")
     if GID:
         send_line_push(GID, msg)
 

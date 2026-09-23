@@ -1,0 +1,754 @@
+/* ============================================================================
+   public-premium.css — เลเยอร์ "ยกระดับ" หน้าแรกสาธารณะ (โหลดท้ายสุด)
+   ----------------------------------------------------------------------------
+   หลักการออกแบบของไฟล์นี้:
+   1. ไม่แตะโครงสร้าง HTML และไม่เพิ่มคลาสใหม่ที่ TSX ยังไม่มี — ใช้คลาส .ph-*
+      / .phw-* ชุดเดิมทั้งหมด จึงทับดีไซน์ได้โดยไม่พังของเดิม
+   2. สีทุกค่าอ่านจาก token --ph-* ที่ public-theme.css ประกาศไว้ ถ้า token ใด
+      ยังไม่มีจะมี fallback ในวงเล็บ var(...) เสมอ → โหมดสว่างก็ยังอ่านออก
+   3. เอฟเฟกต์เรืองแสง/ออโรรา เปิดเฉพาะ [data-mode='dark'] ซึ่งเป็นค่าเริ่มต้น
+      ของระบบ ส่วนโหมดสว่างได้เวอร์ชันสะอาด คอนทราสต์สูง ไม่มีนีออนรบกวน
+   4. ทุกแอนิเมชันถูกปิดอัตโนมัติเมื่อผู้ใช้ตั้ง prefers-reduced-motion: reduce
+   5. โฟกัสคีย์บอร์ดต้องเห็นชัดกว่าเดิม (:focus-visible ring คู่ นีออน + เงา)
+   ========================================================================== */
+
+.ph-page {
+  --phx-neon-1: var(--ph-cyan, #00d9ff);
+  --phx-neon-2: var(--ph-blue, #249bff);
+  --phx-neon-3: var(--ph-purple, #7c4dff);
+  --phx-neon-4: var(--ph-magenta, #c94cff);
+  --phx-ring: 0 0 0 1px rgba(36, 155, 255, 0.35);
+  --phx-lift: cubic-bezier(0.22, 1, 0.36, 1);
+  --phx-edge: linear-gradient(120deg, var(--phx-neon-1), var(--phx-neon-3) 55%, var(--phx-neon-4));
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+}
+
+/* ── 1. ฉากหลัง: ออโรรา + เส้นวงจร ปรับให้ลึกและนิ่งตา ─────────────────── */
+
+.ph-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  contain: strict;
+}
+
+[data-mode='dark'] .ph-bg-aurora {
+  filter: blur(70px) saturate(135%);
+  opacity: var(--ph-aurora-opacity, 0.72);
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+[data-mode='dark'] .ph-bg-aurora-1 {
+  animation: phx-drift-a 26s ease-in-out infinite alternate;
+}
+
+[data-mode='dark'] .ph-bg-aurora-2 {
+  animation: phx-drift-b 32s ease-in-out infinite alternate;
+}
+
+[data-mode='dark'] .ph-bg-aurora-3 {
+  animation: phx-drift-c 38s ease-in-out infinite alternate;
+}
+
+@keyframes phx-drift-a {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); }
+  to   { transform: translate3d(4%, 3%, 0) scale(1.12); }
+}
+
+@keyframes phx-drift-b {
+  from { transform: translate3d(3%, 2%, 0) scale(1.08); }
+  to   { transform: translate3d(-4%, -3%, 0) scale(1); }
+}
+
+@keyframes phx-drift-c {
+  from { transform: translate3d(0, 4%, 0) scale(1.04); }
+  to   { transform: translate3d(2%, -4%, 0) scale(1.14); }
+}
+
+/* เส้นวงจร: จางลงตรงกลางจอเพื่อไม่แย่งสายตาจากเนื้อหา */
+[data-mode='dark'] .ph-bg-grid {
+  opacity: 0.5;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 8%, rgba(0, 0, 0, 0.35) 46%, transparent 78%);
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 8%, rgba(0, 0, 0, 0.35) 46%, transparent 78%);
+}
+
+/* เส้นสแกนบาง ๆ วิ่งลงช้า ๆ — สัญญาณ "ระบบกำลังทำงาน" แบบไม่รบกวน */
+[data-mode='dark'] .ph-bg-vignette::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 42vh;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(var(--ph-accent-rgb, 124, 77, 255), 0.05) 62%,
+    rgba(0, 217, 255, 0.07) 88%,
+    transparent
+  );
+  animation: phx-scan 14s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes phx-scan {
+  0%   { transform: translateY(-46vh); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(126vh); opacity: 0; }
+}
+
+/* ── 2. แถบบน: กระจกเบลอ + เส้นนีออนใต้แถบ ─────────────────────────────── */
+
+.ph-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--ph-line, rgba(148, 163, 184, 0.22));
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.ph-topbar::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--phx-edge);
+  opacity: 0.55;
+}
+
+.ph-brand-mark,
+.ph-brand-logo {
+  position: relative;
+  border-radius: 14px;
+  transition: transform 0.35s var(--phx-lift), box-shadow 0.35s ease;
+}
+
+[data-mode='dark'] .ph-brand-mark,
+[data-mode='dark'] .ph-brand-logo {
+  box-shadow: 0 0 0 1px rgba(var(--ph-accent-rgb, 124, 77, 255), 0.4),
+              0 8px 26px rgba(var(--ph-accent-rgb, 124, 77, 255), 0.28);
+}
+
+.ph-brand:hover .ph-brand-mark,
+.ph-brand:hover .ph-brand-logo {
+  transform: translateY(-1px) scale(1.03);
+}
+
+/* ── 3. จุด live: วงแหวนกระเพื่อม ให้รู้ว่าระบบออนไลน์ ─────────────────── */
+
+.ph-live {
+  position: relative;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.ph-live-dot {
+  position: relative;
+  box-shadow: 0 0 10px 1px var(--ph-ok, #22d39a);
+}
+
+.ph-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--ph-ok-rgb, 34, 211, 154), 0.55);
+  animation: phx-ping 2.4s ease-out infinite;
+}
+
+@keyframes phx-ping {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  70%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* ── 4. Hero: หัวเรื่องไล่เฉดมีประกายวิ่ง ───────────────────────────────── */
+
+.ph-hero {
+  position: relative;
+  z-index: 1;
+}
+
+.ph-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+[data-mode='dark'] .ph-eyebrow {
+  color: var(--ph-cyan, #00d9ff);
+  text-shadow: 0 0 18px rgba(0, 217, 255, 0.45);
+}
+
+.ph-hero-title {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  line-height: 1.12;
+}
+
+.ph-hero-accent {
+  background-image: linear-gradient(
+    100deg,
+    var(--phx-neon-1) 0%,
+    var(--phx-neon-2) 28%,
+    var(--phx-neon-3) 58%,
+    var(--phx-neon-4) 82%,
+    var(--phx-neon-1) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: phx-sheen 9s linear infinite;
+}
+
+@keyframes phx-sheen {
+  from { background-position: 0% 50%; }
+  to   { background-position: 220% 50%; }
+}
+
+.ph-hero-sub {
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+
+/* ── 5. การ์ดแก้ว: ขอบเรืองแสงแบบ conic + ยกตัวตอน hover ────────────────── */
+
+.ph-card,
+.ph-action-card,
+.ph-track-card,
+.phw-card {
+  position: relative;
+  border-radius: var(--ph-radius, 20px);
+  transition: transform 0.4s var(--phx-lift), box-shadow 0.4s ease, border-color 0.3s ease;
+}
+
+.ph-card::before,
+.ph-action-card::before,
+.ph-track-card::before,
+.phw-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--phx-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+[data-mode='dark'] .ph-card::before,
+[data-mode='dark'] .ph-action-card::before,
+[data-mode='dark'] .ph-track-card::before,
+[data-mode='dark'] .phw-card::before {
+  opacity: 0.4;
+}
+
+[data-mode='dark'] .ph-card:hover::before,
+[data-mode='dark'] .ph-action-card:hover::before,
+[data-mode='dark'] .ph-action-card:focus-visible::before,
+[data-mode='dark'] .ph-track-card:hover::before,
+[data-mode='dark'] .phw-card:hover::before {
+  opacity: 1;
+}
+
+[data-mode='dark'] .ph-card,
+[data-mode='dark'] .ph-track-card,
+[data-mode='dark'] .phw-card {
+  box-shadow: var(--ph-shadow, 0 24px 60px rgba(2, 6, 23, 0.55)),
+              inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* การ์ดติดตามงาน (ยังไม่มีสไตล์เดิม) — เป็นการ์ดหลักของหน้า จึงเด่นที่สุด */
+.ph-track-card {
+  background: var(--ph-glass-strong, var(--ph-glass, rgba(255, 255, 255, 0.05)));
+  border: 1px solid var(--ph-line-strong, var(--ph-line, rgba(148, 163, 184, 0.28)));
+  padding: clamp(1.15rem, 2.4vw, 1.9rem);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+[data-mode='dark'] .ph-track-card {
+  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.6),
+              0 0 0 1px rgba(var(--ph-accent-rgb, 124, 77, 255), 0.12),
+              inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.ph-card-title,
+.ph-result-title,
+.ph-sub-title {
+  letter-spacing: -0.01em;
+}
+
+.ph-card-tag {
+  letter-spacing: 0.16em;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+[data-mode='dark'] .ph-card-tag {
+  color: var(--ph-cyan, #00d9ff);
+  border-color: rgba(0, 217, 255, 0.3);
+}
+
+/* ── 6. ฟอร์ม: ช่องกรอกแบบ HUD + โฟกัสนีออน ────────────────────────────── */
+
+.ph-input-wrap {
+  position: relative;
+  border-radius: var(--ph-radius-sm, 14px);
+  transition: box-shadow 0.28s ease, border-color 0.28s ease, background-color 0.28s ease;
+}
+
+.ph-input-wrap:focus-within {
+  box-shadow: 0 0 0 1px var(--phx-neon-2),
+              0 0 0 5px rgba(36, 155, 255, 0.16),
+              0 10px 30px rgba(36, 155, 255, 0.16);
+}
+
+.ph-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.ph-input::placeholder {
+  letter-spacing: 0.02em;
+  opacity: 0.55;
+}
+
+.ph-input-wrap:focus-within .ph-input-icon {
+  color: var(--phx-neon-1);
+}
+
+.ph-input-icon {
+  transition: color 0.25s ease;
+}
+
+/* ปุ่มหลัก: ไล่เฉด + แสงกวาดตอน hover */
+.ph-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.22s var(--phx-lift), box-shadow 0.28s ease, filter 0.28s ease;
+}
+
+.ph-btn-primary {
+  background-image: linear-gradient(120deg, var(--phx-neon-2), var(--phx-neon-3) 60%, var(--phx-neon-4));
+  border-color: transparent;
+  color: var(--ph-on-accent, #fff);
+  box-shadow: 0 10px 28px rgba(var(--ph-accent-rgb, 124, 77, 255), 0.35);
+}
+
+.ph-btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.34) 48%, transparent 76%);
+  transform: translateX(-120%);
+  transition: transform 0.65s var(--phx-lift);
+}
+
+.ph-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.ph-btn-primary:not(:disabled):hover {
+  box-shadow: 0 14px 38px rgba(var(--ph-accent-rgb, 124, 77, 255), 0.5);
+}
+
+.ph-btn-primary:not(:disabled):hover::after {
+  transform: translateX(120%);
+}
+
+.ph-btn:not(:disabled):active {
+  transform: translateY(0) scale(0.985);
+}
+
+.ph-btn:disabled {
+  filter: grayscale(0.25);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* โฟกัสคีย์บอร์ดต้องเห็นชัดทุกองค์ประกอบที่กดได้ */
+.ph-page :is(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--phx-neon-1);
+  outline-offset: 3px;
+  border-radius: var(--ph-radius-sm, 12px);
+}
+
+/* ── 7. การ์ดทางเข้า (แจ้งซ่อม / สแกน QR) ──────────────────────────────── */
+
+.ph-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.ph-action-card {
+  overflow: hidden;
+}
+
+.ph-action-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 80% at 12% 0%,
+    rgba(var(--ph-accent-rgb, 124, 77, 255), 0.16),
+    transparent 62%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.ph-action-card:hover::after,
+.ph-action-card:focus-visible::after {
+  opacity: 1;
+}
+
+.ph-action-card:hover,
+.ph-action-card:focus-visible {
+  transform: translateY(-3px);
+}
+
+.ph-action-icon {
+  position: relative;
+  transition: transform 0.35s var(--phx-lift), box-shadow 0.35s ease, color 0.3s ease;
+}
+
+[data-mode='dark'] .ph-action-primary .ph-action-icon {
+  box-shadow: 0 0 22px rgba(var(--ph-accent-rgb, 124, 77, 255), 0.4);
+}
+
+.ph-action-card:hover .ph-action-icon {
+  transform: scale(1.08) rotate(-3deg);
+}
+
+.ph-action-arrow {
+  transition: transform 0.3s var(--phx-lift);
+}
+
+.ph-action-card:hover .ph-action-arrow,
+.ph-action-card:focus-visible .ph-action-arrow {
+  transform: translateX(4px);
+}
+
+/* ── 8. จุดเด่นระบบ ─────────────────────────────────────────────────────── */
+
+.ph-highlights {
+  position: relative;
+  z-index: 1;
+}
+
+.ph-highlight {
+  position: relative;
+  transition: transform 0.35s var(--phx-lift), border-color 0.3s ease, background-color 0.3s ease;
+}
+
+.ph-highlight:hover {
+  transform: translateY(-2px);
+}
+
+.ph-highlight-icon {
+  transition: transform 0.35s var(--phx-lift), box-shadow 0.35s ease;
+}
+
+[data-mode='dark'] .ph-highlight:hover .ph-highlight-icon {
+  transform: scale(1.06);
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.32);
+}
+
+.ph-highlight-title {
+  letter-spacing: -0.005em;
+}
+
+/* ── 9. ความคืบหน้า + ขั้นตอน: รางนีออนและหมุดเรืองแสง ─────────────────── */
+
+.ph-progress {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.ph-progress-fill {
+  position: relative;
+  background-image: linear-gradient(90deg, var(--phx-neon-1), var(--phx-neon-2) 45%, var(--phx-neon-3));
+  box-shadow: 0 0 16px rgba(36, 155, 255, 0.5);
+  transition: width 0.75s var(--phx-lift);
+}
+
+.ph-progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: phx-flow 2.6s linear infinite;
+}
+
+@keyframes phx-flow {
+  from { background-position: -100% 0; }
+  to   { background-position: 100% 0; }
+}
+
+.ph-step-dot {
+  transition: transform 0.35s var(--phx-lift), box-shadow 0.35s ease, background-color 0.3s ease;
+}
+
+.ph-step.is-done .ph-step-dot,
+.ph-step[data-state='done'] .ph-step-dot {
+  box-shadow: 0 0 14px rgba(var(--ph-ok-rgb, 34, 211, 154), 0.45);
+}
+
+.ph-step.is-current .ph-step-dot,
+.ph-step[data-state='current'] .ph-step-dot {
+  animation: phx-pulse 2s ease-in-out infinite;
+}
+
+@keyframes phx-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(36, 155, 255, 0.5); }
+  50%      { box-shadow: 0 0 0 7px rgba(36, 155, 255, 0); }
+}
+
+.ph-step-label {
+  letter-spacing: 0.01em;
+}
+
+/* ── 10. ผลลัพธ์ / ข้อมูลใบงาน / ไทม์ไลน์ ──────────────────────────────── */
+
+.ph-result {
+  animation: phx-rise 0.5s var(--phx-lift) both;
+}
+
+@keyframes phx-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ph-result-no {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+[data-mode='dark'] .ph-result-no {
+  text-shadow: 0 0 22px rgba(0, 217, 255, 0.28);
+}
+
+.ph-meta {
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+.ph-meta-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.ph-meta:hover {
+  border-color: var(--ph-line-strong, rgba(148, 163, 184, 0.32));
+}
+
+.ph-status-badge {
+  letter-spacing: 0.01em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ph-timeline-dot {
+  box-shadow: 0 0 0 3px var(--ph-navy-900, rgba(10, 22, 51, 0.9));
+}
+
+[data-mode='dark'] .ph-timeline-item:first-child .ph-timeline-dot {
+  box-shadow: 0 0 0 3px var(--ph-navy-900, rgba(10, 22, 51, 0.9)),
+              0 0 16px rgba(36, 155, 255, 0.55);
+}
+
+.ph-timeline-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.ph-chip,
+.ph-recent .ph-chip {
+  transition: transform 0.25s var(--phx-lift), border-color 0.25s ease, color 0.25s ease;
+}
+
+.ph-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--phx-neon-2);
+  color: var(--ph-text, #f8fafc);
+}
+
+/* ── 11. การ์ดประกัน: ให้เข้าชุดกับการ์ดหลัก ───────────────────────────── */
+
+.phw-result {
+  animation: phx-rise 0.45s var(--phx-lift) both;
+}
+
+.phw-days,
+.phw-device-name {
+  font-variant-numeric: tabular-nums;
+}
+
+.phw-status-dot {
+  box-shadow: 0 0 10px 1px currentColor;
+}
+
+/* ── 12. ตัวโหลด / แจ้งเตือน / สถานะว่าง ───────────────────────────────── */
+
+.ph-spinner {
+  border-top-color: currentColor;
+  animation: phx-spin 0.7s linear infinite;
+}
+
+@keyframes phx-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ph-alert {
+  animation: phx-rise 0.35s var(--phx-lift) both;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ph-empty {
+  text-wrap: pretty;
+}
+
+/* ── 13. ฟุตเตอร์ ───────────────────────────────────────────────────────── */
+
+.ph-footer {
+  position: relative;
+}
+
+.ph-footer::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: var(--phx-edge);
+  opacity: 0.35;
+}
+
+.ph-footer-links a,
+.ph-login-link {
+  transition: color 0.25s ease, opacity 0.25s ease;
+}
+
+.ph-footer-links a:hover,
+.ph-login-link:hover {
+  color: var(--phx-neon-1);
+}
+
+/* ── 14. โหมดสว่าง: ถอดนีออนออก คงความสะอาดและคอนทราสต์ ────────────────── */
+
+[data-mode='light'] .ph-hero-accent {
+  animation: none;
+  background-image: linear-gradient(100deg, #1d4ed8, #7c3aed 60%, #a21caf);
+}
+
+[data-mode='light'] .ph-bg-vignette::after,
+[data-mode='light'] .ph-live-dot::after {
+  display: none;
+}
+
+[data-mode='light'] .ph-card,
+[data-mode='light'] .ph-track-card,
+[data-mode='light'] .phw-card {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+[data-mode='light'] .ph-progress-fill {
+  box-shadow: none;
+}
+
+/* ── 15. จอเล็ก: ลดเอฟเฟกต์หนัก ๆ เพื่อความลื่นบนมือถือ ────────────────── */
+
+@media (max-width: 640px) {
+  .ph-page {
+    --ph-radius: 18px;
+  }
+
+  .ph-hero-title {
+    line-height: 1.18;
+  }
+
+  [data-mode='dark'] .ph-bg-aurora {
+    filter: blur(52px) saturate(125%);
+    opacity: 0.55;
+    animation: none;
+  }
+
+  [data-mode='dark'] .ph-bg-vignette::after {
+    display: none;
+  }
+
+  .ph-track-card,
+  .ph-card {
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  .ph-action-card:hover,
+  .ph-highlight:hover {
+    transform: none;
+  }
+}
+
+@media (min-width: 1280px) {
+  .ph-hero-title {
+    letter-spacing: -0.025em;
+  }
+}
+
+/* ── 16. เคารพการตั้งค่าผู้ใช้: ลดการเคลื่อนไหว / คอนทราสต์สูง ─────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-page *,
+  .ph-page *::before,
+  .ph-page *::after {
+    animation-duration: 0.001ms !important; /* จำเป็น: ทับ animation ของไฟล์เดิมที่โหลดก่อน */
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .ph-hero-accent {
+    background-position: 20% 50%;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .ph-page {
+    --ph-line: rgba(226, 232, 240, 0.6);
+    --ph-line-strong: rgba(226, 232, 240, 0.8);
+  }
+
+  .ph-hero-accent {
+    color: var(--ph-text, #f8fafc);
+    -webkit-text-fill-color: currentColor;
+    background-image: none;
+  }
+}

@@ -359,10 +359,24 @@ class UserRole(str):
     OWNER = "owner"           # เจ้าของบริษัทสูงสุด (iwasuperadmin) — เห็น/จัดการทุกอย่าง + ห้าม role อื่นแก้
     ADMIN_SCHOOL = "admin_school"  # ผู้ดูแลโรงเรียน — เห็นเฉพาะข้อมูลในโรงเรียนตัวเอง + จัดการ user ในรรตัวเอง
     ADMIN = "admin"           # ผู้ดูแลบริษัท — เห็นทุกโรงเรียน + จัดการทุกอย่างได้
-    TEACHER = "teacher"       # ครู — เห็นเฉพาะ ticket ที่ตัวเองสร้าง + อุปกรณ์ในโรงเรียน
+    TEACHER = "teacher"       # [เลิกใช้ — ห้ามกำหนดใหม่] ครู — เห็นเฉพาะ ticket ที่ตัวเองสร้าง + อุปกรณ์ในโรงเรียน
     IT_SUPPORT = "it_support" # เจ้าหน้าที่ IT — สร้างโดย owner/admin=เห็นทุกรร, สร้างโดย admin_school=เห็นเฉพาะรร
-    STUDENT = "student"       # นักเรียน — เห็นอุปกรณ์ + สร้าง ticket + ดู ticket ที่ตัวเองสร้าง
+    STUDENT = "student"       # [เลิกใช้ — ห้ามกำหนดใหม่] นักเรียน — เห็นอุปกรณ์ + สร้าง ticket + ดู ticket ที่ตัวเองสร้าง
     SUPER_ADMIN = "super_admin"  # ผู้ดูแลบริษัท — เห็นทุกโรงเรียน + จัดการทุกอย่างได้ (ยกเว้น owner)
+
+
+#: บทบาทที่ยังใช้งานได้จริง (เรียงจากสิทธิ์มากไปน้อย)
+ACTIVE_ROLES: tuple[str, ...] = (
+    UserRole.OWNER,
+    UserRole.SUPER_ADMIN,
+    UserRole.ADMIN,
+    UserRole.ADMIN_SCHOOL,
+    UserRole.IT_SUPPORT,
+)
+
+#: บทบาทที่เลิกใช้แล้ว (teacher/student) — ยังต้องอ่านได้จากแถวเก่า แต่ห้ามกำหนดใหม่
+#: ค่าเหล่านี้ยังอยู่ใน user_role_enum ของฐานข้อมูล จึงห้ามตัดออกจาก SAEnum ด้านล่าง
+LEGACY_ROLES: tuple[str, ...] = ("teacher", "student")
 
 
 class User(Base):
@@ -384,7 +398,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         SAEnum("owner", "admin", "admin_school", "teacher", "it_support", "student", "super_admin",
                name="user_role_enum", create_type=False),
-        default=UserRole.TEACHER, nullable=False, index=True
+        default=UserRole.IT_SUPPORT, nullable=False, index=True
     )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -398,6 +412,63 @@ class User(Base):
 
     # Relationships
     organization: Mapped[Optional["Organization"]] = relationship(back_populates="users")
+
+
+# ---------------------------------------------------------------------------
+# สมัครสมาชิก (Membership) — คำขอเปิดบัญชีใช้งานระบบ
+# ---------------------------------------------------------------------------
+
+#: สถานะคำขอ เก็บเป็น VARCHAR ไม่ใช่ PG enum — เพิ่มค่าใหม่ได้โดยไม่ต้อง migrate type
+MEMBERSHIP_PENDING = "pending"
+MEMBERSHIP_APPROVED = "approved"
+MEMBERSHIP_REJECTED = "rejected"
+MEMBERSHIP_STATUSES: tuple[str, ...] = (
+    MEMBERSHIP_PENDING,
+    MEMBERSHIP_APPROVED,
+    MEMBERSHIP_REJECTED,
+)
+
+
+class MembershipApplication(Base):
+    """คำขอสมัครสมาชิกจากหน้าสาธารณะ — ยังไม่ใช่บัญชีที่เข้าระบบได้
+
+    เก็บเฉพาะ password_hash (ไม่เคยเก็บรหัสผ่านดิบ) เพื่อให้ผู้สมัครใช้รหัสที่ตั้งไว้
+    เข้าระบบได้ทันทีเมื่อผู้ดูแลอนุมัติ — ตอนอนุมัติจะย้าย hash ไปสร้างแถวใน users
+    """
+    __tablename__ = "membership_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # ชื่อผู้ใช้ที่ขอไว้ — จะกลายเป็น users.line_user_id เมื่ออนุมัติ
+    username: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # เก็บรหัสหน่วยงานที่กรอกมาด้วย เผื่อกรอกรหัสที่ยังไม่มีในระบบ
+    organization_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    requested_role: Mapped[str] = mapped_column(String(32), default="it_support", nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), default=MEMBERSHIP_PENDING, nullable=False, index=True
+    )
+    reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # เวลาที่ส่งแถวขึ้น Google Sheet สำเร็จ (None = ยังไม่ได้ส่ง/ส่งไม่ผ่าน)
+    sheet_synced_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 # ---------------------------------------------------------------------------

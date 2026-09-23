@@ -1,13 +1,15 @@
 import React, { useState, useEffect, ReactNode } from 'react';
 import { DeviceInfo, Ticket, Stats, DeviceCreate, TicketCreate } from './types';
 import { User, UserRole, Organization } from './types/user';
+import { isRetiredRole } from './roleLabels';
 import { DevicePageRole, DEVICE_PAGE_ROLES, DEVICE_PAGE_ROLE_BADGE } from './types/index';
 import { api, login, setToken } from './api/client';
 import StatCard from './components/StatCard';
-import Sidebar, { ROLE_MENUS } from './components/Sidebar';
+import Sidebar, { ROLE_MENUS, LEGACY_FALLBACK_MENUS } from './components/Sidebar';
 import SchoolsPage, { SchoolAdminView } from './components/SchoolsPage';
 import ScanPage from './components/ScanPage';
 import PublicNoLoginReportView from './components/PublicNoLoginReportView';
+import PublicHomeView from './components/PublicHomeView';
 import DevicesPage from './components/DevicesPage';
 import AIChatWidget from './components/AIChatWidget';
 import UsersPage from './components/UsersPage';
@@ -19,12 +21,33 @@ import QRBatchPage from './components/QRBatchPage';
 import SalesPage from './components/SalesPage';
 import PMPage from './components/PMPage';
 import AuditLogPage from './components/AuditLogPage';
+import RegistrationsPage from './components/RegistrationsPage';
+import RegisterPage from './components/RegisterPage';
+import CustomerSignupPage from './components/CustomerSignupPage';
 import PrivacyPage from './components/PrivacyPage';
 import { roleLabel } from './roleLabels';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend
-} from 'recharts';
+import { REPORTER_TYPE_OPTIONS, DEFAULT_REPORTER_TYPE } from './reporterTypes';
+import { useThemeVersion, themeColor, themeTint, cssVar } from './theme';
+import './styles/dashboard.css';
+// เลเยอร์ธีม futuristic ของหน้าแรก — ต้องโหลด "หลัง" dashboard.css เพื่อทับค่าเดิมได้
+// โดยไม่ใช้ !important (ทุก selector สโคปอยู่ใต้ .dsh-page จึงไม่กระทบหน้าอื่น)
+import './styles/dashboard-futuristic.css';
+
+/** กราฟ Dashboard โหลดแยกก้อน — recharts + d3 ราว 86 kB gzip
+ *  หน้าอื่น (login / แจ้งซ่อมสาธารณะ / สแกน QR) จึงไม่ต้องดาวน์โหลดไลบรารีกราฟเลย
+ *  ตัวกราฟทั้งหมดอยู่ใน components/DashboardCharts.tsx */
+const DashboardCharts = React.lazy(() => import('./components/DashboardCharts'));
+
+/** ที่ว่างระหว่างรอก้อนกราฟโหลด — ใช้คลาสเดิมเพื่อไม่ให้เลย์เอาต์กระโดด */
+function ChartsFallback() {
+  return (
+    <div className="dsh-card">
+      <div className="dsh-chart-box">
+        <div className="dsh-empty" aria-live="polite">กำลังโหลดกราฟ…</div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Auth Context ────────────────────────────────────────────────────────────
 const AuthContext = React.createContext<{
@@ -150,10 +173,35 @@ function DeviceIconSvg({ type }: { type: string }) {
 }
 
 // ─── Status colors ──────────────────────────────────────────────────────────
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLOR_VARS: Record<string, string> = {
+  new: '--status-new', assigned: '--status-assigned', in_progress: '--status-in-progress',
+  pending: '--status-pending', resolved: '--status-resolved', closed: '--status-closed',
+  cancelled: '--status-cancelled',
+};
+
+/** ค่าสำรองกรณีอ่าน CSS variable ไม่ได้ (เช่นเทสต์ที่ไม่มี DOM จริง) */
+const STATUS_COLOR_FALLBACK: Record<string, string> = {
   new: '#EF4444', assigned: '#F59E0B', in_progress: '#2563EB',
   pending: '#8B5CF6', resolved: '#10B981', closed: '#6B7280', cancelled: '#EF4444',
 };
+
+/**
+ * recharts รับสีเป็น attribute ของ <svg> ซึ่งไม่ขยาย var() ให้
+ * จึงต้องอ่านค่าที่คำนวณแล้วทุกครั้งที่อ่านคีย์ — อ่านสด ๆ ผ่าน Proxy
+ * ทำให้ทุกจุดที่เขียน STATUS_COLORS.xxx ได้สีของธีมปัจจุบันโดยไม่ต้องแก้
+ */
+const STATUS_COLORS: Record<string, string> = new Proxy({} as Record<string, string>, {
+  get: (_target, key) => {
+    const k = String(key);
+    return cssVar(
+      STATUS_COLOR_VARS[k] ?? '',
+      STATUS_COLOR_FALLBACK[k] ?? '#6B7280',
+    );
+  },
+  has: (_target, key) => String(key) in STATUS_COLOR_VARS,
+  ownKeys: () => Object.keys(STATUS_COLOR_VARS),
+  getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+});
 
 // ─── Login Page (จริง: username + password) ─────────────────────────────────
 function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPrivacy?: () => void }) {
@@ -191,7 +239,7 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
   const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault();
     const no = tNo.trim().toUpperCase();
-    if (!no) { setTErr('กรอกหมายเลข Ticket (เช่น SC-2026-000001)'); return; }
+    if (!no) { setTErr('กรอกหมายเลข Ticket (เช่น TK.TEST1.26.0001-V)'); return; }
     setTLoading(true); setTErr(null); setTRes(null);
     try {
       const r = await api.trackTicket(no);
@@ -211,12 +259,14 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
   return (
     <div className="login-page">
       <div className="login-card">
+        {/* หน้า login เป็นหน้าแยกแล้ว — ต้องมีทางกลับหน้าแรกสาธารณะ */}
+        <a href="/" className="login-back-link">← กลับหน้าแรก (แจ้งซ่อม/ติดตามสถานะ)</a>
         <div className="login-logo">
           <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
             <div className="login-logo-icon"><AppLogo size={22} /></div>
             <div>
               <h1 className="login-title">IWA Smart Classroom Support</h1>
-              <p className="login-subtitle">ระบบจัดการแจ้งซ่อมอุปกรณ์อัจฉริยะ</p>
+              <p className="login-subtitle">เข้าสู่ระบบสำหรับเจ้าหน้าที่</p>
             </div>
           </a>
         </div>
@@ -267,6 +317,12 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
           เข้าสู่ระบบเพื่อจัดการแจ้งซ่อมอุปกรณ์และติดตามสถานะซ่อม
         </p>
         <div style={{ textAlign: 'center', marginTop: 8, fontSize: '0.8rem' }}>
+          <span style={{ color: 'var(--color-text-tertiary)' }}>ยังไม่มีบัญชีเจ้าหน้าที่? </span>
+          <a href="/?register=1" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+            สมัครสมาชิก (รอผู้ดูแลอนุมัติ)
+          </a>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 8, fontSize: '0.8rem' }}>
           <span style={{ color: 'var(--color-text-tertiary)' }}>มีเลข Ticket แล้วแต่ยังไม่มีบัญชี? </span>
           <a
             href="#"
@@ -313,16 +369,22 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
             >
               <button
                 onClick={() => setShowTrack(false)}
-                style={{ position: 'absolute', top: 12, right: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--color-text-tertiary)' }}
-              >✕</button>
-              <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem' }}>🔎 ติดตามสถานะงานซ่อม</h3>
+                aria-label="ปิด"
+                title="ปิด"
+                style={{ position: 'absolute', top: 12, right: 12, border: 'none', background: 'transparent', cursor: 'pointer', lineHeight: 0, padding: 4, color: 'var(--color-text-tertiary)' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+              <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem' }}>ติดตามสถานะงานซ่อม</h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', margin: '0 0 16px' }}>
                 กรอกหมายเลข Ticket ที่ได้รับตอนแจ้งซ่อม — ไม่ต้องเข้าสู่ระบบ
               </p>
               <form onSubmit={handleTrack} style={{ display: 'flex', gap: 8 }}>
                 <input
                   className="form-input"
-                  placeholder="SC-2026-000001"
+                  placeholder="TK.TEST1.26.0001-V"
                   value={tNo}
                   onChange={(e) => setTNo(e.target.value)}
                   style={{ flex: 1, textTransform: 'uppercase' }}
@@ -358,9 +420,16 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
                           <span style={{
                             width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            background: p.done ? '#10B981' : 'var(--color-border)', color: p.done ? '#fff' : 'var(--color-text-tertiary)',
+                            background: p.done ? 'var(--status-resolved, #10B981)' : 'var(--color-border)',
+                            color: p.done ? '#FFFFFF' : 'var(--color-text-tertiary)',
                             fontSize: '0.6rem',
-                          }}>{p.done ? '✓' : ''}</span>
+                          }}>
+                            {p.done && (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M20 6L9 17l-5-5" />
+                              </svg>
+                            )}
+                          </span>
                           <span style={{ color: p.done ? 'var(--color-text)' : 'var(--color-text-tertiary)' }}>{p.step}</span>
                         </div>
                       ))}
@@ -502,11 +571,11 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
               zIndex: 100, maxHeight: 380, overflow: 'auto',
             }}>
               <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: '0.85rem', borderBottom: '1px solid var(--color-border)' }}>
-                🔔 การแจ้งเตือน ({openTickets.length})
+                การแจ้งเตือน ({openTickets.length})
               </div>
               {openTickets.length === 0 ? (
                 <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: '0.8rem' }}>
-                  ไม่มีงานค้าง 🎉
+                  ไม่มีงานค้าง
                 </div>
               ) : (
                 openTickets.slice(0, 10).map((t) => (
@@ -576,20 +645,20 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
                     style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-text)', textAlign: 'left' }}
                     onMouseDown={() => { setShowUserMenu(false); onNavigate?.('profile'); }}
                   >
-                    <span style={{ fontSize: '1rem' }}>👤</span> โปรไฟล์
+                    โปรไฟล์
                   </button>
                   <button
                     style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-text)', textAlign: 'left' }}
                     onMouseDown={() => { setShowUserMenu(false); onNavigate?.('settings'); }}
                   >
-                    <span style={{ fontSize: '1rem' }}>⚙️</span> การตั้งค่า
+                    การตั้งค่า
                   </button>
                   <div style={{ borderTop: '1px solid var(--color-border)' }} />
                   <button
                     style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-danger)', textAlign: 'left' }}
                     onMouseDown={() => { setShowUserMenu(false); onLogout?.(); }}
                   >
-                    <span style={{ fontSize: '1rem' }}>🚪</span> ออกจากระบบ
+                    ออกจากระบบ
                   </button>
                 </div>
               </>
@@ -621,52 +690,57 @@ function DashboardContent({
   currentOrgId: number | null | undefined;
   userRole?: string;
 }) {
+  // ธีมเปลี่ยน → ต้อง re-render ให้ชาร์ตอ่าน token สีชุดใหม่ (var() ใช้ใน svg ไม่ได้)
+  useThemeVersion();
   const [filterDevice, setFilterDevice] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  // หมวดหมู่อุปกรณ์ที่เลือกดู ('' = ทุกหมวดหมู่)
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
+  // โรงเรียนที่เลือกดู ('' = ทุกโรงเรียนที่มีสิทธิ์เห็น) — มีผลกับ Ticket, อุปกรณ์ และหมวดหมู่
+  const [schoolFilter, setSchoolFilter] = useState('');
 
   // ─── บทบาทครู/นักเรียน: dashboard เบา ๆ เฉพาะของตัวเอง ─────────────────
-  const isBasicRole = userRole === 'teacher' || userRole === 'student';
+  // บัญชีเก่าที่ยังติดบทบาท teacher/student (เลิกใช้แล้ว) — ให้เห็น dashboard แบบจำกัด
+  const isLegacyReporterRole = isRetiredRole(userRole);
   const myTickets = tickets;
   const myOpenTickets = myTickets.filter((t) => ['new', 'assigned', 'in_progress', 'pending'].includes(t.status));
   const myResolved = myTickets.filter((t) => t.status === 'resolved' || t.status === 'closed');
 
-  const statusChartData = [
-    { name: 'เปิด', value: stats?.new ?? 0, color: STATUS_COLORS.new },
-    { name: 'รอซ่อม', value: stats?.assigned ?? 0, color: STATUS_COLORS.assigned },
-    { name: 'กำลังดำเนินการ', value: stats?.in_progress ?? 0, color: STATUS_COLORS.in_progress },
-    { name: 'เสร็จสิ้น', value: stats?.resolved ?? 0, color: STATUS_COLORS.resolved },
-    { name: 'ยกเลิก', value: stats?.cancelled ?? 0, color: STATUS_COLORS.cancelled },
-  ].filter((d) => d.value > 0);
+  // หมายเหตุ: ข้อมูลกราฟย้ายไปคำนวณหลังบล็อกตัวกรองด้านล่าง
+  // (ต้องใช้ filteredTicketsEntities / filteredDevices ซึ่งประกาศทีหลัง)
 
-  // Pie: สัดส่วนอุปกรณ์ตามประเภท (ข้อมูลจริงจาก /api/stats by_type)
-  const DEVICE_PIE_COLORS = ['#7C3AED', '#2563EB', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#0EA5E9', '#8B5CF6', '#6B7280', '#F97316'];
-  const deviceTypeData = Object.entries(stats?.by_type ?? {})
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+  // ─── ขอบเขตอุปกรณ์ตามสิทธิ์ + รายชื่อโรงเรียนที่มีอุปกรณ์จริง ───
+  const UNKNOWN_SCHOOL = 'ไม่ระบุโรงเรียน';
+  const schoolNameOf = (d: DeviceInfo): string =>
+    d.organization_name || d.organization?.name || UNKNOWN_SCHOOL;
 
-  const monthlyData = (() => {
-    const map = new Map<string, number>();
-    tickets.forEach((t) => {
-      const d = new Date(t.created_at);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      map.set(key, (map.get(key) || 0) + 1);
-    });
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([month, value]) => ({ month, value }));
-  })();
+  const scopedDevices = devices.filter(
+    (d) => !needsOrgFilter || d.organization_id === currentOrgId,
+  );
+  const schoolCounts = scopedDevices.reduce<Record<string, number>>((acc, d) => {
+    const s = schoolNameOf(d);
+    acc[s] = (acc[s] || 0) + 1;
+    return acc;
+  }, {});
+  const schoolOptions = Object.keys(schoolCounts).sort((a, b) => a.localeCompare(b, 'th'));
+  // ถ้าโรงเรียนที่เลือกไม่มีอยู่แล้ว (ข้อมูลเปลี่ยน) ให้ถือว่าดูทุกโรงเรียน
+  const activeSchoolFilter = schoolOptions.includes(schoolFilter) ? schoolFilter : '';
 
   const filteredTicketsEntities = tickets.filter((t) => {
     if (needsOrgFilter && currentOrgId) {
       const dev = devices.find((d) => d.device_id === t.device_id);
       if (dev && dev.organization_id !== currentOrgId) return false;
     }
+    if (activeSchoolFilter) {
+      const dev = devices.find((d) => d.device_id === t.device_id);
+      if (!dev || schoolNameOf(dev) !== activeSchoolFilter) return false;
+    }
     if (filterDevice && t.device_id !== filterDevice) return false;
     if (filterStatus && t.status !== filterStatus) return false;
     return true;
   });
 
-  const filteredDevices = devices.filter((d) => {
+  const filteredDevices = scopedDevices.filter((d) => {
     if (!filterDevice) return true;
     const q = filterDevice.toLowerCase();
     return (
@@ -676,83 +750,167 @@ function DashboardContent({
       (d.model && d.model.toLowerCase().includes(q)) ||
       (d.room_name && d.room_name.toLowerCase().includes(q))
     );
-  }).filter((d) => !needsOrgFilter || d.organization_id === currentOrgId);
+  }).filter((d) => !activeSchoolFilter || schoolNameOf(d) === activeSchoolFilter);
+
+  // ─── หมวดหมู่อุปกรณ์ที่มีอยู่จริง + จำนวนของแต่ละหมวด (มาก → น้อย) ───
+  const UNKNOWN_TYPE = 'ไม่ระบุประเภท';
+  const deviceTypeCounts = filteredDevices.reduce<Record<string, number>>((acc, d) => {
+    const t = d.device_type || UNKNOWN_TYPE;
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+  const deviceTypeOptions = Object.keys(deviceTypeCounts).sort(
+    (a, b) => deviceTypeCounts[b] - deviceTypeCounts[a] || a.localeCompare(b, 'th'),
+  );
+  // ถ้าหมวดที่เลือกหายไป (เปลี่ยนตัวกรองอื่น) ให้ถือว่าแสดงทุกหมวด
+  const activeTypeFilter = deviceTypeOptions.includes(deviceTypeFilter) ? deviceTypeFilter : '';
+  const visibleDevices = activeTypeFilter
+    ? filteredDevices.filter((d) => (d.device_type || UNKNOWN_TYPE) === activeTypeFilter)
+    : filteredDevices;
+
+  // ─── ข้อมูลกราฟ — คำนวณจาก "ผลหลังกรอง" ───────────────────────────────
+  // เดิมอ่านจาก stats (ทั้งระบบ) ทำให้เลือกโรงเรียน/อุปกรณ์/สถานะแล้วกราฟนิ่งอยู่กับที่
+  // ไม่ตรงกับตัวเลขในตารางด้านล่าง ตอนนี้ทุกกราฟใช้ชุดข้อมูลเดียวกับตาราง
+  const ticketStatusCounts = filteredTicketsEntities.reduce<Record<string, number>>((acc, t) => {
+    acc[t.status] = (acc[t.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const statusChartData = [
+    { key: 'new', name: 'เปิด', color: STATUS_COLORS.new },
+    { key: 'assigned', name: 'รอซ่อม', color: STATUS_COLORS.assigned },
+    { key: 'in_progress', name: 'กำลังดำเนินการ', color: STATUS_COLORS.in_progress },
+    { key: 'pending', name: 'รออะไหล่/รอภายนอก', color: STATUS_COLORS.pending },
+    { key: 'resolved', name: 'เสร็จสิ้น', color: STATUS_COLORS.resolved },
+    { key: 'closed', name: 'ปิดงาน', color: STATUS_COLORS.closed },
+    { key: 'cancelled', name: 'ยกเลิก', color: STATUS_COLORS.cancelled },
+  ]
+    .map(({ key, name, color }) => ({ name, value: ticketStatusCounts[key] ?? 0, color }))
+    .filter((d) => d.value > 0);
+
+  // Pie: สัดส่วนอุปกรณ์ตามประเภท — ใช้ยอดนับชุดเดียวกับตัวกรองหมวดหมู่
+  // (deviceTypeOptions เรียงมาก→น้อยอยู่แล้ว) จานสีอยู่ใน DashboardCharts
+  const deviceTypeData = deviceTypeOptions.map((name) => ({
+    name,
+    value: deviceTypeCounts[name] ?? 0,
+  }));
+
+  const monthlyData = (() => {
+    const map = new Map<string, number>();
+    filteredTicketsEntities.forEach((t) => {
+      const d = new Date(t.created_at);
+      if (Number.isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, value]) => ({ month, value }));
+  })();
+
+  // ป้ายกำกับช่วงปีของกราฟรายเดือน — คำนวณจากข้อมูลจริง (เดิม hardcode '2026')
+  const monthlyRangeLabel = (() => {
+    if (monthlyData.length === 0) return String(new Date().getFullYear());
+    const firstYear = monthlyData[0].month.slice(0, 4);
+    const lastYear = monthlyData[monthlyData.length - 1].month.slice(0, 4);
+    return firstYear === lastYear ? firstYear : `${firstYear}–${lastYear}`;
+  })();
+
+  // ─── จัดกลุ่มอุปกรณ์ที่แสดง: โรงเรียน → หมวดหมู่ ────────────────────────
+  // เดิมการ์ด "อุปกรณ์ทั้งหมด" เทรายการทุกโรงเรียนรวมในกริดเดียว ทำให้แยกไม่ออกว่า
+  // เครื่องไหนอยู่โรงเรียนใด (ข้อมูลจริงมีหลายโรงเรียนและจำนวนไม่เท่ากัน)
+  // จึงจัดเป็นกลุ่มต่อโรงเรียน เรียงจากโรงเรียนที่มีอุปกรณ์มากไปน้อย
+  // และในแต่ละกลุ่มเรียงอุปกรณ์ตามหมวดใหญ่ → หมวดเล็ก แล้วไล่ตามรหัสเครื่อง
+  const devicesBySchool = (() => {
+    const groups = new Map<string, DeviceInfo[]>();
+    visibleDevices.forEach((d) => {
+      const s = schoolNameOf(d);
+      const list = groups.get(s);
+      if (list) list.push(d);
+      else groups.set(s, [d]);
+    });
+    return Array.from(groups.entries())
+      .map(([school, items]) => {
+        const typeCounts = items.reduce<Record<string, number>>((acc, d) => {
+          const t = d.device_type || UNKNOWN_TYPE;
+          acc[t] = (acc[t] || 0) + 1;
+          return acc;
+        }, {});
+        const types = Object.keys(typeCounts).sort(
+          (a, b) => typeCounts[b] - typeCounts[a] || a.localeCompare(b, 'th'),
+        );
+        const sorted = [...items].sort((a, b) => {
+          const ta = a.device_type || UNKNOWN_TYPE;
+          const tb = b.device_type || UNKNOWN_TYPE;
+          if (ta !== tb) return typeCounts[tb] - typeCounts[ta] || ta.localeCompare(tb, 'th');
+          return a.device_id.localeCompare(b.device_id, 'th', { numeric: true });
+        });
+        return { school, items: sorted, types, typeCounts };
+      })
+      .sort((a, b) => b.items.length - a.items.length || a.school.localeCompare(b.school, 'th'));
+  })();
 
   if (loading) return (
-    <div className="loading-state" style={{ minHeight: 200, padding: '40px', margin: '0 auto', width: '100%' }}>
+    <div className="dsh-loading" role="status" aria-live="polite">
       <div className="spinner" />
       <span>กำลังโหลดข้อมูล...</span>
     </div>
   );
 
   // ─── Dashboard สำหรับครู/นักเรียน: เฉพาะของตัวเอง + แจ้งซ่อมเร็ว ──────────
-  if (isBasicRole) {
+  if (isLegacyReporterRole) {
     return (
-      <div>
-        {/* Hero banner ต้อนรับ */}
-        <div style={{
-          padding: '22px 26px', marginBottom: 18, borderRadius: 'var(--radius-lg)',
-          background: 'linear-gradient(120deg, var(--color-primary) 0%, var(--color-primary-dark) 60%, #1E1B2E 100%)',
-          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexWrap: 'wrap', gap: 16, boxShadow: '0 8px 24px rgba(124,58,237,0.18)',
-        }}>
+      <div className="dsh-page">
+        {/* Hero banner ต้อนรับ — สไตล์อยู่ในคลาส .dsh-hero (dashboard.css) เปลี่ยนตามธีมเอง */}
+        <div className="dsh-hero">
           <div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: 4 }}>
-              สวัสดีครับ 👋 {userRole === 'student' ? 'นักเรียน' : 'คุณครู'}
-            </div>
-            <div style={{ fontSize: '0.85rem', opacity: 0.85 }}>
+            <div className="dsh-hero-title">สวัสดีครับ ยินดีต้อนรับ</div>
+            <div className="dsh-hero-sub">
               ติดตามงานแจ้งซ่อมของคุณได้ที่นี่ — หากพบปัญหาอุปกรณ์ สแกน QR ที่ตัวเครื่องเพื่อแจ้งซ่อม
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.18)', padding: '6px 14px', borderRadius: 20 }}>
-              🟠 กำลังดำเนินการ {myOpenTickets.length}
-            </span>
-            <span style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.18)', padding: '6px 14px', borderRadius: 20 }}>
-              ✅ ซ่อมเสร็จ {myResolved.length}
-            </span>
+          <div className="dsh-hero-chips">
+            <span className="dsh-chip">กำลังดำเนินการ {myOpenTickets.length}</span>
+            <span className="dsh-chip">ซ่อมเสร็จ {myResolved.length}</span>
           </div>
         </div>
 
         {/* สถิติของฉัน — KPI ทันสมัย */}
-        <div className="stat-cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+        <div className="dsh-kpi-grid dsh-kpi-grid--compact">
           {[
-            { icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', value: myTickets.length, label: 'แจ้งซ่อมทั้งหมด', color: '#7C3AED', sub: 'ทุกครั้ง' },
-            { icon: 'M12 6v6l4 2', value: myOpenTickets.length, label: 'กำลังดำเนินการ', color: '#F59E0B', sub: 'ยังไม่เสร็จ' },
-            { icon: 'M13 10V3L4 14h7v7l9-11h-7z', value: myResolved.length, label: 'ซ่อมเสร็จแล้ว', color: '#10B981', sub: 'แก้ไขได้แล้ว' },
+            { icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', value: myTickets.length, label: 'แจ้งซ่อมทั้งหมด', color: '--chart-1', sub: 'ทุกครั้ง' },
+            { icon: 'M12 6v6l4 2', value: myOpenTickets.length, label: 'กำลังดำเนินการ', color: '--status-assigned', sub: 'ยังไม่เสร็จ' },
+            { icon: 'M13 10V3L4 14h7v7l9-11h-7z', value: myResolved.length, label: 'ซ่อมเสร็จแล้ว', color: '--status-resolved', sub: 'แก้ไขได้แล้ว' },
           ].map((kpi) => (
-            <div key={kpi.label} style={{
-              background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border)', padding: '16px 18px',
-              display: 'flex', flexDirection: 'column', gap: 10,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${kpi.color}1a` }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={kpi.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={kpi.icon} /></svg>
+            <div key={kpi.label} className="dsh-kpi">
+              <div className="dsh-kpi-top">
+                <div className="dsh-kpi-icon" style={{ background: themeTint(kpi.color, 0.1) }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={themeColor(kpi.color)} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={kpi.icon} /></svg>
                 </div>
-                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-tertiary)' }}>{kpi.sub}</span>
+                <span className="dsh-kpi-sub">{kpi.sub}</span>
               </div>
               <div>
-                <div style={{ fontSize: '1.7rem', fontWeight: 800, lineHeight: 1, color: 'var(--color-text)' }}>{kpi.value}</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 5, fontWeight: 600 }}>{kpi.label}</div>
+                <div className="dsh-kpi-value">{kpi.value}</div>
+                <div className="dsh-kpi-label">{kpi.label}</div>
               </div>
             </div>
           ))}
         </div>
 
         {/* Ticket ของฉัน */}
-        <div className="page-section">
-          <div className="section-header">
-            <span className="section-title">Ticket ของฉัน ({myTickets.length})</span>
+        <div className="dsh-card">
+          <div className="dsh-card-head">
+            <span className="dsh-card-title">Ticket ของฉัน</span>
+            <span className="dsh-card-badge">{myTickets.length} รายการ</span>
           </div>
-          <div className="section-body">
+          <div className="dsh-card-body dsh-card-body--flush">
             {myTickets.length === 0 ? (
-              <div className="empty-state" style={{ padding: '32px 16px' }}>
-                <span className="empty-text">ยังไม่มี Ticket — สแกน QR ที่ตัวเครื่องเพื่อแจ้งซ่อม</span>
+              <div className="dsh-empty">
+                ยังไม่มี Ticket — สแกน QR ที่ตัวเครื่องเพื่อแจ้งซ่อม
               </div>
             ) : (
-              <div className="table-wrap">
-                <table className="data-table">
+              <div className="dsh-table-wrap">
+                <table className="dsh-table">
                   <thead>
                     <tr>
                       <th>Ticket ID</th><th>อุปกรณ์</th><th>หัวข้อ</th><th>สถานะ</th><th>ความเร่งด่วน</th><th>สร้างเมื่อ</th>
@@ -761,9 +919,9 @@ function DashboardContent({
                   <tbody>
                     {myTickets.slice(0, 8).map((ticket) => (
                       <tr key={ticket.ticket_id}>
-                        <td className="table-id">{ticket.ticket_id}</td>
-                        <td>{ticket.device_id}</td>
-                        <td>{ticket.title}</td>
+                        <td className="dsh-td-id">{ticket.ticket_id}</td>
+                        <td className="dsh-td-muted">{ticket.device_id}</td>
+                        <td className="dsh-td-wrap">{ticket.title}</td>
                         <td>
                           <span className={`badge badge-${ticket.status}`}>
                             {STATUS_LABELS_TICKET[ticket.status] || ticket.status}
@@ -774,7 +932,7 @@ function DashboardContent({
                             {ticket.priority}
                           </span>
                         </td>
-                        <td style={{ color: 'var(--color-text-tertiary)', fontSize: '0.8rem' }}>
+                        <td className="dsh-td-muted">
                           {new Date(ticket.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </td>
                       </tr>
@@ -790,180 +948,141 @@ function DashboardContent({
   }
 
   return (
-    <div>
+    <div className="dsh-page">
       {/* Hero banner สรุปภาพรวม */}
-      <div className="dash-hero" style={{
-        padding: '22px 26px', marginBottom: 18, borderRadius: 'var(--radius-lg)',
-        background: 'linear-gradient(120deg, var(--color-primary) 0%, var(--color-primary-dark) 60%, #1E1B2E 100%)',
-        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: 16, boxShadow: '0 8px 24px rgba(124,58,237,0.18)',
-      }}>
+      <div className="dsh-hero">
         <div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: 4 }}>ภาพรวมระบบซ่อมบำรุง 📊</div>
-          <div style={{ fontSize: '0.85rem', opacity: 0.85 }}>
+          <div className="dsh-hero-title">ภาพรวมระบบซ่อมบำรุง</div>
+          <div className="dsh-hero-sub">
             มี Ticket ทั้งหมด <b>{stats?.total_tickets ?? 0}</b> รายการ · กำลังดำเนินการ <b>{stats?.in_progress ?? 0}</b> · รอรับเรื่อง <b>{stats?.new ?? 0}</b>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.18)', padding: '6px 14px', borderRadius: 20 }}>
-            ✅ เสร็จสิ้น {stats?.resolved ?? 0}
-          </span>
-          <span style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.18)', padding: '6px 14px', borderRadius: 20 }}>
-            🖥️ อุปกรณ์ {stats?.total_devices ?? 0}
-          </span>
+        <div className="dsh-hero-chips">
+          <span className="dsh-chip">เสร็จสิ้น {stats?.resolved ?? 0}</span>
+          <span className="dsh-chip">อุปกรณ์ {stats?.total_devices ?? 0}</span>
         </div>
       </div>
 
       {/* KPI Stat Cards — ทันสมัย */}
-      <div className="stat-cards-grid">
+      <div className="dsh-kpi-grid">
         {[
-          { icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', value: stats?.total_tickets ?? 0, label: 'Ticket ทั้งหมด', color: '#7C3AED', sub: 'ทุกสถานะ' },
-          { icon: 'M12 6v6l4 2', value: stats?.new ?? 0, label: 'รอรับเรื่อง', color: '#F59E0B', sub: 'ยังไม่มีช่างรับ' },
-          { icon: 'M13 10V3L4 14h7v7l9-11h-7z', value: stats?.in_progress ?? 0, label: 'กำลังดำเนินการ', color: '#2563EB', sub: 'อยู่ระหว่างซ่อม' },
-          { icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', value: stats?.resolved ?? 0, label: 'ซ่อมเสร็จ', color: '#10B981', sub: 'รอ/ปิดงาน' },
-          { icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8', value: stats?.high ?? 0, label: 'ความเร่งด่วนสูง', color: '#EF4444', sub: 'high+critical' },
-          { icon: 'M3 6h18M3 12h18M3 18h18', value: stats?.total_devices ?? 0, label: 'อุปกรณ์ทั้งหมด', color: '#6B7280', sub: 'ที่ลงทะเบียน' },
+          { icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', value: stats?.total_tickets ?? 0, label: 'Ticket ทั้งหมด', color: '--chart-1', sub: 'ทุกสถานะ' },
+          { icon: 'M12 6v6l4 2', value: stats?.new ?? 0, label: 'รอรับเรื่อง', color: '--status-assigned', sub: 'ยังไม่มีช่างรับ' },
+          { icon: 'M13 10V3L4 14h7v7l9-11h-7z', value: stats?.in_progress ?? 0, label: 'กำลังดำเนินการ', color: '--status-in-progress', sub: 'อยู่ระหว่างซ่อม' },
+          { icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', value: stats?.resolved ?? 0, label: 'ซ่อมเสร็จ', color: '--status-resolved', sub: 'รอ/ปิดงาน' },
+          { icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8', value: stats?.high ?? 0, label: 'ความเร่งด่วนสูง', color: '--status-new', sub: 'high+critical' },
+          { icon: 'M3 6h18M3 12h18M3 18h18', value: stats?.total_devices ?? 0, label: 'อุปกรณ์ทั้งหมด', color: '--color-muted', sub: 'ที่ลงทะเบียน' },
         ].map((kpi) => (
-          <div key={kpi.label} className="kpi-card" style={{
-            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-border)', padding: '16px 18px',
-            display: 'flex', flexDirection: 'column', gap: 10,
-            transition: 'transform 0.15s, box-shadow 0.15s',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: `${kpi.color}1a`,
-              }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={kpi.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div key={kpi.label} className="dsh-kpi">
+            <div className="dsh-kpi-top">
+              <div className="dsh-kpi-icon" style={{ background: themeTint(kpi.color, 0.1) }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={themeColor(kpi.color)} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d={kpi.icon} />
                 </svg>
               </div>
-              <span style={{ fontSize: '0.68rem', color: 'var(--color-text-tertiary)' }}>{kpi.sub}</span>
+              <span className="dsh-kpi-sub">{kpi.sub}</span>
             </div>
             <div>
-              <div style={{ fontSize: '1.7rem', fontWeight: 800, lineHeight: 1, color: 'var(--color-text)' }}>{kpi.value}</div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 5, fontWeight: 600 }}>{kpi.label}</div>
+              <div className="dsh-kpi-value">{kpi.value}</div>
+              <div className="dsh-kpi-label">{kpi.label}</div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Charts Row */}
-      <div className="charts-row">
-        <div className="chart-card">
-          <div className="card-header">
-            <span className="card-title">สถานะ Ticket</span>
-            <span className="card-badge">ปัจจุบัน</span>
+      {/* แถบตัวกรอง — ควบคุม schoolFilter / filterDevice / filterStatus ที่ประกาศไว้ด้านบน */}
+      <div className="dsh-toolbar">
+        {schoolOptions.length > 1 && (
+          <div className="dsh-toolbar-field">
+            <label className="dsh-toolbar-label" htmlFor="dsh-filter-school">โรงเรียน</label>
+            <select
+              id="dsh-filter-school"
+              className="dsh-select"
+              value={activeSchoolFilter}
+              onChange={(e) => { setSchoolFilter(e.target.value); setFilterDevice(''); }}
+            >
+              <option value="">ทุกโรงเรียน ({scopedDevices.length} เครื่อง)</option>
+              {schoolOptions.map((s) => (
+                <option key={s} value={s}>{s} ({schoolCounts[s]})</option>
+              ))}
+            </select>
           </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={statusChartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#9894A4" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#9894A4" />
-                <RechartsTooltip
-                  contentStyle={{
-                    borderRadius: 8, border: '1px solid var(--color-border)',
-                    background: 'var(--color-surface)', fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={32}>
-                  {statusChartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        )}
+
+        <div className="dsh-toolbar-field">
+          <label className="dsh-toolbar-label" htmlFor="dsh-filter-device">อุปกรณ์</label>
+          <select
+            id="dsh-filter-device"
+            className="dsh-select"
+            value={filterDevice}
+            onChange={(e) => setFilterDevice(e.target.value)}
+          >
+            <option value="">ทุกอุปกรณ์</option>
+            {scopedDevices
+              .filter((d) => !activeSchoolFilter || schoolNameOf(d) === activeSchoolFilter)
+              .map((d) => (
+                <option key={d.device_id} value={d.device_id}>
+                  {d.device_id} · {d.device_type}
+                  {d.room_name || d.room_code ? ` · ${d.room_name || d.room_code}` : ''}
+                </option>
+              ))}
+          </select>
         </div>
 
-        <div className="chart-card">
-          <div className="card-header">
-            <span className="card-title">ยอด Ticket รายเดือน</span>
-            <span className="card-badge">2026</span>
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#9894A4" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#9894A4" />
-                <RechartsTooltip
-                  contentStyle={{
-                    borderRadius: 8, border: '1px solid var(--color-border)',
-                    background: 'var(--color-surface)', fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="value" fill="#7C3AED" radius={[6, 6, 0, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="dsh-toolbar-field">
+          <label className="dsh-toolbar-label" htmlFor="dsh-filter-status">สถานะ Ticket</label>
+          <select
+            id="dsh-filter-status"
+            className="dsh-select"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">ทุกสถานะ</option>
+            {['new', 'assigned', 'in_progress', 'pending', 'resolved', 'closed', 'cancelled'].map((s) => (
+              <option key={s} value={s}>{STATUS_LABELS_TICKET[s] || s}</option>
+            ))}
+          </select>
         </div>
+
+        <button
+          type="button"
+          className="btn btn-ghost dsh-toolbar-reset"
+          onClick={() => { setFilterDevice(''); setFilterStatus(''); setSchoolFilter(''); setDeviceTypeFilter(''); }}
+          disabled={!filterDevice && !filterStatus && !activeSchoolFilter && !deviceTypeFilter}
+        >
+          ล้างตัวกรอง
+        </button>
+
+        {(filterDevice || filterStatus || activeSchoolFilter) && (
+          <span className="dsh-toolbar-count" aria-live="polite">
+            แสดง {filteredTicketsEntities.length} Ticket · {filteredDevices.length} อุปกรณ์
+          </span>
+        )}
       </div>
 
-      {/* Pie chart: อุปกรณ์ตามประเภท */}
-      <div className="chart-card" style={{ marginBottom: 'var(--spacing-xl)' }}>
-        <div className="card-header">
-          <span className="card-title">อุปกรณ์ตามประเภท</span>
-          <span className="card-badge">ทั้งหมด {stats?.total_devices ?? 0} เครื่อง</span>
-        </div>
-        <div className="chart-pie-container">
-          {deviceTypeData.length === 0 ? (
-            <div className="empty-state" style={{ padding: '40px' }}>
-              <span className="empty-text">ยังไม่มีข้อมูลอุปกรณ์</span>
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={deviceTypeData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  dataKey="value"
-                  paddingAngle={2}
-                >
-                  {deviceTypeData.map((entry, i) => (
-                    <Cell key={i} fill={DEVICE_PIE_COLORS[i % DEVICE_PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip
-                  contentStyle={{
-                    borderRadius: 8, border: '1px solid var(--color-border)',
-                    background: 'var(--color-surface)', fontSize: 12,
-                  }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  iconType="circle"
-                  iconSize={8}
-                  formatter={(value) => value}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+      {/* Charts + Pie — โหลดแยกก้อนตอนเปิดหน้า Dashboard (ดู DashboardCharts.tsx) */}
+      <React.Suspense fallback={<ChartsFallback />}>
+        <DashboardCharts
+          statusData={statusChartData}
+          monthlyData={monthlyData}
+          monthlyRangeLabel={monthlyRangeLabel}
+          deviceTypeData={deviceTypeData}
+          totalDevices={filteredDevices.length}
+        />
+      </React.Suspense>
 
       {/* Tickets Table */}
-      <div className="page-section">
-        <div className="section-header">
-          <span className="section-title">Ticket ล่าสุด</span>
+      <div className="dsh-card">
+        <div className="dsh-card-head">
+          <span className="dsh-card-title">Ticket ล่าสุด</span>
+          <span className="dsh-card-badge">{Math.min(filteredTicketsEntities.length, 10)} / {filteredTicketsEntities.length}</span>
         </div>
-        <div className="section-body">
+        <div className="dsh-card-body dsh-card-body--flush">
           {filteredTicketsEntities.length === 0 ? (
-            <div className="empty-state" style={{ padding: '32px 16px' }}>
-              <svg className="empty-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="3" y="5" width="18" height="14" rx="2"/>
-                <path d="M3 10h18M8 20a2 2 0 004 0M12 20a2 2 0 004 0M16 20a2 2 0 004 0"/>
-              </svg>
-              <span className="empty-text">ยังไม่มี Ticket</span>
-            </div>
+            <div className="dsh-empty">ยังไม่มี Ticket</div>
           ) : (
-            <div className="table-wrap">
-              <table className="data-table">
+            <div className="dsh-table-wrap">
+              <table className="dsh-table">
                 <thead>
                   <tr>
                     <th>Ticket ID</th>
@@ -977,13 +1096,11 @@ function DashboardContent({
                 <tbody>
                   {filteredTicketsEntities.slice(0, 10).map((ticket) => (
                     <tr key={ticket.ticket_id}>
-                      <td className="table-id">{ticket.ticket_id}</td>
+                      <td className="dsh-td-id">{ticket.ticket_id}</td>
                       <td>
-                        <div className="table-meta">
-                          <span style={{ fontWeight: 500 }}>{ticket.device_id}</span>
-                        </div>
+                        <span style={{ fontWeight: 500 }}>{ticket.device_id}</span>
                       </td>
-                      <td>{ticket.title}</td>
+                      <td className="dsh-td-wrap">{ticket.title}</td>
                       <td>
                         <span className={`badge badge-${ticket.status}`}>
                           {ticket.status.replace(/_/g, ' ')}
@@ -994,7 +1111,7 @@ function DashboardContent({
                           {ticket.priority}
                         </span>
                       </td>
-                      <td style={{ color: 'var(--color-text-tertiary)', fontSize: '0.8rem' }}>
+                      <td className="dsh-td-muted">
                         {new Date(ticket.created_at).toLocaleDateString('th-TH', {
                           day: '2-digit', month: 'short', year: 'numeric',
                         })}
@@ -1009,54 +1126,95 @@ function DashboardContent({
       </div>
 
       {/* Device List */}
-      <div className="page-section">
-        <div className="section-header">
-          <span className="section-title">อุปกรณ์ทั้งหมด</span>
-          <span className="section-subnote" style={{ fontSize: '0.78rem', color: 'var(--color-text-tertiary)' }}>
-            สแกน QR ที่ตัวอุปกรณ์เพื่อแจ้งซ่อม
+      <div className="dsh-card">
+        <div className="dsh-card-head">
+          <span className="dsh-card-title">อุปกรณ์ทั้งหมด</span>
+          <span className="dsh-card-note">
+            {activeSchoolFilter
+              ? `${activeSchoolFilter} · `
+              : `${devicesBySchool.length} โรงเรียน · `}
+            {activeTypeFilter
+              ? `${visibleDevices.length} เครื่อง · หมวด ${activeTypeFilter} (ทั้งหมด ${filteredDevices.length})`
+              : `${filteredDevices.length} เครื่อง · ${deviceTypeOptions.length} หมวดหมู่ · สแกน QR ที่ตัวอุปกรณ์เพื่อแจ้งซ่อม`}
           </span>
+          <select
+            className="dsh-select"
+            value={activeTypeFilter}
+            onChange={(e) => setDeviceTypeFilter(e.target.value)}
+            aria-label="เลือกหมวดหมู่อุปกรณ์"
+            disabled={deviceTypeOptions.length === 0}
+          >
+            <option value="">ทุกหมวดหมู่อุปกรณ์</option>
+            {deviceTypeOptions.map((t) => (
+              <option key={t} value={t}>{t} ({deviceTypeCounts[t]})</option>
+            ))}
+          </select>
         </div>
-        <div className="section-body">
-          {filteredDevices.length === 0 ? (
-            <div className="empty-state" style={{ padding: '32px 16px' }}>
-              <svg className="empty-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="2" y="4" width="20" height="14" rx="2"/>
-                <path d="M2 10h20M12 14v6"/>
-              </svg>
-              <span className="empty-text">ไม่มีอุปกรณ์</span>
+        <div className="dsh-card-body dsh-card-body--flush">
+          {visibleDevices.length === 0 ? (
+            <div className="dsh-empty">
+              {activeTypeFilter ? `ไม่มีอุปกรณ์ในหมวด "${activeTypeFilter}"` : 'ไม่มีอุปกรณ์'}
             </div>
           ) : (
-            <div className="device-grid">
-              {filteredDevices.map((device) => (
-                <div
-                  key={device.device_id}
-                  className="device-card"
-                  onClick={() => onOpenRepairPanel(device.device_id)}
-                >
-                  <div className="device-card-top">
-                    <div className="device-card-icon-box">
-                      <DeviceIconSvg type={device.device_type} />
-                    </div>
-                    <span className={`role-badge ${device.page_role ? (DEVICE_PAGE_ROLES[device.page_role] ?? 'other') : 'other'}`}>
-                      {device.page_role === 'none' ? '-' : device.page_role ? (DEVICE_PAGE_ROLE_BADGE[device.page_role] ?? device.page_role) : '-'}
+            <div className="dsh-device-pane">
+              {devicesBySchool.map((group) => (
+                <section className="dsh-school-group" key={group.school}>
+                  <div className="dsh-school-head">
+                    <span className="dsh-school-name">{group.school}</span>
+                    <span className="dsh-school-meta">
+                      {group.items.length} เครื่อง · {group.types.length} หมวดหมู่
                     </span>
                   </div>
-                  <div className="device-card-id">{device.device_id}</div>
-                  <div className="device-card-type">{device.device_type}</div>
-                  <div className="device-card-room">
-                    {device.room_name || device.room_code || '—'} • {device.organization_name || device.organization?.name || '—'}
-                  </div>
-                  <div className="device-card-bottom">
-                    <div className="device-card-actions">
-                      <button className="btn btn-primary btn-sm">
-                        แจ้งซ่อม
+                  {/* ชิปหมวดหมู่ของโรงเรียนนี้ — กดเพื่อกรอง/ยกเลิกกรองหมวดเดียวกับ select ด้านบน */}
+                  <div className="dsh-school-chips">
+                    {group.types.map((t) => (
+                      <button
+                        type="button"
+                        key={t}
+                        className={activeTypeFilter === t ? 'dsh-type-chip is-active' : 'dsh-type-chip'}
+                        aria-pressed={activeTypeFilter === t}
+                        title={activeTypeFilter === t ? `ยกเลิกกรองหมวด ${t}` : `กรองเฉพาะหมวด ${t}`}
+                        onClick={() => setDeviceTypeFilter(activeTypeFilter === t ? '' : t)}
+                      >
+                        <span className="dsh-type-chip-name">{t}</span>
+                        <span className="dsh-type-chip-n">{group.typeCounts[t]}</span>
                       </button>
-                      <button className="btn btn-secondary btn-sm">
-                        ดูรายละเอียด
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                </div>
+                  <div className="device-grid">
+                    {group.items.map((device) => (
+                      <div
+                        key={device.device_id}
+                        className="device-card"
+                        onClick={() => onOpenRepairPanel(device.device_id)}
+                      >
+                        <div className="device-card-top">
+                          <div className="device-card-icon-box">
+                            <DeviceIconSvg type={device.device_type} />
+                          </div>
+                          <span className={`role-badge ${device.page_role ? (DEVICE_PAGE_ROLES[device.page_role] ?? 'other') : 'other'}`}>
+                            {device.page_role === 'none' ? '-' : device.page_role ? (DEVICE_PAGE_ROLE_BADGE[device.page_role] ?? device.page_role) : '-'}
+                          </span>
+                        </div>
+                        <div className="device-card-id">{device.device_id}</div>
+                        <div className="device-card-type">{device.device_type}</div>
+                        <div className="device-card-room">
+                          {device.room_name || device.room_code || '—'}
+                        </div>
+                        <div className="device-card-bottom">
+                          <div className="device-card-actions">
+                            <button className="btn btn-primary btn-sm">
+                              แจ้งซ่อม
+                            </button>
+                            <button className="btn btn-secondary btn-sm">
+                              ดูรายละเอียด
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}
@@ -1083,6 +1241,56 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
 }) {
   const [updating, setUpdating] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // ── ตัวกรองรายการ Ticket: คำค้น / สถานะ / ความเร่งด่วน / ประเภทอุปกรณ์ ──
+  const [q, setQ] = useState('');
+  const [fStatus, setFStatus] = useState('');
+  const [fPriority, setFPriority] = useState('');
+  const [fType, setFType] = useState('');
+  const [fCategory, setFCategory] = useState('');
+  // กรองเป็นหมวดโรงเรียน — เก็บเป็น organization_id (string) เพื่อไม่ชนกรณีชื่อซ้ำ
+  const [fOrg, setFOrg] = useState('');
+
+  // ประเภทอุปกรณ์เอาจากรายการที่มีจริง ไม่ต้องเรียก API เพิ่ม
+  const deviceTypes = Array.from(
+    new Set(tickets.map((t) => (t.device_type || '').trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, 'th'));
+
+  // หมวดหมู่อุปกรณ์เอาจาก ticket ที่มีจริงเช่นกัน (backend map ประเภท → หมวดให้แล้ว)
+  const deviceCategories = Array.from(
+    new Set(tickets.map((t) => (t.device_category || '').trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, 'th'));
+
+  // รายชื่อโรงเรียนจาก ticket ที่มองเห็นจริง (Map กัน id ซ้ำ) → [id, ป้ายที่แสดง]
+  const ticketOrgs = Array.from(
+    new Map(
+      tickets
+        .filter((t) => t.organization_id != null)
+        .map((t) => [
+          String(t.organization_id),
+          `${t.organization_name || 'ไม่ระบุโรงเรียน'}${t.organization_code ? ` (${t.organization_code})` : ''}`,
+        ] as [string, string]),
+    ).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1], 'th'));
+
+  const kw = q.trim().toLowerCase();
+  const filtered = tickets.filter((t) => {
+    if (fStatus && t.status !== fStatus) return false;
+    if (fPriority && t.priority !== fPriority) return false;
+    if (fType && (t.device_type || '') !== fType) return false;
+    if (fCategory && (t.device_category || '') !== fCategory) return false;
+    if (fOrg && String(t.organization_id ?? '') !== fOrg) return false;
+    if (!kw) return true;
+    // ค้นด้วยชื่ออุปกรณ์/โรงเรียนได้ด้วย ไม่ใช่แค่รหัส
+    return [
+      t.ticket_id, t.device_id, t.device_label, t.device_category,
+      t.organization_name, t.organization_code,
+      t.title, t.reporter_name, t.description,
+    ].some((v) => (v || '').toLowerCase().includes(kw));
+  });
+  const hasFilter = !!(kw || fStatus || fPriority || fType || fCategory || fOrg);
+  const clearFilters = () => {
+    setQ(''); setFStatus(''); setFPriority(''); setFType(''); setFCategory(''); setFOrg('');
+  };
 
   const handleStatusChange = async (ticketId: string, newStatus: string) => {
     if (!newStatus) return;
@@ -1121,23 +1329,117 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
           </button>
           <div>
             <h1 className="top-bar-title">Tickets</h1>
-            <span className="top-bar-subtitle">{tickets.length} รายการ</span>
+            <span className="top-bar-subtitle">
+              {hasFilter ? `${filtered.length} / ${tickets.length} รายการ` : `${tickets.length} รายการ`}
+            </span>
           </div>
         </div>
         <div className="top-bar-actions">
-          <button className="btn btn-ghost" onClick={onTicketsChanged}>⟳ รีเฟรช</button>
+          <button className="btn btn-ghost" onClick={onTicketsChanged}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginRight: 6, verticalAlign: '-2px' }}>
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            รีเฟรช
+          </button>
         </div>
       </div>
 
       <div className="page-section">
         <div className="section-body">
-          {tickets.length === 0 ? (
+          <div
+            style={{
+              display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
+              marginBottom: 'var(--spacing-md)',
+            }}
+          >
+            <input
+              className="form-input"
+              style={{ flex: '1 1 200px', minWidth: 160, maxWidth: 340 }}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="ค้นหา: เลข Ticket / อุปกรณ์ / หัวข้อ / ผู้แจ้ง"
+              aria-label="ค้นหา Ticket"
+            />
+            <select
+              className="form-select"
+              style={{ flex: '0 1 190px', minWidth: 150 }}
+              value={fStatus}
+              onChange={(e) => setFStatus(e.target.value)}
+              aria-label="กรองตามสถานะ"
+            >
+              <option value="">ทุกสถานะ</option>
+              {ALL_STATUSES.map((s) => (
+                <option key={s} value={s}>{STATUS_LABELS_TICKET[s]}</option>
+              ))}
+            </select>
+            <select
+              className="form-select"
+              style={{ flex: '0 1 170px', minWidth: 140 }}
+              value={fPriority}
+              onChange={(e) => setFPriority(e.target.value)}
+              aria-label="กรองตามความเร่งด่วน"
+            >
+              <option value="">ทุกความเร่งด่วน</option>
+              <option value="low">low</option>
+              <option value="normal">normal</option>
+              <option value="high">high</option>
+              <option value="critical">critical</option>
+            </select>
+            <select
+              className="form-select"
+              style={{ flex: '0 1 190px', minWidth: 150 }}
+              value={fType}
+              onChange={(e) => setFType(e.target.value)}
+              aria-label="กรองตามประเภทอุปกรณ์"
+              disabled={deviceTypes.length === 0}
+            >
+              <option value="">ทุกประเภทอุปกรณ์</option>
+              {deviceTypes.map((dt) => (
+                <option key={dt} value={dt}>{dt}</option>
+              ))}
+            </select>
+            <select
+              className="form-select"
+              style={{ flex: '0 1 190px', minWidth: 150 }}
+              value={fCategory}
+              onChange={(e) => setFCategory(e.target.value)}
+              aria-label="กรองตามหมวดหมู่อุปกรณ์"
+              disabled={deviceCategories.length === 0}
+            >
+              <option value="">ทุกหมวดหมู่อุปกรณ์</option>
+              {deviceCategories.map((dc) => (
+                <option key={dc} value={dc}>{dc}</option>
+              ))}
+            </select>
+            <select
+              className="form-select"
+              style={{ flex: '0 1 220px', minWidth: 160 }}
+              value={fOrg}
+              onChange={(e) => setFOrg(e.target.value)}
+              aria-label="กรองตามโรงเรียน"
+              disabled={ticketOrgs.length === 0}
+            >
+              <option value="">ทุกโรงเรียน</option>
+              {ticketOrgs.map(([id, label]) => (
+                <option key={id} value={id}>{label}</option>
+              ))}
+            </select>
+            {hasFilter && (
+              <button type="button" className="btn btn-ghost" onClick={clearFilters}>
+                ล้างตัวกรอง
+              </button>
+            )}
+          </div>
+          {filtered.length === 0 ? (
             <div className="empty-state" style={{ padding: '32px 16px' }}>
               <svg className="empty-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="3" y="5" width="18" height="14" rx="2"/>
                 <path d="M3 10h18M8 20a2 2 0 004 0M12 20a2 2 0 004 0M16 20a2 2 0 004 0"/>
               </svg>
-              <span className="empty-text">ไม่มี Ticket</span>
+              <span className="empty-text">
+                {tickets.length === 0 ? 'ไม่มี Ticket' : 'ไม่พบ Ticket ที่ตรงกับตัวกรอง'}
+              </span>
             </div>
           ) : (
             <div className="table-wrap">
@@ -1155,13 +1457,17 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.map((ticket) => (
+                  {filtered.map((ticket) => (
                     <tr key={ticket.ticket_id}>
                       <td className="table-id">{ticket.ticket_id}</td>
                       <td>
                         <div className="table-meta">
                           <span style={{ fontWeight: 500 }}>{ticket.device_id}</span>
-                          <span className="table-meta-row">{ticket.device_type || ''}</span>
+                          <span className="table-meta-row">
+                            {ticket.device_label || ticket.device_type || ''}
+                            {ticket.device_category ? ` · ${ticket.device_category}` : ''}
+                            {ticket.organization_name ? ` · ${ticket.organization_name}` : ''}
+                          </span>
                         </div>
                       </td>
                       <td>{ticket.title}</td>
@@ -1231,7 +1537,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
     reporter_name: '',
     reporter_email: '',
     reporter_phone: '',
-    reporter_type: 'teacher',
+    reporter_type: DEFAULT_REPORTER_TYPE,
     priority: 'normal',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -1285,7 +1591,9 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
       };
 
       const result = await api.createTicket(payload);
-      setSuccessTicketId(result.ticket_id || 'SC-xxxx');
+      // ไม่ใส่เลขตัวอย่างปลอม ('SC-xxxx' เป็นรูปแบบเก่าและทำให้ผู้แจ้งจดเลขผิด)
+      // ถ้า backend ไม่คืนเลขมา ให้เว้นไว้ แล้วให้ผู้ใช้ไปดูจากหน้าติดตามสถานะ
+      setSuccessTicketId(result.ticket_id || '');
       setSubmitted(true);
       setTimeout(() => {
         onSubmit({ success: true, ticket_id: result.ticket_id });
@@ -1310,7 +1618,11 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
         <div className="repair-panel-body">
           {submitted ? (
             <div className="success-state">
-              <div className="success-icon">✓</div>
+              <div className="success-icon" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </div>
               <div className="success-title">ส่งคำร้องเรียบร้อยแล้ว</div>
               <div className="success-sub">หมายเลข Ticket:</div>
               <div className="success-ticket-id">{successTicketId}</div>
@@ -1346,7 +1658,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
                   border: '1px solid var(--color-border)',
                 }}>
                   <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                    🕘 งานแจ้งซ่อมล่าสุดของเครื่องนี้
+                    งานแจ้งซ่อมล่าสุดของเครื่องนี้
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <strong style={{ color: 'var(--color-primary)' }}>{recentTicket.ticket_id}</strong>
@@ -1362,7 +1674,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
                     style={{ display: 'inline-block', marginTop: 8, color: 'var(--color-primary)', fontWeight: 600, fontSize: '0.8rem' }}
                     onClick={(e) => { e.preventDefault(); window.location.href = `/?ticket=${encodeURIComponent(recentTicket.ticket_id)}`; }}
                   >
-                    📋 ดูสถานะงานนี้ → (ไม่ต้องเข้าสู่ระบบ)
+                    ดูสถานะงานนี้ → (ไม่ต้องเข้าสู่ระบบ)
                   </a>
                 </div>
               )}
@@ -1411,11 +1723,9 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
                     value={form.reporter_type}
                     onChange={(e) => setField('reporter_type', e.target.value)}
                   >
-                    <option value="teacher">ครูผู้สอน</option>
-                    <option value="staff">เจ้าหน้าที่</option>
-                    <option value="student">นักเรียน/นักศึกษา</option>
-                    <option value="it_admin">เจ้าหน้าที่ IT</option>
-                    <option value="other">อื่นๆ</option>
+                    {REPORTER_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1511,7 +1821,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
     reporter_name: '',
     reporter_email: '',
     reporter_phone: '',
-    reporter_type: 'teacher',
+    reporter_type: DEFAULT_REPORTER_TYPE,
     priority: 'normal',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -1524,7 +1834,23 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
   const [diag, setDiag] = useState<any | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
   // กันแจ้งซ้ำ (409)
-  const [dupAlert, setDupAlert] = useState<{ existing_ticket_no?: string; existing_status?: string } | null>(null);
+  const [dupAlert, setDupAlert] = useState<{
+    existing_ticket_no?: string;
+    existing_status?: string;
+    existing_status_label?: string;
+    existing_device_label?: string;
+    existing_title?: string;
+    can_add_note?: boolean;
+  } | null>(null);
+  // งานค้างที่ตรวจล่วงหน้าตอนเปิดหน้า — ไม่ต้องให้ผู้แจ้งกรอกทั้งใบแล้วค่อยเจอ 409
+  const [openTicket, setOpenTicket] = useState<any | null>(null);
+  // แจ้งอาการ/ข้อมูลเพิ่มเข้าใบเดิมที่ยังไม่ปิด — ใช้แทนการเปิดใบซ้ำ
+  const [noteText, setNoteText] = useState('');
+  const [noteSending, setNoteSending] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [noteDone, setNoteDone] = useState<string | null>(null);
+  // เลื่อนหน้าจอไปที่กล่องงานค้างเมื่อกดส่งแล้วเจอ 409 (กล่องอยู่เหนือฟอร์ม อาจพ้นจอ)
+  const blockRef = React.useRef<HTMLDivElement | null>(null);
   // งานล่าสุดของเครื่อง (ช่วยหาเลขคืนถ้าลืม — ตรงตามที่ต้องการ)
   const [recentTicket, setRecentTicket] = useState<any | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
@@ -1538,6 +1864,10 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
     api.getDeviceRecent(deviceId)
       .then((r: any) => { setRecentTicket(r?.recent_ticket ?? null); setRecentLoading(false); })
       .catch(() => { setRecentLoading(false); });
+    // อุปกรณ์นี้มีงานค้างอยู่ไหม — รู้ก่อนกรอก จะได้แจ้งเพิ่มเข้าใบเดิมแทนการเปิดใบซ้ำ
+    api.publicDeviceOpenTicket(deviceId)
+      .then((r: any) => { setOpenTicket(r?.has_open_ticket ? (r.open_ticket ?? null) : null); })
+      .catch(() => { setOpenTicket(null); });
   }, [deviceId]);
 
   const setField = (field: string, value: string) => {
@@ -1548,10 +1878,23 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    setNoteError(null);
+    setNoteDone(null);
 
     if (!form.title.trim()) {
       setError('โปรดระบุหัวข้อ');
       setSubmitting(false);
+      return;
+    }
+
+    // มีใบงานค้างอยู่แล้ว → ไม่ต้องยิงให้ backend ตอบ 409 ซ้ำ ชี้ไปที่ช่องแจ้งเพิ่มเลย
+    if (openTicket && openTicket.can_add_note !== false) {
+      setError(
+        `อุปกรณ์นี้มีใบงานค้างอยู่ (${openTicket.ticket_no || '-'}) — ` +
+        'กรุณาแจ้งอาการเพิ่มเข้าใบเดิมในกล่องด้านบน ระบบไม่สร้าง Ticket ซ้ำ'
+      );
+      setSubmitting(false);
+      blockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -1579,11 +1922,65 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
     } catch (err: any) {
       // กันแจ้งซ้ำ: อุปกรณ์มี ticket ค้างอยู่ (409 DUPLICATE_OPEN_TICKET)
       if (err?.status === 409 && err?.code === 'DUPLICATE_OPEN_TICKET') {
-        setDupAlert({ existing_ticket_no: err.detail?.existing_ticket_no, existing_status: err.detail?.existing_status });
+        const d = err.detail || {};
+        setDupAlert({
+          existing_ticket_no: d.existing_ticket_no,
+          existing_status: d.existing_status,
+          existing_status_label: d.existing_status_label || d.open_ticket?.status_label,
+          existing_device_label: d.existing_device_label || d.open_ticket?.device_label,
+          existing_title: d.existing_title || d.open_ticket?.title,
+          can_add_note: d.can_add_note !== false,
+        });
+        setError('อุปกรณ์นี้มีใบงานค้างอยู่ — แจ้งอาการเพิ่มเข้าใบเดิมได้ในกล่องด้านบน');
+        // กล่องรายละเอียด + ช่องแจ้งเพิ่มอยู่เหนือฟอร์ม เลื่อนไปให้เห็นหลัง state อัปเดต
+        setTimeout(
+          () => blockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+          0,
+        );
       } else {
         setError(err.message || 'เกิดข้อผิดพลาด');
       }
       setSubmitting(false);
+    }
+  };
+
+  /** ส่งอาการ/ข้อมูลเพิ่มเข้า Ticket เดิม (ไม่ต้องล็อกอิน) — ไม่เปลี่ยนสถานะงาน ไม่ทับข้อมูลเดิม */
+  const handleAddNote = async () => {
+    const ticketNo = (dupAlert?.existing_ticket_no || openTicket?.ticket_no || '').trim();
+    if (!ticketNo) return;
+    const note = noteText.trim();
+    const name = form.reporter_name.trim();
+    if (note.length < 3) {
+      setNoteError('กรุณาระบุอาการหรือข้อมูลที่ต้องการแจ้งเพิ่ม (อย่างน้อย 3 ตัวอักษร)');
+      return;
+    }
+    if (!name) {
+      setNoteError('กรุณากรอกชื่อผู้แจ้งในฟอร์มด้านล่างก่อน');
+      return;
+    }
+    setNoteError(null);
+    setNoteDone(null);
+    setNoteSending(true);
+    try {
+      const res = await api.publicAddTicketNote(ticketNo, {
+        note,
+        reporter_name: name,
+        reporter_phone: form.reporter_phone.trim() || undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
+      setNoteDone(res?.message || `บันทึกข้อมูลเพิ่มเข้า Ticket ${ticketNo} เรียบร้อยแล้ว`);
+      setNoteText('');
+    } catch (err: any) {
+      if (err?.status === 409) {
+        // งานถูกปิดไปแล้วระหว่างที่ผู้แจ้งกรอก → เปิดทางให้แจ้งซ่อมใบใหม่
+        setNoteError(err?.detail?.message || err?.message || 'Ticket นี้ปิดงานแล้ว — กรุณาแจ้งซ่อมใหม่');
+        setDupAlert((d) => (d ? { ...d, can_add_note: false } : d));
+        setOpenTicket((t: any) => (t ? { ...t, can_add_note: false } : t));
+      } else {
+        setNoteError(err?.message || 'ส่งข้อมูลเพิ่มไม่สำเร็จ กรุณาลองอีกครั้ง');
+      }
+    } finally {
+      setNoteSending(false);
     }
   };
 
@@ -1630,6 +2027,26 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
     }
   };
 
+  // งานค้างที่ต้องแจ้งเพิ่มเข้าใบเดิม — รวมทั้งที่ตรวจล่วงหน้า (open-ticket) และที่ 409 ตอบกลับ
+  // ให้เป็นรูปแบบเดียว เพื่อให้ UI มีที่เดียวไม่ต้องเขียนกล่องเตือนสองแบบ
+  const blocking = dupAlert
+    ? {
+        ticket_no: dupAlert.existing_ticket_no || '',
+        status_label: dupAlert.existing_status_label || dupAlert.existing_status || '',
+        device_label: dupAlert.existing_device_label || '',
+        title: dupAlert.existing_title || '',
+        can_add_note: dupAlert.can_add_note !== false,
+      }
+    : openTicket
+      ? {
+          ticket_no: openTicket.ticket_no || '',
+          status_label: openTicket.status_label || openTicket.status || '',
+          device_label: openTicket.device_label || '',
+          title: openTicket.title || '',
+          can_add_note: openTicket.can_add_note !== false,
+        }
+      : null;
+
   return (
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 480 }}>
@@ -1646,7 +2063,11 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
 
         {submitted ? (
           <div className="success-state">
-            <div className="success-icon">✓</div>
+            <div className="success-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
             <div className="success-title">ส่งคำร้องเรียบร้อยแล้ว</div>
             <div className="success-sub">หมายเลข Ticket:</div>
             <div className="success-ticket-id">{ticketId}</div>
@@ -1661,7 +2082,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
               style={{ marginTop: 8, width: '100%' }}
               onClick={() => window.location.href = `/?ticket=${encodeURIComponent(ticketId)}`}
             >
-              📋 ติดตามสถานะ Ticket นี้
+              ติดตามสถานะ Ticket นี้
             </button>
           </div>
         ) : (
@@ -1694,19 +2115,105 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
               </div>
             )}
 
+            {/* มีใบงานค้างอยู่แล้ว → แจ้งอาการเพิ่มเข้าใบเดิม ไม่เปิดใบซ้ำ */}
+            {blocking && !submitted && (
+              <div
+                ref={blockRef}
+                style={{
+                  padding: '14px 16px',
+                  marginBottom: 16,
+                  background: 'var(--color-warning-light)',
+                  border: '1px solid var(--color-warning, #F59E0B)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--badge-warning-text, #92400E)',
+                  fontSize: '0.85rem',
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                  อุปกรณ์นี้มีการแจ้งซ่อมที่ยังไม่ปิดอยู่แล้ว
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <strong>{blocking.ticket_no || '-'}</strong>
+                  {blocking.status_label && <span>· สถานะ: {blocking.status_label}</span>}
+                </div>
+                {blocking.title && (
+                  <div style={{ fontSize: '0.8rem', marginTop: 2 }}>อาการที่แจ้งไว้: {blocking.title}</div>
+                )}
+                {blocking.device_label && blocking.device_label !== '-' && (
+                  <div style={{ fontSize: '0.8rem', marginTop: 2 }}>อุปกรณ์: {blocking.device_label}</div>
+                )}
+                {blocking.ticket_no && (
+                  <a
+                    href={`/?ticket=${encodeURIComponent(blocking.ticket_no)}`}
+                    style={{ display: 'inline-block', marginTop: 8, color: 'var(--color-primary)', fontWeight: 600, fontSize: '0.8rem' }}
+                  >
+                    ดูสถานะ Ticket นี้ → (ไม่ต้องเข้าสู่ระบบ)
+                  </a>
+                )}
+
+                {blocking.can_add_note ? (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border, rgba(0,0,0,0.12))' }}>
+                    <label className="form-label" htmlFor="public-add-note">
+                      แจ้งอาการ/ข้อมูลเพิ่มเข้า Ticket นี้
+                    </label>
+                    <textarea
+                      id="public-add-note"
+                      className="form-textarea"
+                      rows={3}
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="เช่น อาการแย่ลง จอดับเองบ่อยขึ้น / ใช้ห้องช่วงบ่ายไม่ได้"
+                      maxLength={2000}
+                      disabled={noteSending}
+                    />
+                    <div style={{ fontSize: '0.72rem', marginTop: 4, opacity: 0.9 }}>
+                      กรอกชื่อผู้แจ้งในฟอร์มด้านล่างก่อนกดส่ง
+                      {attachments.length > 0 ? ` · รูปที่แนบไว้ ${attachments.length} รูปจะถูกส่งไปด้วย` : ''}
+                    </div>
+                    {noteError && (
+                      <div role="alert" style={{ color: 'var(--color-danger)', fontSize: '0.78rem', marginTop: 6 }}>
+                        {noteError}
+                      </div>
+                    )}
+                    {noteDone && (
+                      <div role="status" style={{ color: 'var(--color-success, #047857)', fontSize: '0.78rem', marginTop: 6, fontWeight: 600 }}>
+                        {noteDone}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ width: '100%', marginTop: 8 }}
+                      onClick={handleAddNote}
+                      disabled={noteSending || !noteText.trim()}
+                    >
+                      {noteSending ? 'กำลังส่ง...' : 'ส่งข้อมูลเพิ่มเข้า Ticket เดิม'}
+                    </button>
+                    <div style={{ fontSize: '0.72rem', marginTop: 6, opacity: 0.9 }}>
+                      ระบบไม่สร้าง Ticket ซ้ำ — ข้อมูลที่ส่งจะเข้าไปในงานเดิมให้ช่างเห็นตามลำดับเวลา
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.78rem', marginTop: 8 }}>
+                    งานเดิมปิดแล้ว — กรอกฟอร์มด้านล่างเพื่อแจ้งซ่อมใหม่ได้เลย
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* งานแจ้งซ่อมล่าสุดของเครื่องนี้ (ช่วยผู้ใช้ที่ลืมเลขหาเลขคืน) */}
             {recentLoading && (
               <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
                 กำลังตรวจสอบประวัติการแจ้งซ่อม...
               </div>
             )}
-            {!recentLoading && recentTicket && !submitted && (
+            {!recentLoading && recentTicket && !blocking && !submitted && (
               <div style={{
                 padding: '12px 14px', marginBottom: 16,
                 background: 'var(--color-info-light)', borderRadius: 'var(--radius-md)',
                 fontSize: '0.85rem', border: '1px solid var(--color-primary-light)',
               }}>
-                <div style={{ fontWeight: 700, marginBottom: 6 }}>🕘 งานแจ้งซ่อมล่าสุดของเครื่องนี้</div>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>งานแจ้งซ่อมล่าสุดของเครื่องนี้</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <strong style={{ color: 'var(--color-primary)' }}>{recentTicket.ticket_id}</strong>
                   <span className={`badge badge-${recentTicket.status}`} style={{ fontSize: '0.68rem' }}>
@@ -1726,7 +2233,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                   href={`/?ticket=${encodeURIComponent(recentTicket.ticket_id)}`}
                   style={{ display: 'inline-block', marginTop: 8, color: 'var(--color-primary)', fontWeight: 600, fontSize: '0.8rem' }}
                 >
-                  📋 ดูสถานะงานนี้ → (ไม่ต้องเข้าสู่ระบบ)
+                  ดูสถานะงานนี้ → (ไม่ต้องเข้าสู่ระบบ)
                 </a>
                 <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                   ลืมเลข Ticket ไหม? กดดูสถานะด้านบน หรือแจ้งซ่อมใหม่ด้านล่าง
@@ -1777,11 +2284,9 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                     value={form.reporter_type}
                     onChange={(e) => setField('reporter_type', e.target.value)}
                   >
-                    <option value="teacher">ครูผู้สอน</option>
-                    <option value="staff">เจ้าหน้าที่</option>
-                    <option value="student">นักเรียน/นักศึกษา</option>
-                    <option value="it_admin">เจ้าหน้าที่ IT</option>
-                    <option value="other">อื่นๆ</option>
+                    {REPORTER_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1836,32 +2341,8 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                 </div>
               )}
 
-              {/* กันแจ้งซ้ำ: อุปกรณ์มี ticket ค้างอยู่ */}
-              {dupAlert && (
-                <div style={{
-                  padding: '12px 14px',
-                  marginBottom: 'var(--spacing-md)',
-                  background: 'var(--color-warning-light)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.85rem',
-                  color: '#92400E',
-                }}>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠️ อุปกรณ์นี้มีการแจ้งซ่อมที่ยังไม่ปิดอยู่แล้ว</div>
-                  <div>
-                    Ticket ที่ค้างอยู่: <strong>{dupAlert.existing_ticket_no || '-'}</strong>
-                    {' · '}สถานะ: {dupAlert.existing_status || '-'}
-                  </div>
-                  <a
-                    href={`/?ticket=${encodeURIComponent(dupAlert.existing_ticket_no || '')}`}
-                    style={{ color: 'var(--color-primary)', fontWeight: 600, fontSize: '0.8rem' }}
-                  >
-                    📋 ดูสถานะ Ticket นี้
-                  </a>
-                  <div style={{ fontSize: '0.75rem', marginTop: 4, color: '#78350F' }}>
-                    กรุณารอเจ้าหน้าที่ดำเนินการงานเดิมก่อน — ระบบไม่สร้าง Ticket ซ้ำ
-                  </div>
-                </div>
-              )}
+              {/* กันแจ้งซ้ำ: รายละเอียดงานค้าง + ช่องแจ้งอาการเพิ่มเข้าใบเดิม
+                  อยู่ในกล่องเหนือฟอร์ม (blocking) แล้ว ไม่ซ้ำที่นี่อีก */}
 
               {/* AI วินิจฉัยเบื้องต้น (ตอบจาก KB เท่านั้น) */}
               <div style={{ marginBottom: 'var(--spacing-md)' }}>
@@ -1878,9 +2359,15 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                       กำลังวิเคราะห์อาการ...
                     </>
                   ) : diag ? (
-                    '⟳ วิเคราะห์ใหม่'
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginRight: 6, verticalAlign: '-2px' }}>
+                        <path d="M21 12a9 9 0 11-3.5-7.1" />
+                        <path d="M21 3v6h-6" />
+                      </svg>
+                      วิเคราะห์ใหม่
+                    </>
                   ) : (
-                    '🤖 ทดลองวินิจฉัยอัตโนมัติ (แนะนำวิธีแก้เบื้องต้น)'
+                    'ทดลองวินิจฉัยอัตโนมัติ (แนะนำวิธีแก้เบื้องต้น)'
                   )}
                 </button>
 
@@ -1892,7 +2379,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                     borderRadius: 'var(--radius-sm)',
                     fontSize: '0.83rem',
                   }}>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>💡 {diag.title || 'วิธีแก้ไขเบื้องต้น'}</div>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>{diag.title || 'วิธีแก้ไขเบื้องต้น'}</div>
                     <ol style={{ margin: '0 0 8px 18px', padding: 0 }}>
                       {(diag.steps || []).map((s: string, i: number) => (
                         <li key={i} style={{ marginBottom: 4 }}>{s}</li>
@@ -1913,14 +2400,14 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                             });
                             setDiag(null);
                             setForm((f) => ({ ...f, title: '', description: '' }));
-                            setError('🎉 ดีใจด้วยที่แก้ไขได้! บันทึกเป็นกรณีแก้เองแล้ว');
+                            setError('ดีใจด้วยที่แก้ไขได้ บันทึกเป็นกรณีแก้เองแล้ว');
                           } catch {
                             setDiag(null);
                             setForm((f) => ({ ...f, title: '', description: '' }));
                           }
                         }}
                       >
-                        ✅ แก้ไขได้แล้ว
+                        แก้ไขได้แล้ว
                       </button>
                       <button
                         type="button"
@@ -1956,14 +2443,19 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                         <button
                           type="button"
                           onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                          aria-label="ลบรูปนี้"
+                          title="ลบรูปนี้"
                           style={{
                             position: 'absolute', top: -6, right: -6,
                             background: 'var(--color-danger)', color: '#fff',
                             border: 'none', borderRadius: '50%', width: 18, height: 18,
-                            fontSize: 11, cursor: 'pointer', lineHeight: '18px',
+                            cursor: 'pointer', lineHeight: 0, padding: 0,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           }}
                         >
-                          ✕
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
                         </button>
                       </div>
                     ))}
@@ -2005,18 +2497,6 @@ const STATUS_LABELS_PUBLIC: Record<string, string> = {
   resolved: 'ซ่อมเสร็จแล้ว (Resolved)',
   closed: 'ปิดงาน (Closed)',
   cancelled: 'ยกเลิก (Cancelled)',
-};
-
-const STATUS_ICONS: Record<string, string> = {
-  new: '🕐',
-  assigned: '👤',
-  in_progress: '🔧',
-  pending: '📦',
-  waiting_parts: '📦',
-  waiting_user: '👤',
-  resolved: '✅',
-  closed: '🔒',
-  cancelled: '❌',
 };
 
 function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
@@ -2075,7 +2555,7 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
               className="form-input"
               value={ticketInput}
               onChange={(e) => setTicketInput(e.target.value.toUpperCase())}
-              placeholder="กรอกเลข Ticket เช่น SC-2026-00001"
+              placeholder="กรอกเลข Ticket เช่น TK.TEST1.26.0001-V"
               style={{ flex: 1 }}
             />
             <button type="submit" className="btn btn-primary" disabled={loading || !ticketInput.trim()}>
@@ -2093,7 +2573,7 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
             fontSize: '0.8rem',
             marginBottom: 16,
           }}>
-            {error} — ตรวจสอบเลข Ticket ให้ถูกต้อง (เช่น SC-2026-00001)
+            {error} — ตรวจสอบเลข Ticket ให้ถูกต้อง (เช่น TK.TEST1.26.0001-V)
           </div>
         )}
 
@@ -2108,7 +2588,7 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <div className="device-select-name" style={{ fontSize: '0.95rem' }}>{ticket.ticket_id}</div>
                   <span className={`badge badge-${ticket.status}`}>
-                    {STATUS_ICONS[ticket.status] || ''} {STATUS_LABELS_PUBLIC[ticket.status] || ticket.status}
+                    {STATUS_LABELS_PUBLIC[ticket.status] || ticket.status}
                   </span>
                 </div>
                 <div className="device-select-sub">{ticket.title}</div>
@@ -2123,7 +2603,7 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
                 <div className="form-label">ความเร่งด่วน</div>
                 <div style={{ fontSize: '0.85rem' }}>
                   <span className={`badge badge-priority badge-${ticket.priority}`}>
-                    {ticket.priority === 'critical' ? '🔥 เร่งด่วนมาก' : ticket.priority === 'high' ? 'High' : ticket.priority === 'low' ? 'Low' : 'Normal'}
+                    {ticket.priority === 'critical' ? 'เร่งด่วนมาก' : ticket.priority === 'high' ? 'High' : ticket.priority === 'low' ? 'Low' : 'Normal'}
                   </span>
                 </div>
               </div>
@@ -2150,7 +2630,6 @@ function TrackStatusView({ initialTicketId }: { initialTicketId?: string }) {
                     </div>
                     <div style={{ paddingBottom: 8, flex: 1 }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                        {STATUS_ICONS[h.to_status || h.status] || ''}{' '}
                         {STATUS_LABELS_PUBLIC[h.to_status || h.status] || h.to_status || h.status}
                       </div>
                       {h.note && <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: 2 }}>{h.note}</div>}
@@ -2271,39 +2750,59 @@ function AppInner() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState(false);
+  const loadGeneration = React.useRef(0);
 
   const { user } = auth;
   const needsOrgFilter = user?.role !== 'super_admin';
   const currentOrgId = user?.organization_id;
 
   // โหลดข้อมูลทั้งหมด (ใช้ซ้ำตอน refresh / submit / ลบ)
-  const reloadData = React.useCallback(() => {
-    Promise.all([
-      api.getStats(),
-      api.listTickets(),
-      api.listDevices(100),
-    ])
-      .then(([s, t, d]) => { setStats(s); setTickets(t); setDevices(d); })
-      .catch(() => {});
+  const reloadData = React.useCallback(async () => {
+    const generation = ++loadGeneration.current;
+    setLoading(true);
+    setDataError(false);
+    try {
+      const [s, t, d] = await Promise.all([
+        api.getStats(),
+        api.listAllTickets(),
+        api.listAllDevices(),
+      ]);
+      if (generation !== loadGeneration.current) return;
+      setStats(s);
+      setTickets(t);
+      setDevices(d);
+    } catch {
+      if (generation === loadGeneration.current) setDataError(true);
+    } finally {
+      if (generation === loadGeneration.current) setLoading(false);
+    }
   }, []);
 
   // Fetch data (ครั้งแรก)
   useEffect(() => {
-    reloadData();
-    setLoading(false);
+    if (!auth.isAuthenticated) {
+      ++loadGeneration.current;
+      setStats(null);
+      setTickets([]);
+      setDevices([]);
+      setLoading(false);
+      return;
+    }
+    void reloadData();
 
     // ─── สแกน QR เข้ามา (คนที่มีบัญชี): URL มี ?device=DEV-xxxx → เปิดฟอร์มแจ้งซ่อมทันที
     //     หมายเหตุ: คนที่ยังไม่ login จะถูกจัดการที่ render (PublicReportView) ก่อนถึงตรงนี้ —
     //     effect นี้ล้าง URL ได้เฉพาะเมื่อ logged-in แล้ว เพื่อไม่ให้ไปตัด ?device= ของหน้า public
     const params = new URLSearchParams(window.location.search);
     const deviceParam = params.get('device');
-    if (deviceParam && auth.isAuthenticated) {
+    if (deviceParam) {
       openRepairPanel(deviceParam);
       // ล้าง query param ออกจาก URL (ไม่ให้กด refresh แล้วเปิดซ้ำ) — เฉพาะ logged-in
       window.history.replaceState({}, '', window.location.pathname);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [auth.isAuthenticated, reloadData]);
 
   // ─── ฟัง event จาก SettingsPage (ปุ่ม "แก้ไขโปรไฟล์ →") ────────────────
   useEffect(() => {
@@ -2317,7 +2816,7 @@ function AppInner() {
 
   const handleMenuChange = (menu: string) => {
     // Role guard: ถ้าเมนูไม่ได้รับอนุญาตสำหรับบทบาทนี้ → กลับ Dashboard
-    const allowed = ROLE_MENUS[role] || ROLE_MENUS.teacher;
+    const allowed = ROLE_MENUS[role] || LEGACY_FALLBACK_MENUS;
     if (!allowed.includes(menu)) menu = 'dashboard';
     setMenu(menu);
     if (menu === 'dashboard') reloadData();  // กลับหน้า Dashboard → ดึงข้อมูลใหม่เสมอ (ไม่ต้อง hard refresh)
@@ -2365,6 +2864,26 @@ function AppInner() {
   // ─── สแกน QR เข้ามา: URL มี ?device=DEV-xxxx → เปิดหน้าสาธารณะแจ้งซ่อมทันที (ไม่ต้อง login)
   //     ตรวจก่อน auth gate → ทั้งคนมีบัญชีและไม่มีบัญชี เห็นหน้าเดียวกัน
   const qrParams = new URLSearchParams(window.location.search);
+
+  // ─── สมัครสมาชิกลูกค้า (ไม่ต้อง login): /?customer=1 → ฟอร์มฝากข้อมูลให้ทีมขายติดต่อกลับ
+  //     คนละอย่างกับ /?register=1 ซึ่งเป็นการขอเปิดบัญชีเจ้าหน้าที่
+  if (qrParams.get('customer') !== null) {
+    return <CustomerSignupPage />;
+  }
+
+  // ─── สมัครสมาชิก (ไม่ต้อง login): /?register=1 → ฟอร์มขอเปิดบัญชีเจ้าหน้าที่
+  //     ต้องตรวจก่อน auth gate เพื่อให้เข้าถึงได้ทั้งคนที่ยังไม่มีบัญชีและคนที่ล็อกอินอยู่
+  if (qrParams.get('register') !== null) {
+    return <RegisterPage />;
+  }
+
+  // ─── แจ้งซ่อมสาธารณะ (คนไม่มีบัญชี): ?publicreport=1 → ต้องตรวจก่อน ?device= / ?t=
+  //     เพราะลิงก์จากการสแกนอาจเป็น ?publicreport=1&t=TOKEN — ฟอร์มสาธารณะ
+  //     resolve token เองแล้วเติมโรงเรียน/อุปกรณ์ให้ ไม่ต้องเด้งไปหน้าอื่น
+  if (qrParams.get('publicreport') === '1') {
+    return <PublicNoLoginReportView />;
+  }
+
   const qrDevice = qrParams.get('device');
   if (qrDevice) {
     return <PublicReportView deviceId={qrDevice} />;
@@ -2376,15 +2895,11 @@ function AppInner() {
     return <QrTokenResolveView token={qrToken} />;
   }
 
-  // ─── ติดตามสถานะ: URL มี ?ticket=SC-xxxx (หรือ ?ticket= เปล่า) → เปิดหน้าสาธารณะติดตามสถานะ
+  // ─── ติดตามสถานะ: URL มี ?ticket=TK.SCHM01.26.0001-T (หรือ ?ticket= เปล่า)
+  //     → หน้าแรกสาธารณะ เปิดพร้อมค้นเลขใบงานนั้นให้เลย
   const trackTicket = qrParams.get('ticket');
   if (trackTicket !== null) {
-    return <TrackStatusView initialTicketId={trackTicket || undefined} />;
-  }
-
-  // ─── แจ้งซ่อมสาธารณะ (คนไม่มีบัญชี): URL มี ?publicreport=1 → เปิดหน้าก่อน auth gate
-  if (qrParams.get('publicreport') === '1') {
-    return <PublicNoLoginReportView />;
+    return <PublicHomeView initialTicketId={trackTicket || undefined} />;
   }
 
   if (!auth.isAuthenticated) {
@@ -2392,7 +2907,12 @@ function AppInner() {
     if (menu === 'privacy') {
       return <PrivacyPage onBack={() => setMenu('dashboard')} />;
     }
-    return <LoginPage onLogin={auth.login} onPrivacy={() => setMenu('privacy')} />;
+    // หน้าเข้าสู่ระบบเจ้าหน้าที่แยกเป็นอีกหน้า — เข้าถึงด้วย /?login=1 เท่านั้น
+    if (qrParams.get('login') !== null) {
+      return <LoginPage onLogin={auth.login} onPrivacy={() => setMenu('privacy')} />;
+    }
+    // หน้าแรก = หน้าสาธารณะ (ติดตามสถานะ + สแกนแจ้งซ่อม) ไม่ใช่หน้า login อีกแล้ว
+    return <PublicHomeView />;
   }
 
   const role = auth.user?.role ?? 'super_admin';
@@ -2404,7 +2924,7 @@ function AppInner() {
   const globalScope = ['owner', 'super_admin', 'admin'].includes(role)
     || (role === 'it_support' && !auth.user?.organization_id);
 
-  const sidebarSchoolName = auth.user?.organization?.name ?? 'Smart Classroom';
+  const sidebarSchoolName = auth.user?.organization?.name ?? 'Smart Classroom Support';
 
   return (
     <>
@@ -2435,6 +2955,12 @@ function AppInner() {
 
           <div className="app-main">
             <div className="page-content">
+              {dataError && (
+                <div role="alert" className="alert alert-error">
+                  โหลดข้อมูลล่าสุดไม่สำเร็จ กรุณาลองอีกครั้ง{' '}
+                  <button type="button" onClick={() => { void reloadData(); }}>โหลดใหม่</button>
+                </div>
+              )}
               {menu === 'dashboard' && (
                 <DashboardContent
                   onOpenRepairPanel={openRepairPanel}
@@ -2504,6 +3030,9 @@ function AppInner() {
               )}
               {menu === 'audit' && (
                 <AuditLogPage onBack={() => handleMenuChange('dashboard')} />
+              )}
+              {menu === 'registrations' && (
+                <RegistrationsPage onBack={() => handleMenuChange('dashboard')} />
               )}
               {menu === 'sales' && (
                 <SalesPage onBack={() => handleMenuChange('dashboard')} userRole={auth.user?.role} />

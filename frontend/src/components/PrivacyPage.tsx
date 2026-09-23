@@ -33,7 +33,12 @@ export default function PrivacyPage({ onBack }: { onBack: () => void }) {
 
           <p style={{ color: 'var(--color-text-tertiary)', fontSize: '0.8rem', marginTop: 16 }}>ปรับปรุงล่าสุด: {new Date().toLocaleDateString('th-TH')}</p>
         </div>
-        <button className="btn btn-ghost" style={{ marginTop: 16, width: '100%' }} onClick={onBack}>← กลับ</button>
+        <button className="btn btn-ghost" style={{ marginTop: 16, width: '100%' }} onClick={onBack}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginRight: 6, verticalAlign: '-2px' }}>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          กลับ
+        </button>
       </div>
     </div>
   );

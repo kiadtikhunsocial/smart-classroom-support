@@ -1,0 +1,804 @@
+/* ============================================================================
+   public-theme.css — ทำให้หน้าสาธารณะ (ph-* / pr-*) ใช้ธีมเดียวกับแดชบอร์ด
+   ----------------------------------------------------------------------------
+   เหตุผลของไฟล์นี้:
+     public-home.css / public-report.css ถูกเขียนเป็นธีม navy ตายตัว (hardcode
+     rgba(5,11,28) ฯลฯ) จึงไม่ขยับตาม [data-mode]/[data-accent] ของระบบ
+     ไฟล์นี้เป็น "เลเยอร์ทับ" ที่:
+       1. นิยาม --ph-* ใหม่โดยอ้างอิง token กลาง (--color-*, --accent-*)
+       2. ทับเฉพาะ property ที่เป็นสี/เงา ของ rule ที่ hardcode ไว้
+          → ไม่แตะ layout เดิมเลย
+
+   ทำไมใช้ selector นำด้วย [data-mode]:
+     เพื่อชนะ specificity ของไฟล์เดิมโดยไม่พึ่งลำดับ import (คอมโพเนนต์
+     สองตัว import CSS ของตัวเอง ลำดับใน bundle จึงไม่การันตี) และไม่ใช้
+     !important เลย
+
+   โหมดเริ่มต้นของระบบคือ dark (theme.ts → DEFAULT_THEME) → หน้าสาธารณะจึงเป็น
+   navy โดยปริยาย แต่บล็อก [data-mode='light'] ด้านล่างยังต้องคงไว้ครบ เพราะ
+   ผู้ใช้สลับเป็นโหมดสว่างได้ที่หน้าตั้งค่า
+   ========================================================================== */
+
+/* ── 1. โทเคนที่ใช้ร่วมทั้งสองโหมด ──────────────────────────────────────── */
+
+[data-mode] .ph-page {
+  --ph-accent-rgb: var(--accent-rgb);
+  --ph-on-accent: #ffffff;
+
+  /* สถานะ: token กลางสลับค่าตามโหมดอยู่แล้ว ใช้เป็นทั้งพื้นและตัวอักษรได้ */
+  --ph-ok: var(--color-success);
+  --ph-warn: var(--color-warning);
+  --ph-danger: var(--color-danger);
+  --ph-info: var(--color-info);
+
+  --ph-glow: 0 0 0 1px rgb(var(--accent-rgb) / 0.32), 0 0 26px rgb(var(--accent-rgb) / 0.20);
+  --ph-glow-blue: var(--ph-glow);
+
+  /* พรีวิวกล้องต้องอยู่บนพื้นเข้มทั้งสองโหมด ภาพจึงไม่ล้างจนดูไม่ออก */
+  --ph-scanner-bg: #070b16;
+
+  background: var(--ph-bg);
+  color: var(--ph-text);
+  transition: background var(--transition-base, 0.25s ease), color var(--transition-base, 0.25s ease);
+}
+
+/* ── 2. โหมดสว่าง (ค่าเริ่มต้น) ─────────────────────────────────────────── */
+
+[data-mode='light'] .ph-page {
+  --ph-bg: var(--color-bg);
+
+  --ph-blue: var(--accent);
+  --ph-cyan: var(--accent-strong);
+  --ph-purple: var(--accent-grad-to);
+  --ph-magenta: var(--accent-grad-from);
+  --ph-accent-text: var(--accent-strong);
+
+  --ph-text: var(--color-text);
+  --ph-text-2: var(--color-text-secondary);
+  --ph-text-3: var(--color-text-tertiary);
+
+  --ph-glass: rgba(255, 255, 255, 0.78);
+  --ph-glass-strong: var(--color-surface);
+  --ph-surface-soft: var(--color-surface-sunken);
+  --ph-field: #ffffff;
+  --ph-field-focus: #ffffff;
+
+  --ph-line: var(--color-border);
+  --ph-line-strong: rgb(var(--accent-rgb) / 0.38);
+  --ph-shadow: var(--shadow-lg);
+
+  --ph-topbar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.74));
+  --ph-footer-bg: rgba(255, 255, 255, 0.86);
+  --ph-vignette: linear-gradient(180deg, rgba(247, 248, 251, 0) 42%, rgba(247, 248, 251, 0.92) 100%);
+  --ph-grid-line: rgba(20, 20, 40, 0.05);
+  --ph-aurora-strength: 0.20;
+  --ph-aurora-opacity: 0.55;
+
+  --ph-ok-rgb: 15 157 110;
+  --ph-warn-rgb: 199 119 0;
+  --ph-danger-rgb: 220 43 63;
+}
+
+/* ── 3. โหมดมืด (คงคาแรกเตอร์ glass เดิม แต่สีเน้นวิ่งตามธีม) ───────────── */
+
+[data-mode='dark'] .ph-page {
+  --ph-bg: #070b16;
+
+  --ph-blue: var(--accent-soft);
+  --ph-cyan: var(--accent-softer);
+  --ph-purple: var(--accent);
+  --ph-magenta: var(--accent-grad-to);
+  --ph-accent-text: var(--accent-softer);
+
+  --ph-text: var(--color-text);
+  --ph-text-2: var(--color-text-secondary);
+  --ph-text-3: var(--color-text-tertiary);
+
+  --ph-glass: rgba(255, 255, 255, 0.045);
+  --ph-glass-strong: rgba(255, 255, 255, 0.06);
+  --ph-surface-soft: rgba(255, 255, 255, 0.035);
+  --ph-field: rgba(0, 0, 0, 0.35);
+  --ph-field-focus: rgba(0, 0, 0, 0.5);
+
+  --ph-line: rgba(255, 255, 255, 0.10);
+  --ph-line-strong: rgb(var(--accent-rgb) / 0.55);
+  --ph-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+
+  --ph-topbar-bg: linear-gradient(180deg, rgba(7, 11, 22, 0.94), rgba(7, 11, 22, 0.66));
+  --ph-footer-bg: rgba(7, 11, 22, 0.72);
+  --ph-vignette: linear-gradient(180deg, rgba(7, 11, 22, 0) 40%, rgba(7, 11, 22, 0.88) 100%);
+  --ph-grid-line: rgba(180, 200, 255, 0.055);
+  --ph-aurora-strength: 0.42;
+  --ph-aurora-opacity: 0.5;
+
+  --ph-ok-rgb: 52 211 153;
+  --ph-warn-rgb: 251 191 36;
+  --ph-danger-rgb: 248 113 113;
+}
+
+/* ── 4. ชั้นพื้นหลังตกแต่ง ──────────────────────────────────────────────── */
+
+[data-mode] .ph-bg-aurora {
+  opacity: var(--ph-aurora-opacity);
+}
+
+[data-mode] .ph-bg-aurora-1 {
+  background: radial-gradient(circle, rgb(var(--accent-rgb) / var(--ph-aurora-strength)), transparent 68%);
+}
+
+[data-mode] .ph-bg-aurora-2 {
+  background: radial-gradient(circle, rgb(var(--accent-rgb) / calc(var(--ph-aurora-strength) * 0.85)), transparent 68%);
+}
+
+[data-mode] .ph-bg-aurora-3 {
+  background: radial-gradient(circle, rgb(var(--accent-rgb) / calc(var(--ph-aurora-strength) * 0.6)), transparent 70%);
+}
+
+[data-mode] .ph-bg-grid {
+  background-image:
+    linear-gradient(var(--ph-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ph-grid-line) 1px, transparent 1px);
+}
+
+[data-mode] .ph-bg-vignette {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgb(var(--accent-rgb) / 0.10), transparent 70%),
+    var(--ph-vignette);
+}
+
+/* ── 5. แถบบน / แบรนด์ / ท้ายหน้า ───────────────────────────────────────── */
+
+[data-mode] .ph-topbar {
+  background: var(--ph-topbar-bg);
+  border-bottom-color: var(--ph-line);
+}
+
+[data-mode] .ph-brand-mark {
+  background: linear-gradient(140deg, rgb(var(--accent-rgb) / 0.20), rgb(var(--accent-rgb) / 0.10));
+  border-color: var(--ph-line-strong);
+  box-shadow: 0 0 22px rgb(var(--accent-rgb) / 0.18);
+}
+
+[data-mode] .ph-live {
+  border-color: rgb(var(--ph-ok-rgb) / 0.35);
+  background: rgb(var(--ph-ok-rgb) / 0.10);
+  color: var(--ph-ok);
+}
+
+[data-mode] .ph-live-dot {
+  background: var(--ph-ok);
+  box-shadow: 0 0 10px rgb(var(--ph-ok-rgb) / 0.8);
+}
+
+[data-mode] .ph-login-link {
+  background: var(--ph-glass-strong);
+  border-color: var(--ph-line);
+  color: var(--ph-text-2);
+}
+
+[data-mode] .ph-login-link:hover,
+[data-mode] .ph-login-link:focus-visible {
+  color: var(--ph-accent-text);
+  border-color: var(--ph-line-strong);
+  background: rgb(var(--accent-rgb) / 0.12);
+  box-shadow: var(--ph-glow);
+}
+
+[data-mode] .ph-footer {
+  background: var(--ph-footer-bg);
+  border-top-color: var(--ph-line);
+}
+
+/* ── 6. Hero / การ์ดทางเข้า / จุดเด่น ───────────────────────────────────── */
+
+[data-mode] .ph-eyebrow {
+  border-color: var(--ph-line);
+  background: rgb(var(--accent-rgb) / 0.10);
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .ph-action-card {
+  background: var(--ph-glass-strong);
+  border-color: var(--ph-line);
+  box-shadow: var(--shadow-sm, none);
+}
+
+[data-mode] .ph-action-card:hover,
+[data-mode] .ph-action-card:focus-visible {
+  border-color: var(--ph-line-strong);
+  box-shadow: var(--ph-shadow), 0 0 28px rgb(var(--accent-rgb) / 0.16);
+}
+
+[data-mode] .ph-action-primary {
+  border-color: var(--ph-line-strong);
+  background:
+    linear-gradient(135deg, rgb(var(--accent-rgb) / 0.14), rgb(var(--accent-rgb) / 0.06)),
+    var(--ph-glass-strong);
+}
+
+[data-mode] .ph-action-icon {
+  border-color: var(--ph-line-strong);
+  background: linear-gradient(140deg, rgb(var(--accent-rgb) / 0.18), rgb(var(--accent-rgb) / 0.10));
+  color: var(--ph-accent-text);
+  box-shadow: inset 0 0 18px rgb(var(--accent-rgb) / 0.12);
+}
+
+[data-mode] .ph-action-card:hover .ph-action-arrow,
+[data-mode] .ph-action-card:focus-visible .ph-action-arrow {
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .ph-highlight {
+  background: var(--ph-glass-strong);
+  border-color: var(--ph-line);
+}
+
+[data-mode] .ph-highlight-icon {
+  color: var(--ph-accent-text);
+}
+
+/* ── 7. การ์ดกระจก ──────────────────────────────────────────────────────── */
+
+[data-mode] .ph-card {
+  background: var(--ph-glass-strong);
+  border-color: var(--ph-line);
+  box-shadow: var(--ph-shadow);
+}
+
+[data-mode] .ph-card::before {
+  background: linear-gradient(90deg, transparent, var(--ph-blue), var(--ph-magenta), transparent);
+}
+
+[data-mode] .ph-card-tag {
+  border-color: var(--ph-line);
+  color: var(--ph-text-3);
+}
+
+/* ── 8. ฟอร์มค้นหา / ปุ่ม / ชิป ─────────────────────────────────────────── */
+
+[data-mode] .ph-input {
+  background: var(--ph-field);
+  border-color: var(--ph-line);
+  color: var(--ph-text);
+}
+
+[data-mode] .ph-input:focus {
+  background: var(--ph-field-focus);
+  border-color: var(--ph-blue);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 0.18);
+}
+
+[data-mode] .ph-btn {
+  background: var(--ph-glass-strong);
+  border-color: var(--ph-line);
+  color: var(--ph-text);
+}
+
+[data-mode] .ph-btn:hover:not(:disabled),
+[data-mode] .ph-btn:focus-visible:not(:disabled) {
+  background: rgb(var(--accent-rgb) / 0.12);
+  border-color: var(--ph-line-strong);
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .ph-btn-primary {
+  border-color: transparent;
+  background: linear-gradient(120deg, var(--accent-grad-from), var(--accent-grad-to));
+  color: var(--ph-on-accent);
+  box-shadow: 0 10px 26px -8px rgb(var(--accent-rgb) / 0.45);
+}
+
+[data-mode] .ph-btn-primary:hover:not(:disabled),
+[data-mode] .ph-btn-primary:focus-visible:not(:disabled) {
+  color: var(--ph-on-accent);
+  background: linear-gradient(120deg, var(--accent-grad-to), var(--accent-grad-from));
+  box-shadow: 0 14px 32px -8px rgb(var(--accent-rgb) / 0.5);
+}
+
+[data-mode] .ph-spinner {
+  border-color: rgba(255, 255, 255, 0.4);
+  border-top-color: var(--ph-on-accent);
+}
+
+[data-mode] .ph-hint code {
+  background: rgb(var(--accent-rgb) / 0.10);
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .ph-chip {
+  background: rgb(var(--accent-rgb) / 0.08);
+  border-color: var(--ph-line);
+  color: var(--ph-text-2);
+}
+
+[data-mode] .ph-chip:hover:not(:disabled),
+[data-mode] .ph-chip:focus-visible:not(:disabled) {
+  border-color: var(--ph-line-strong);
+  background: rgb(var(--accent-rgb) / 0.16);
+  color: var(--ph-accent-text);
+}
+
+/* ── 9. แจ้งเตือน ───────────────────────────────────────────────────────── */
+
+[data-mode] .ph-alert {
+  background: var(--ph-surface-soft);
+  border-color: var(--ph-line);
+  color: var(--ph-text-2);
+}
+
+[data-mode] .ph-alert-info {
+  border-color: rgb(var(--accent-rgb) / 0.35);
+  background: rgb(var(--accent-rgb) / 0.10);
+  color: var(--ph-info);
+}
+
+[data-mode] .ph-alert-warn {
+  border-color: rgb(var(--ph-warn-rgb) / 0.38);
+  background: rgb(var(--ph-warn-rgb) / 0.10);
+  color: var(--ph-warn);
+}
+
+[data-mode] .ph-alert-danger {
+  border-color: rgb(var(--ph-danger-rgb) / 0.38);
+  background: rgb(var(--ph-danger-rgb) / 0.10);
+  color: var(--ph-danger);
+}
+
+[data-mode] .ph-alert-success {
+  border-color: rgb(var(--ph-ok-rgb) / 0.38);
+  background: rgb(var(--ph-ok-rgb) / 0.10);
+  color: var(--ph-ok);
+}
+
+/* ── 10. ผลการค้นหา: เลขใบงาน + badge สถานะ ─────────────────────────────── */
+
+/* ยังเป็น gradient เพราะ rule เดิมใช้ background-clip: text */
+[data-mode] .ph-result-no strong {
+  background: linear-gradient(100deg, var(--ph-text), var(--ph-accent-text));
+}
+
+[data-mode] .ph-page .badge.ph-status-badge {
+  background: rgb(var(--accent-rgb) / 0.12);
+  border-color: rgb(var(--accent-rgb) / 0.35);
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .ph-page .badge.badge-resolved.ph-status-badge,
+[data-mode] .ph-page .badge.badge-closed.ph-status-badge {
+  border-color: rgb(var(--ph-ok-rgb) / 0.4);
+  background: rgb(var(--ph-ok-rgb) / 0.12);
+  color: var(--ph-ok);
+}
+
+[data-mode] .ph-page .badge.badge-pending.ph-status-badge,
+[data-mode] .ph-page .badge.badge-waiting_parts.ph-status-badge,
+[data-mode] .ph-page .badge.badge-waiting_user.ph-status-badge {
+  border-color: rgb(var(--ph-warn-rgb) / 0.4);
+  background: rgb(var(--ph-warn-rgb) / 0.12);
+  color: var(--ph-warn);
+}
+
+[data-mode] .ph-page .badge.badge-cancelled.ph-status-badge {
+  border-color: rgb(var(--ph-danger-rgb) / 0.42);
+  background: rgb(var(--ph-danger-rgb) / 0.12);
+  color: var(--ph-danger);
+}
+
+[data-mode] .ph-page .badge.badge-new.ph-status-badge {
+  border-color: rgb(var(--accent-rgb) / 0.42);
+  background: rgb(var(--accent-rgb) / 0.14);
+  color: var(--ph-accent-text);
+}
+
+/* ── 11. Stepper + แถบความคืบหน้า ───────────────────────────────────────── */
+
+[data-mode] .ph-progress {
+  background: var(--ph-surface-soft);
+}
+
+[data-mode] .ph-progress-fill {
+  box-shadow: 0 0 16px rgb(var(--accent-rgb) / 0.45);
+}
+
+[data-mode] .ph-step-dot {
+  background: var(--ph-field);
+  border-color: var(--ph-line);
+  color: var(--ph-text-3);
+}
+
+[data-mode] .ph-step.is-done {
+  color: var(--ph-ok);
+}
+
+[data-mode] .ph-step.is-done .ph-step-dot {
+  border-color: rgb(var(--ph-ok-rgb) / 0.5);
+  background: rgb(var(--ph-ok-rgb) / 0.14);
+  color: var(--ph-ok);
+}
+
+[data-mode] .ph-step.is-current {
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .ph-step.is-current .ph-step-dot {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-grad-from), var(--accent-grad-to));
+  color: var(--ph-on-accent);
+  box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.16);
+}
+
+/* ── 12. ข้อมูลอุปกรณ์ / ไทม์ไลน์ ───────────────────────────────────────── */
+
+[data-mode] .ph-meta {
+  background: var(--ph-surface-soft);
+  border-color: var(--ph-line);
+}
+
+[data-mode] .ph-timeline::before {
+  background: linear-gradient(180deg, var(--ph-blue), rgb(var(--accent-rgb) / 0.4), transparent);
+}
+
+/* พื้นของจุดไทม์ไลน์ใน public-home.css คือ --ph-navy-950 (สี navy ตายตัว)
+   ต้องใช้สีพื้นหลังของหน้าจริง ไม่งั้นโหมดสว่างได้วงจุดกรมท่าบนพื้นขาว */
+[data-mode] .ph-timeline-dot {
+  background: var(--ph-bg);
+  border-color: var(--ph-blue);
+  box-shadow: 0 0 12px rgb(var(--accent-rgb) / 0.5);
+}
+
+[data-mode] .ph-empty {
+  background: var(--ph-surface-soft);
+  border-color: var(--ph-line);
+  color: var(--ph-text-3);
+}
+
+/* ── 13. หน้าแจ้งซ่อมสาธารณะ (pr-*) ─────────────────────────────────────── */
+
+[data-mode] .pr-step::before {
+  background: var(--ph-line);
+}
+
+[data-mode] .pr-step.is-done::before,
+[data-mode] .pr-step.is-current::before {
+  background: linear-gradient(90deg, rgb(var(--ph-ok-rgb) / 0.45), var(--ph-blue));
+}
+
+[data-mode] .pr-step-dot {
+  background: var(--ph-field);
+  border-color: var(--ph-line);
+  color: var(--ph-text-3);
+}
+
+[data-mode] .pr-step.is-done {
+  color: var(--ph-ok);
+}
+
+[data-mode] .pr-step.is-done .pr-step-dot {
+  border-color: rgb(var(--ph-ok-rgb) / 0.5);
+  background: rgb(var(--ph-ok-rgb) / 0.14);
+  color: var(--ph-ok);
+}
+
+[data-mode] .pr-step.is-current {
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .pr-step.is-current .pr-step-dot {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-grad-from), var(--accent-grad-to));
+  color: var(--ph-on-accent);
+  box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.16);
+}
+
+[data-mode] .pr-scanner {
+  background: var(--ph-scanner-bg);
+  border-color: var(--ph-line);
+}
+
+[data-mode] .pr-scanner.is-active {
+  box-shadow: inset 0 0 40px rgb(var(--accent-rgb) / 0.14), 0 0 26px rgb(var(--accent-rgb) / 0.16);
+}
+
+[data-mode] .pr-fallback {
+  background: var(--ph-surface-soft);
+  border-color: var(--ph-line);
+}
+
+[data-mode] .pr-input,
+[data-mode] .pr-textarea,
+[data-mode] .pr-select {
+  background: var(--ph-field);
+  border-color: var(--ph-line);
+  color: var(--ph-text);
+}
+
+/* dropdown ของ <select> วาดโดย OS — ต้องกำหนดสี option เองในโหมดสว่าง */
+[data-mode] .pr-select option {
+  background: var(--ph-field);
+  color: var(--ph-text);
+}
+
+[data-mode] .pr-input:focus,
+[data-mode] .pr-textarea:focus,
+[data-mode] .pr-select:focus {
+  background: var(--ph-field-focus);
+  border-color: var(--ph-blue);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 0.18);
+}
+
+[data-mode] .pr-input.has-error,
+[data-mode] .pr-textarea.has-error {
+  border-color: rgb(var(--ph-danger-rgb) / 0.6);
+}
+
+[data-mode] .pr-field-err {
+  color: var(--ph-danger);
+}
+
+[data-mode] .pr-file {
+  background: var(--ph-surface-soft);
+  border-color: var(--ph-line);
+  color: var(--ph-text-2);
+}
+
+[data-mode] .pr-file::file-selector-button {
+  background: rgb(var(--accent-rgb) / 0.14);
+  border-color: var(--ph-line-strong);
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .pr-file::file-selector-button:hover {
+  background: rgb(var(--accent-rgb) / 0.26);
+}
+
+[data-mode] .pr-thumb {
+  border-color: var(--ph-line);
+  background: var(--ph-surface-soft);
+}
+
+[data-mode] .pr-thumb-remove {
+  background: rgb(var(--ph-danger-rgb) / 0.9);
+  color: #ffffff;
+}
+
+[data-mode] .pr-device {
+  border-color: rgb(var(--ph-ok-rgb) / 0.35);
+  background: linear-gradient(135deg, rgb(var(--ph-ok-rgb) / 0.10), rgb(var(--accent-rgb) / 0.07));
+}
+
+[data-mode] .pr-device-ok {
+  color: var(--ph-ok);
+}
+
+[data-mode] .pr-block {
+  border-color: rgb(var(--ph-warn-rgb) / 0.42);
+  background: rgb(var(--ph-warn-rgb) / 0.10);
+  color: var(--ph-warn);
+}
+
+[data-mode] .pr-block-link {
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .pr-note {
+  border-top-color: rgb(var(--ph-warn-rgb) / 0.28);
+}
+
+[data-mode] .pr-success-icon {
+  border-color: rgb(var(--ph-ok-rgb) / 0.45);
+  background: rgb(var(--ph-ok-rgb) / 0.14);
+  color: var(--ph-ok);
+  box-shadow: 0 0 0 6px rgb(var(--ph-ok-rgb) / 0.08), 0 0 30px rgb(var(--ph-ok-rgb) / 0.22);
+}
+
+[data-mode] .pr-ticket-no {
+  background: linear-gradient(100deg, var(--ph-text), var(--ph-accent-text));
+}
+
+[data-mode] .pr-link-btn {
+  background: rgb(var(--accent-rgb) / 0.10);
+  border-color: var(--ph-line);
+  color: var(--ph-accent-text);
+}
+
+[data-mode] .pr-link-btn:hover,
+[data-mode] .pr-link-btn:focus-visible {
+  background: rgb(var(--accent-rgb) / 0.18);
+  border-color: var(--ph-line-strong);
+}
+
+/* ── 14. ปุ่มสลับธีมบนแถบบน (PublicThemeToggle) ─────────────────────────── */
+
+.ph-theme {
+  position: relative;
+  display: inline-flex;
+}
+
+.ph-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line);
+  background: var(--ph-glass-strong);
+  color: var(--ph-text-2);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.ph-theme-btn:hover,
+.ph-theme-btn:focus-visible,
+.ph-theme-btn[aria-expanded='true'] {
+  color: var(--ph-accent-text);
+  border-color: var(--ph-line-strong);
+  background: rgb(var(--accent-rgb) / 0.12);
+  box-shadow: var(--ph-glow);
+}
+
+.ph-theme-btn-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent-grad-from), var(--accent-grad-to));
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.22);
+}
+
+.ph-theme-btn-label {
+  display: inline-block;
+}
+
+.ph-theme-pop {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  width: 252px;
+  max-width: calc(100vw - 32px);
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--ph-line);
+  background: var(--ph-glass-strong);
+  box-shadow: var(--ph-shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+
+.ph-theme-group-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ph-text-3);
+}
+
+.ph-theme-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--ph-surface-soft);
+  border: 1px solid var(--ph-line);
+}
+
+.ph-theme-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ph-text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.ph-theme-seg-btn:hover {
+  color: var(--ph-text);
+  background: rgb(var(--accent-rgb) / 0.08);
+}
+
+.ph-theme-seg-btn[aria-checked='true'] {
+  background: rgb(var(--accent-rgb) / 0.16);
+  border-color: var(--ph-line-strong);
+  color: var(--ph-accent-text);
+}
+
+.ph-theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ph-theme-swatch {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ph-theme-swatch-fill {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sw-from), var(--sw-to));
+}
+
+.ph-theme-swatch:hover {
+  transform: translateY(-1px);
+  border-color: var(--ph-line-strong);
+}
+
+.ph-theme-swatch[aria-checked='true'] {
+  border-color: var(--ph-text);
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 0.20);
+}
+
+.ph-theme-reset {
+  align-self: flex-start;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line);
+  background: transparent;
+  color: var(--ph-text-3);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.ph-theme-reset:hover,
+.ph-theme-reset:focus-visible {
+  color: var(--ph-accent-text);
+  border-color: var(--ph-line-strong);
+  background: rgb(var(--accent-rgb) / 0.10);
+}
+
+/* จอเล็ก: ซ่อนข้อความในปุ่ม เหลือไอคอน + จุดสี เพื่อไม่ให้แถบบนล้น */
+@media (max-width: 640px) {
+  .ph-theme-btn-label {
+    display: none;
+  }
+
+  .ph-theme-btn {
+    padding: 9px 11px;
+  }
+
+  .ph-theme-pop {
+    width: 236px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-theme-btn,
+  .ph-theme-swatch,
+  .ph-theme-seg-btn,
+  [data-mode] .ph-page {
+    transition: none;
+  }
+}

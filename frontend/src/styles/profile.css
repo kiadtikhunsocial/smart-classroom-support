@@ -1,0 +1,204 @@
+/* ── หน้าโปรไฟล์ — จัดกึ่งกลาง, responsive, ใช้ token เดียวกับธีมหลัก ── */
+
+.prof-page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.prof-wrap {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.prof-topbar {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.prof-card {
+  padding: 32px 32px 28px;
+}
+
+/* ── ส่วนหัว: อวาตาร์ + ชื่อ + ข้อมูลย่อ ── */
+.prof-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.prof-avatar {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 3px solid var(--color-primary-light, var(--color-border));
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-bg, var(--color-surface));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.prof-avatar:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.prof-avatar:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.prof-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.prof-avatar-initial {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.prof-avatar-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+}
+
+.prof-file {
+  display: none;
+}
+
+.prof-name {
+  font-size: 1.12rem;
+  font-weight: 600;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.prof-role {
+  font-size: 0.8rem;
+  color: var(--color-text-tertiary);
+}
+
+/* ── ข้อมูลย่อแบบ 3 ช่อง ── */
+.prof-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin: 18px 0 0;
+  padding: 0;
+}
+
+.prof-meta-item {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--color-bg, transparent);
+  text-align: center;
+}
+
+.prof-meta-item dt {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  margin-bottom: 4px;
+}
+
+.prof-meta-item dd {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.prof-meta-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ── ฟอร์ม ── */
+.prof-form {
+  padding-top: 20px;
+}
+
+.prof-section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 10px;
+}
+
+.prof-form .form-row + .prof-section-title,
+.prof-form .form-group + .prof-section-title {
+  margin-top: 18px;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--color-text-tertiary);
+}
+
+.prof-alert {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.82rem;
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+.prof-alert--error {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.prof-alert--ok {
+  background: var(--color-success-light);
+  color: var(--badge-success-text, #065F46);
+}
+
+.prof-submit {
+  padding: 12px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .prof-card {
+    padding: 22px 18px 20px;
+  }
+
+  .prof-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .prof-meta-item {
+    text-align: left;
+  }
+
+  .prof-form .form-row {
+    display: block;
+  }
+}

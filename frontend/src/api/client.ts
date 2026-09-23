@@ -1,6 +1,31 @@
 import { User } from '../types/user';
+import type { PublicOptions } from '../types';
 
-const BASE = (typeof __VITE_API_URL__ !== 'undefined' ? __VITE_API_URL__ : import.meta.env.VITE_API_URL) || 'http://localhost:8000/api';
+// ─── API base URL ───────────────────────────────────────────────────────
+// ลำดับ: ค่าที่ฝังตอน build (__VITE_API_URL__) → import.meta.env → same-origin '/api'
+// ห้าม fallback เป็น http://localhost:8000/api: build ที่ deploy แล้วจะยิงไป localhost
+// ของเครื่องผู้ใช้ปลายทาง (เบราว์เซอร์บล็อก mixed content) ซึ่งเป็นต้นเหตุที่ล็อกอินไม่ผ่าน
+// ส่วน dev ยังใช้ '/api' ได้เพราะ vite proxy ส่งต่อไป localhost:8000 ให้อยู่แล้ว
+function resolveApiBase(): string {
+  const injected = typeof __VITE_API_URL__ === 'string' ? __VITE_API_URL__ : '';
+  const fromEnv =
+    typeof import.meta.env?.VITE_API_URL === 'string' ? import.meta.env.VITE_API_URL : '';
+  const explicit = (injected || fromEnv).trim().replace(/\/+$/, '');
+  return explicit || '/api';
+}
+
+export const API_BASE = resolveApiBase();
+
+const BASE = API_BASE;
+
+function resolveUploadUrl(url: string): string {
+  if (!url.startsWith('/uploads/') || !/^https?:\/\//i.test(BASE)) return url;
+  try {
+    return new URL(url, new URL(BASE).origin).toString();
+  } catch {
+    return url;
+  }
+}
 
 // ─── Token helpers ──────────────────────────────────────────────────────
 export function getToken(): string | null {
@@ -38,6 +63,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+async function collectPages<T>(fetchPage: (offset: number, limit: number) => Promise<T[]>, limit: number): Promise<T[]> {
+  const all: T[] = [];
+  for (;;) {
+    const page = await fetchPage(all.length, limit);
+    all.push(...page);
+    if (page.length < limit) return all;
+  }
+}
+
 export const api = {
   getDevice: (deviceId: string) => request<any>(`/devices/${deviceId}`),
 
@@ -47,16 +81,22 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  listTickets: (params?: { status?: string; priority?: string; device_id?: string; organization_id?: number; limit?: number }) => {
+  listTickets: (params?: { status?: string; priority?: string; device_id?: string; device_type?: string; device_category?: string; organization_id?: number; limit?: number; offset?: number }) => {
       const qs = new URLSearchParams();
       if (params?.status) qs.set('status', params.status);
       if (params?.priority) qs.set('priority', params.priority);
       if (params?.device_id) qs.set('device_id', params.device_id);
+      if (params?.device_type) qs.set('device_type', params.device_type);
+      if (params?.device_category) qs.set('device_category', params.device_category);
       if (params?.organization_id !== undefined) qs.set('organization_id', String(params.organization_id));
       if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.offset !== undefined) qs.set('offset', String(params.offset));
       const q = qs.toString();
       return request<any[]>(`/tickets${q ? '?' + q : ''}`);
     },
+
+  listAllTickets: (params?: { status?: string; priority?: string; device_id?: string; device_type?: string; device_category?: string; organization_id?: number }) =>
+    collectPages((offset, limit) => api.listTickets({ ...params, offset, limit }), 200),
 
   getTicket: (ticketId: string) => request<any>(`/tickets/${ticketId}`),
 
@@ -71,8 +111,11 @@ export const api = {
 
   getStats: () => request<any>('/stats'),
 
-  listDevices: (limit: number = 100, organization_id?: number) =>
-    request<any[]>(`/devices?limit=${limit}${organization_id ? `&organization_id=${organization_id}` : ''}`),
+  listDevices: (limit: number = 100, organization_id?: number, offset: number = 0) =>
+    request<any[]>(`/devices?limit=${limit}&offset=${offset}${organization_id ? `&organization_id=${organization_id}` : ''}`),
+
+  listAllDevices: (organization_id?: number) =>
+    collectPages((offset, limit) => api.listDevices(limit, organization_id, offset), 500),
 
   listOrganizations: () => request<any[]>('/organizations'),
 
@@ -122,7 +165,7 @@ export const api = {
   // ─── Auth / Profile ────────────────────────────────────────────────
   authMe: () => request<{ user: User }>('/auth/me'),
 
-  updateProfile: (data: { line_display_name?: string; line_email?: string; line_picture_url?: string; password?: string }) =>
+  updateProfile: (data: { line_display_name?: string; username?: string; line_email?: string; line_picture_url?: string; password?: string }) =>
     request<{ token: string; user: User }>('/auth/profile', {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -171,13 +214,15 @@ export const api = {
     const token = getToken();
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`${BASE}/uploads`, {
+    const uploadPath = token ? '/uploads' : '/public/uploads';
+    const res = await fetch(`${BASE}${uploadPath}`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,
     });
     if (!res.ok) throw new Error('อัปโหลดรูปไม่สำเร็จ');
-    return res.json();
+    const result = await res.json();
+    return { ...result, url: resolveUploadUrl(result.url) };
   },
 
   // ─── SLA ───────────────────────────────────────────────────────────
@@ -192,6 +237,15 @@ export const api = {
     checklist?: any[];
     is_active?: boolean;
   }) => request<any>('/pm/plans', { method: 'POST', body: JSON.stringify(data) }),
+  updatePMPlan: (planId: number, data: {
+    name?: string;
+    device_type?: string | null;
+    interval_days?: number;
+    checklist?: any[];
+    is_active?: boolean;
+  }) => request<any>(`/pm/plans/${planId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePMPlan: (planId: number) =>
+    request<any>(`/pm/plans/${planId}`, { method: 'DELETE' }),
   generatePMTasks: () => request<any>('/pm/generate', { method: 'POST' }),
   listPMTasks: (params?: {
     status?: string;
@@ -248,6 +302,10 @@ export const api = {
     entity_type?: string;
     entity_id?: string;
     user_id?: number;
+    /** วันที่เริ่ม (YYYY-MM-DD) — นับรวมวันนั้นทั้งวัน */
+    date_from?: string;
+    /** วันที่สิ้นสุด (YYYY-MM-DD) — นับรวมวันนั้นทั้งวัน */
+    date_to?: string;
     limit?: number;
     offset?: number;
   }) => {
@@ -256,6 +314,8 @@ export const api = {
     if (params?.entity_type) qs.set('entity_type', params.entity_type);
     if (params?.entity_id) qs.set('entity_id', params.entity_id);
     if (params?.user_id !== undefined) qs.set('user_id', String(params.user_id));
+    if (params?.date_from) qs.set('date_from', params.date_from);
+    if (params?.date_to) qs.set('date_to', params.date_to);
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.offset) qs.set('offset', String(params.offset));
     const q = qs.toString();
@@ -273,6 +333,8 @@ export const api = {
 
   // ─── Ticket ล่าสุดของอุปกรณ์ (ช่วยหาเลขคืนเมื่อลืม) ──────────────
   getDeviceRecent: (deviceId: string) => request<any>(`/devices/${encodeURIComponent(deviceId)}/recent`),
+
+  checkWarranty: (code: string) => request<any>(`/public/warranty/${encodeURIComponent(code)}`),
 
   // ─── Ticket lifecycle actions (Batch 1 backend) ──────────────────
     trackTicket: (ticketNo: string) => request<any>(`/tickets/track/${encodeURIComponent(ticketNo)}`),
@@ -314,16 +376,96 @@ export const api = {
     request<any>(`/organizations/${orgId}/buildings`, { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── Public report (คนไม่มีบัญชี) ─────────────────────────────────────
-  publicOptions: () => request<any>('/public/options'),
+  // ไม่ส่ง organization_code = ได้แต่ประเภทอุปกรณ์ (backend ไม่คืนรายการอุปกรณ์ให้ไล่ดู)
+  publicOptions: (organizationCode?: string) => {
+    const code = (organizationCode || '').trim();
+    const qs = code ? `?organization_code=${encodeURIComponent(code)}` : '';
+    return request<PublicOptions>(`/public/options${qs}`);
+  },
+  // อุปกรณ์นี้มีงานค้างอยู่ไหม — เช็คตอนสแกน ก่อนให้ผู้แจ้งกรอกฟอร์มทั้งใบ
+  publicDeviceOpenTicket: (code: string) =>
+    request<any>(`/public/devices/${encodeURIComponent(code)}/open-ticket`),
+
+  // แจ้งอาการ/ข้อมูลเพิ่มเข้า Ticket เดิมที่ยังไม่ปิด (ไม่ต้องล็อกอิน) — แทนการแจ้งซ้ำ
+  publicAddTicketNote: (
+    ticketNo: string,
+    data: { note: string; reporter_name: string; reporter_phone?: string; attachments?: string[] },
+  ) =>
+    request<any>(`/public/tickets/${encodeURIComponent(ticketNo)}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // หมวดหมู่อุปกรณ์ + ประเภทในแต่ละหมวด — ใช้ทำตัวกรองหมวดหมู่ในหน้ารายการงาน
+  listDeviceCategories: () =>
+    request<{ categories: { category: string; device_types: string[] }[] }>(
+      '/device-categories'
+    ),
+
   publicReport: (data: any) =>
     request<any>('/public/report', { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── Sales Leads + Chatbot Logs ──────────────────────────────────
   listSalesLeads: () => request<any[]>('/sales/leads'),
+  // สมัครสมาชิกลูกค้าจากหน้าเว็บ — ไม่ต้อง login, บันทึกเป็น lead ช่องทาง WEB
+  publicCustomerSignup: (data: {
+    full_name: string;
+    phone: string;
+    email?: string;
+    organization?: string;
+    interest?: string;
+    products?: string;
+    note?: string;
+    consent: boolean;
+  }) =>
+    request<{ id: number; duplicate: boolean; message: string }>(
+      '/public/customer-signup',
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
   markLeadContacted: (leadId: number) =>
     request<any>(`/sales/leads/${leadId}`, { method: 'PATCH', body: JSON.stringify({ status: 'contacted' }) }),
   deleteSalesLead: (leadId: number) =>
     request<any>(`/sales/leads/${leadId}`, { method: 'DELETE' }),
+  // ─── สมัครสมาชิก (Membership) ────────────────────────────────────
+  // /public/register ไม่ต้อง login — request() แนบ token ให้เฉพาะกรณีที่มีอยู่แล้ว
+  publicRegister: (data: {
+    username: string;
+    password: string;
+    full_name: string;
+    email?: string;
+    phone?: string;
+    organization_code?: string;
+    note?: string;
+  }) =>
+    request<{ id: number; status: string; sheet_synced: boolean; message: string }>(
+      '/public/register',
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+
+  listRegistrations: (params?: { status?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.offset) qs.set('offset', String(params.offset));
+    const q = qs.toString();
+    return request<any[]>(`/registrations${q ? '?' + q : ''}`);
+  },
+
+  approveRegistration: (
+    applicationId: number,
+    data?: { role?: string; organization_id?: number },
+  ) =>
+    request<any>(`/registrations/${applicationId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
+    }),
+
+  rejectRegistration: (applicationId: number, reason?: string) =>
+    request<any>(`/registrations/${applicationId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
   listChatbotLogs: () => request<any[]>('/chatbot/logs'),
 };
 
@@ -339,6 +481,21 @@ export async function lineLogin(): Promise<{ url?: string; user?: User } | null>
 
 // Login จริง (username + password) — คืน token + user
 export async function login(username: string, password: string): Promise<{ token: string; user: User }> {
+  try {
+    return await loginRequest(username, password);
+  } catch (err) {
+    // fetch โยน TypeError เมื่อคำขอไปไม่ถึงเซิร์ฟเวอร์เลย (backend ปิด / CORS / mixed content)
+    // ข้อความเดิม "Failed to fetch" ไม่บอกว่าต้องแก้อะไร
+    if (err instanceof TypeError) {
+      throw new Error(
+        `ติดต่อเซิร์ฟเวอร์ที่ ${BASE} ไม่ได้ — ตรวจว่า backend เปิดอยู่ และตั้งค่า VITE_API_URL / CORS_ORIGINS ถูกต้อง`
+      );
+    }
+    throw err;
+  }
+}
+
+async function loginRequest(username: string, password: string): Promise<{ token: string; user: User }> {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -346,7 +503,16 @@ export async function login(username: string, password: string): Promise<{ token
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body.detail || `HTTP ${res.status}`);
+    const detail = (body as any)?.detail;
+    throw new Error(
+      typeof detail === 'string'
+        ? detail
+        : typeof detail?.message === 'string'
+          ? detail.message
+          : res.status === 401
+            ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'
+            : `HTTP ${res.status}`
+    );
   }
   return body;
 }

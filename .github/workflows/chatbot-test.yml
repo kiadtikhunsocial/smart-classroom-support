@@ -1,8 +1,6 @@
-name: Chatbot Test Suite
+name: Manual legacy Railway chatbot smoke test
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:

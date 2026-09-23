@@ -118,7 +118,12 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
         <div className="top-bar-actions">
           <input className="form-input" style={{ width: 200 }} placeholder="ค้นหาบทความ..." value={q}
             onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
-          <button className="btn btn-secondary" onClick={load}>⟳</button>
+          <button className="btn btn-secondary btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
           {canEditKB && <button className="btn btn-primary" onClick={openNew}>+ เพิ่มบทความ</button>}
         </div>
       </div>
@@ -156,7 +161,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
                   ? <span style={{ marginLeft: 6, color: 'var(--color-primary)' }}>· ส่วนกลาง</span>
                   : <span style={{ marginLeft: 6, color: 'var(--color-success, #2F855A)' }}>· เฉพาะโรงเรียน</span>}
               </div>
-              {!a.is_published && <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', marginTop: 4 }}>⛔ ยังไม่เผยแพร่</div>}
+              {!a.is_published && <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', marginTop: 4 }}>ยังไม่เผยแพร่</div>}
               {stepsArray(a).length > 0 && (
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 8, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {stepsArray(a).slice(0, 2).map((s: string, i: number) => (
@@ -182,7 +187,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
                 <div style={{ fontSize: '0.78rem', color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   {selected.kb_id}
                   {selected.device_type ? ` · ${selected.device_type}` : ''}
-                  {selected.is_published ? '' : ' · ⛔ ยังไม่เผยแพร่'}
+                  {selected.is_published ? '' : ' · ยังไม่เผยแพร่'}
                 </div>
               </div>
               <button className="repair-panel-close" onClick={() => setSelected(null)}>
@@ -194,7 +199,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
               {/* Tags */}
               {Array.isArray(selected.symptom_tags) && selected.symptom_tags.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8 }}>🏷️ คำค้นที่เกี่ยวข้อง</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8 }}>คำค้นที่เกี่ยวข้อง</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {selected.symptom_tags.map((t: string, i: number) => (
                       <span key={i} style={{
@@ -208,7 +213,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
 
               {/* Steps */}
               <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 10 }}>
-                📋 ขั้นตอนวิธีแก้ไข ({stepsArray(selected).length} ขั้น)
+                ขั้นตอนวิธีแก้ไข ({stepsArray(selected).length} ขั้น)
               </div>
               <ol style={{ margin: 0, padding: '0 0 0 22px', lineHeight: 1.9 }}>
                 {stepsArray(selected).map((s: string, i: number) => (
@@ -236,8 +241,8 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
                 <div style={{ flex: 1 }} />
                 {canEditArticle(selected) && (
                   <>
-                    <button className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '8px 16px' }} onClick={() => openEdit(selected)}>✏️ แก้ไขบทความ</button>
-                    <button className="btn btn-ghost" style={{ fontSize: '0.82rem', padding: '8px 16px', color: 'var(--color-danger)' }} onClick={() => remove(selected)}>🗑️ ลบ</button>
+                    <button className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '8px 16px' }} onClick={() => openEdit(selected)}>แก้ไขบทความ</button>
+                    <button className="btn btn-ghost" style={{ fontSize: '0.82rem', padding: '8px 16px', color: 'var(--color-danger)' }} onClick={() => remove(selected)}>ลบ</button>
                   </>
                 )}
                 {!canEditArticle(selected) && (
@@ -256,7 +261,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
         <div className="panel-overlay" onClick={() => setShowForm(false)}>
           <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
-              <h3 className="repair-panel-title">{editing ? '✏️ แก้ไขบทความ' : '➕ เพิ่มบทความใหม่'}</h3>
+              <h3 className="repair-panel-title">{editing ? 'แก้ไขบทความ' : 'เพิ่มบทความใหม่'}</h3>
               <button className="repair-panel-close" onClick={() => setShowForm(false)}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
@@ -289,7 +294,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
                 </label>
                 <div style={{ flex: 1 }} />
                 <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'กำลังบันทึก...' : (editing ? '💾 บันทึก' : '➕ เพิ่ม')}</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'กำลังบันทึก...' : (editing ? 'บันทึก' : 'เพิ่ม')}</button>
               </div>
             </form>
           </div>

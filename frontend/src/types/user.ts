@@ -12,7 +12,14 @@ export interface User {
   organization?: Organization | null;
 }
 
-export type UserRole = 'admin' | 'teacher' | 'it_support' | 'student' | 'super_admin';
+// บทบาทที่ใช้งานได้จริง — teacher/student ถูกยกเลิกแล้ว (ผู้แจ้งซ่อมไม่ต้องมีบัญชี)
+export type UserRole = 'owner' | 'super_admin' | 'admin' | 'admin_school' | 'it_support';
+
+// บทบาทเก่าที่ยังพบได้ในบัญชีที่สร้างไว้ก่อนหน้า — ใช้เฉพาะตอนแสดงผล
+export type LegacyUserRole = 'teacher' | 'student';
+
+/** role ที่มาจาก API อาจเป็นบทบาทเก่าได้ ใช้ชนิดนี้เวลาอ่านค่าดิบ */
+export type AnyUserRole = UserRole | LegacyUserRole;
 
 export interface Organization {
   id: number;

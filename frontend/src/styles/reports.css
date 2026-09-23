@@ -1,0 +1,532 @@
+/* ============================================================================
+   reports.css — สไตล์เฉพาะหน้า "รายงาน" (ReportsPage)
+   ----------------------------------------------------------------------------
+   หลักการ:
+   1. ทุกคลาสขึ้นต้นด้วย .rp- เพื่อไม่ชนกับ global.css / design-system.css
+      จึงไม่ทำให้หน้าอื่นเพี้ยน และไม่ต้องใช้ !important
+   2. สีทั้งหมดอ่านจาก CSS variable ของธีม (theme-tokens.css) พร้อม fallback
+      → สลับโหมดสว่าง/มืด และเปลี่ยนสีเน้นได้เองโดยไม่ต้อง re-render
+   3. ใช้ logical property (margin-inline / padding-inline / text-align: start)
+      เพื่อให้ layout ไม่พังเมื่อ dir="rtl"
+   ========================================================================== */
+
+.rp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── แบนเนอร์สรุปด้านบน ─────────────────────────────────────────────────── */
+.rp-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px;
+  border-radius: var(--radius-lg, 16px);
+  background: var(--gradient-hero, linear-gradient(135deg, #5B5BD6 0%, #8B5CF6 100%));
+  box-shadow: var(--shadow-hero, 0 12px 32px rgba(15, 15, 40, 0.18));
+  color: #FFFFFF;
+}
+
+.rp-hero::after {
+  content: '';
+  position: absolute;
+  inset-block-start: -42%;
+  inset-inline-end: -6%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.rp-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rp-hero-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin-block-end: 4px;
+}
+
+.rp-hero-sub {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.rp-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rp-chip {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  white-space: nowrap;
+}
+
+/* ── KPI ────────────────────────────────────────────────────────────────── */
+.rp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+  gap: 14px;
+}
+
+.rp-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E7E8F0);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(16, 16, 40, 0.05));
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.rp-kpi:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-border-strong, #D6D8E2);
+  box-shadow: var(--shadow-md, 0 8px 20px rgba(16, 16, 40, 0.08));
+}
+
+.rp-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ไอคอน KPI เป็นตัวย่อข้อความ (TKT/OPEN/DONE/AVG/DEV/AI) ไม่ใช่อิโมจิ
+   จึงต้องใช้ min-width + padding แทนความกว้างคงที่ ไม่ให้คำยาวล้นกรอบ */
+.rp-kpi-icon {
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--color-primary, #7C3AED);
+  border-radius: 12px;
+  background: var(--color-primary-light, rgba(124, 58, 237, 0.1));
+}
+
+.rp-kpi-sub {
+  font-size: 0.68rem;
+  color: var(--color-text-tertiary, #86868F);
+  text-align: end;
+}
+
+.rp-kpi-value {
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-text, #16161D);
+  overflow-wrap: anywhere;
+}
+
+.rp-kpi-label {
+  margin-block-start: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #5B5B66);
+}
+
+/* ── แท็บ ───────────────────────────────────────────────────────────────── */
+.rp-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--color-surface-sunken, #F1F2F7);
+  border: 1px solid var(--color-border, #E7E8F0);
+  border-radius: 999px;
+}
+
+.rp-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 9px 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary, #5B5B66);
+  font-size: 0.84rem;
+  font-weight: 650;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rp-tab:hover {
+  background: var(--color-primary-tint, rgba(124, 58, 237, 0.06));
+  color: var(--color-text, #16161D);
+}
+
+.rp-tab:focus-visible {
+  outline: 2px solid var(--color-primary, #7C3AED);
+  outline-offset: 2px;
+}
+
+.rp-tab[aria-selected='true'] {
+  background: var(--color-surface, #FFFFFF);
+  color: var(--color-primary-dark, #5B21B6);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(16, 16, 40, 0.12));
+}
+
+.rp-tab-count {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-primary-light, rgba(124, 58, 237, 0.1));
+  color: var(--color-primary-dark, #5B21B6);
+}
+
+/* ── การ์ด ──────────────────────────────────────────────────────────────── */
+.rp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.rp-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E7E8F0);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(16, 16, 40, 0.05));
+  overflow: hidden;
+}
+
+.rp-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 18px;
+  border-block-end: 1px solid var(--color-border, #E7E8F0);
+}
+
+.rp-card-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text, #16161D);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rp-card-badge {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--color-primary-light, rgba(124, 58, 237, 0.1));
+  color: var(--color-primary-dark, #5B21B6);
+  white-space: nowrap;
+}
+
+.rp-card-body {
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+.rp-card-body--flush {
+  padding: 0;
+}
+
+/* ── แถบสัดส่วน ─────────────────────────────────────────────────────────── */
+.rp-bar {
+  margin-block-end: 12px;
+}
+
+.rp-bar:last-child {
+  margin-block-end: 0;
+}
+
+.rp-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 5px;
+  font-size: 0.8rem;
+}
+
+.rp-bar-label {
+  color: var(--color-text-secondary, #5B5B66);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.rp-bar-value {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: var(--color-text, #16161D);
+  font-variant-numeric: tabular-nums;
+}
+
+.rp-bar-pct {
+  margin-inline-start: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-tertiary, #86868F);
+}
+
+.rp-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-sunken, #F1F2F7);
+  overflow: hidden;
+}
+
+.rp-bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-bar-fill,
+  .rp-kpi {
+    transition: none;
+  }
+}
+
+/* ── ตาราง ──────────────────────────────────────────────────────────────── */
+.rp-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rp-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.rp-table th {
+  position: sticky;
+  inset-block-start: 0;
+  text-align: start;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary, #86868F);
+  background: var(--color-surface-sunken, #F1F2F7);
+  padding: 11px 14px;
+  white-space: nowrap;
+}
+
+.rp-table td {
+  padding: 11px 14px;
+  border-block-start: 1px solid var(--color-border, #E7E8F0);
+  color: var(--color-text, #16161D);
+  vertical-align: middle;
+}
+
+.rp-table tbody tr:hover td {
+  background: var(--color-primary-tint, rgba(124, 58, 237, 0.05));
+}
+
+.rp-td-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.rp-td-muted {
+  color: var(--color-text-tertiary, #86868F);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.rp-td-wrap {
+  min-width: 200px;
+  overflow-wrap: anywhere;
+}
+
+/* ปุ่มลิงก์ในตาราง — ให้คีย์บอร์ดเปิด ticket ได้ ไม่ใช่คลิกเมาส์อย่างเดียว */
+.rp-linkbtn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--color-primary-dark, #5B21B6);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rp-linkbtn:hover {
+  text-decoration-thickness: 2px;
+}
+
+.rp-linkbtn:focus-visible {
+  outline: 2px solid var(--color-primary, #7C3AED);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── แถบเครื่องมือ / ค้นหา ──────────────────────────────────────────────── */
+.rp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-end: 14px;
+}
+
+.rp-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-text, #16161D);
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border-strong, #D6D8E2);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.rp-input:focus-visible {
+  outline: 2px solid var(--color-primary, #7C3AED);
+  outline-offset: 1px;
+  border-color: var(--color-primary, #7C3AED);
+}
+
+/* ── รายละเอียด ticket ที่เลือก ─────────────────────────────────────────── */
+.rp-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 20px;
+}
+
+.rp-detail-item {
+  min-width: 0;
+}
+
+.rp-detail-key {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-text-tertiary, #86868F);
+  margin-block-end: 3px;
+}
+
+.rp-detail-val {
+  font-size: 0.88rem;
+  color: var(--color-text, #16161D);
+  overflow-wrap: anywhere;
+}
+
+/* ── สถานะว่าง / กำลังโหลด ──────────────────────────────────────────────── */
+/* โปรเจกต์ยังไม่มี .sr-only กลาง จึงนิยามเองแบบมี prefix กันชนกับสไตล์อื่น
+   ซ่อนจากสายตาแต่ยังอยู่ใน accessibility tree (ไม่ใช้ display:none) */
+.rp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rp-empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-tertiary, #86868F);
+}
+
+.rp-alert {
+  display: flex;
+  gap: 8px;
+  padding: 11px 15px;
+  font-size: 0.85rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-danger-light, rgba(229, 62, 62, 0.1));
+  color: var(--color-danger, #E53E3E);
+}
+
+.rp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.83rem;
+}
+
+.rp-list li {
+  padding-block: 8px;
+  border-block-start: 1px solid var(--color-border, #E7E8F0);
+  overflow-wrap: anywhere;
+}
+
+.rp-list li:first-child {
+  border-block-start: none;
+  padding-block-start: 0;
+}
+
+/* ── จอเล็ก ─────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .rp-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+  }
+
+  .rp-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .rp-kpi-value {
+    font-size: 1.4rem;
+  }
+
+  .rp-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rp-card-body {
+    padding: 14px;
+  }
+}

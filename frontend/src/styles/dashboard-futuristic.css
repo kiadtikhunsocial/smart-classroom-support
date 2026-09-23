@@ -1,0 +1,556 @@
+/* ============================================================================
+   dashboard-futuristic.css — เลเยอร์ "ยกระดับ" ของหน้าแรก (ภาพรวม)
+   ----------------------------------------------------------------------------
+   โหลดหลัง dashboard.css เท่านั้น และทุก selector อยู่ใต้ .dsh-page
+   → ไม่กระทบหน้าอื่น (รายงาน / โรงเรียน / PM) และไม่ต้องใช้ !important
+
+   หลักการ:
+   1. ไม่ hardcode สีลงใน rule — ประกาศ token --fx-* ที่ .dsh-page แล้วสลับค่า
+      ตาม [data-mode] ทำให้โหมดมืดได้ neon เต็มที่ ส่วนโหมดสว่างได้แค่แก้วใส
+      บาง ๆ ที่ยังอ่านออก (contrast ผ่าน)
+   2. ไม่ตั้ง background ให้ .dsh-kpi-icon เพราะ App.tsx ใส่ inline style
+      จาก themeTint() ไว้ (inline ชนะ stylesheet) จึงเสริมแค่กรอบ/เงาเรืองแสง
+   3. logical property (inset-inline / padding-block / border-*-start) → rtl ปลอดภัย
+   4. เอฟเฟกต์เคลื่อนไหวทุกตัวปิดทั้งหมดใน prefers-reduced-motion
+   5. เลเยอร์เรืองแสงเป็น ::before/::after + pointer-events:none → ไม่บังการคลิก
+   ========================================================================== */
+
+/* ── 1. โทเคนของเลเยอร์นี้ ──────────────────────────────────────────────── */
+.dsh-page {
+  /* จานสีหลักตามบรีฟ */
+  --fx-navy-deep: #050b1c;
+  --fx-navy: #0a1633;
+  --fx-blue: #249bff;
+  --fx-cyan: #00d9ff;
+  --fx-purple: #7c4dff;
+  --fx-magenta: #c94cff;
+
+  /* ผิวแก้ว + เส้นขอบ (โหมดสว่าง = ค่าเริ่มต้น, อ่านง่ายเป็นหลัก) */
+  --fx-glass: color-mix(in srgb, var(--color-surface, #fff) 86%, transparent);
+  --fx-glass-2: color-mix(in srgb, var(--color-surface, #fff) 94%, transparent);
+  --fx-line: var(--color-border, #e7e8f0);
+  --fx-line-strong: color-mix(in srgb, var(--fx-blue) 28%, var(--fx-line));
+  --fx-blur: 10px;
+
+  /* แสง/เงา */
+  --fx-glow-soft: 0 0 0 1px color-mix(in srgb, var(--fx-blue) 14%, transparent);
+  --fx-glow-card: 0 18px 40px -22px rgba(9, 16, 40, 0.28);
+  --fx-glow-hover: 0 0 0 1px color-mix(in srgb, var(--fx-blue) 34%, transparent),
+    0 22px 46px -20px color-mix(in srgb, var(--fx-blue) 34%, transparent);
+  --fx-rail: linear-gradient(90deg, var(--fx-cyan), var(--fx-blue) 45%, var(--fx-magenta));
+
+  /* ความเข้มของพื้นหลังเรืองแสง/ลายวงจร — โหมดสว่างแทบมองไม่เห็น */
+  --fx-bg-strength: 0.05;
+  --fx-grid-strength: 0.045;
+  --fx-scan: 0.06;
+
+  position: relative;
+  isolation: isolate;
+}
+
+[data-mode='dark'] .dsh-page,
+[data-mode='dark'].dsh-page {
+  --fx-glass: rgba(10, 22, 51, 0.58);
+  --fx-glass-2: rgba(5, 11, 28, 0.72);
+  --fx-line: rgba(126, 178, 255, 0.16);
+  --fx-line-strong: rgba(36, 155, 255, 0.42);
+  --fx-blur: 16px;
+
+  --fx-glow-soft: 0 0 0 1px rgba(36, 155, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --fx-glow-card: 0 24px 60px -28px rgba(0, 0, 0, 0.85),
+    0 0 42px -26px rgba(36, 155, 255, 0.55);
+  --fx-glow-hover: 0 0 0 1px rgba(0, 217, 255, 0.5),
+    0 0 26px -6px rgba(36, 155, 255, 0.35),
+    0 26px 60px -26px rgba(0, 0, 0, 0.9);
+
+  --fx-bg-strength: 0.5;
+  --fx-grid-strength: 0.13;
+  --fx-scan: 0.16;
+
+  /* ── จานสี navy ตามบรีฟ ────────────────────────────────────────────────
+     โหมดมืดของระบบเป็นดำอมเทา (#0B0B12) ซึ่งไม่ใช่ "deep navy" ที่ต้องการ
+     จึงทับ token กลางเฉพาะที่ element นี้ → ลูกหลานทั้งหมดในหน้าแรกได้ navy
+     ทันที (การ์ด, select, ตาราง, ชาร์ต) โดย sidebar/header/หน้าอื่นไม่ขยับ
+     เพราะ token ถูกประกาศบน .dsh-page ไม่ใช่ :root
+     ตัวอักษรยังเป็น --color-text (#ECECF4) → คอนทราสต์บน #0A1633 ≈ 14:1 */
+  --color-bg: var(--fx-navy-deep);
+  --color-surface: var(--fx-navy);
+  --color-surface-raised: #0e1c40;
+  --color-surface-sunken: #071026;
+  --color-border: rgba(126, 178, 255, 0.14);
+  --color-border-strong: rgba(126, 178, 255, 0.3);
+  --chart-grid: rgba(126, 178, 255, 0.12);
+  --chart-axis: #8098c2;
+
+  /* พื้นของหน้าเอง — ::before ยื่นเลยขอบ 28/32px จึงกลืนกับพื้นแอปพอดี */
+  background-color: var(--fx-navy-deep);
+}
+
+/* ── 2. พื้นหลัง: เรืองแสงน้ำเงิน-ม่วง + ลายวงจรบาง ๆ ─────────────────────
+   วางเป็น ::before ที่กินพื้นที่เกินขอบหน้า (inset ลบ) แล้วส่งไป z-index: -1
+   จึงไม่ต้องแก้ background ของ body และไม่กระทบหน้าอื่น */
+.dsh-page::before {
+  content: '';
+  position: absolute;
+  inset: -28px -32px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 28px;
+  background-image:
+    radial-gradient(
+      760px 420px at 12% -8%,
+      rgb(36 155 255 / var(--fx-bg-strength)),
+      transparent 62%
+    ),
+    radial-gradient(
+      680px 420px at 92% 4%,
+      rgb(124 77 255 / var(--fx-bg-strength)),
+      transparent 64%
+    ),
+    radial-gradient(
+      900px 520px at 50% 108%,
+      rgb(0 217 255 / calc(var(--fx-bg-strength) * 0.55)),
+      transparent 70%
+    ),
+    /* ลายวงจร: เส้นตั้ง/นอนห่าง 56px คมแค่ 1px ไม่รบกวนสายตา */
+    repeating-linear-gradient(
+      90deg,
+      rgb(126 178 255 / var(--fx-grid-strength)) 0 1px,
+      transparent 1px 56px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgb(126 178 255 / var(--fx-grid-strength)) 0 1px,
+      transparent 1px 56px
+    );
+  /* จางลงที่ขอบล่าง ไม่ให้ลายตัดจบแบบมีเส้นตรง */
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(120% 100% at 50% 0%, #000 55%, transparent 100%);
+}
+
+/* ── 2.5 พื้นของ shell รอบหน้าแรก ────────────────────────────────────────
+   .dsh-page ทับ --color-bg เป็น navy ได้แค่ตัวมันเองและลูกหลาน ส่วน
+   .app-main / .page-content ที่ครอบอยู่ยังทาพื้นด้วย --color-bg จาก :root
+   (โหมดมืดเดิม = #0B0B12 ดำอมเทา) → เห็นเป็นกรอบคนละโทนล้อมหน้าแรกไว้
+   :has(.dsh-page) ทำให้ rule นี้มีผลเฉพาะตอนที่หน้าแรกถูก render อยู่
+   หน้าอื่น (รายงาน/โรงเรียน/PM) ยังได้พื้นธีมปกติ และเบราว์เซอร์ที่ไม่รู้จัก
+   :has() จะข้าม rule นี้ไปเฉย ๆ = กลับไปพฤติกรรมเดิม ไม่พัง
+   ใช้ค่าตรงเพราะ --fx-navy-deep ประกาศไว้ที่ .dsh-page ซึ่งเป็น "ลูก"
+   จึงสืบทอดขึ้นมาถึง ancestor ไม่ได้ (ค่าเดียวกับ --fx-navy-deep) */
+[data-mode='dark'] .app-main:has(.dsh-page),
+[data-mode='dark'] .page-content:has(.dsh-page) {
+  background-color: #050b1c;
+}
+
+/* ── 3. Hero: กระจกเรืองแสง + แถบสแกนวิ่ง ───────────────────────────────── */
+[data-mode='dark'] .dsh-page .dsh-hero,
+[data-mode='dark'].dsh-page .dsh-hero {
+  background:
+    linear-gradient(135deg, rgba(36, 155, 255, 0.22) 0%, rgba(124, 77, 255, 0.2) 52%, rgba(5, 11, 28, 0.6) 100%),
+    var(--fx-glass-2);
+  border: 1px solid var(--fx-line-strong);
+  box-shadow: var(--fx-glow-card);
+  -webkit-backdrop-filter: blur(var(--fx-blur));
+  backdrop-filter: blur(var(--fx-blur));
+}
+
+.dsh-page .dsh-hero {
+  /* เส้นเรืองแสงบนสุดของแบนเนอร์ — ใช้ ::before ที่ยังว่างอยู่ (::after ถูกใช้แล้ว) */
+  border-start-start-radius: var(--radius-lg, 16px);
+  border-start-end-radius: var(--radius-lg, 16px);
+}
+
+.dsh-page .dsh-hero::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 2px;
+  z-index: 0;
+  background: var(--fx-rail);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* แถบแสงกวาดช้า ๆ ให้รู้สึกว่าเป็นจอเทคโนโลยี ไม่ใช่ภาพนิ่ง */
+.dsh-page .dsh-hero::after {
+  animation: fx-orb-drift 14s ease-in-out infinite alternate;
+}
+
+.dsh-page .dsh-hero-title {
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 18px rgba(0, 217, 255, 0.28);
+}
+
+.dsh-page .dsh-hero-sub b {
+  color: #fff;
+  text-shadow: 0 0 14px rgba(0, 217, 255, 0.45);
+}
+
+.dsh-page .dsh-chip {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0 18px -8px rgba(0, 217, 255, 0.7);
+}
+
+/* ── 4. KPI: การ์ดแก้วมีรางแสงด้านบน ────────────────────────────────────── */
+.dsh-page .dsh-kpi {
+  position: relative;
+  overflow: hidden;
+  background: var(--fx-glass);
+  border: 1px solid var(--fx-line);
+  box-shadow: var(--fx-glow-soft), var(--fx-glow-card);
+  -webkit-backdrop-filter: blur(var(--fx-blur));
+  backdrop-filter: blur(var(--fx-blur));
+}
+
+/* รางแสงบนการ์ด: ทึบเมื่อ hover/โฟกัสภายใน ปกติจางไว้ */
+.dsh-page .dsh-kpi::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 2px;
+  background: var(--fx-rail);
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.dsh-page .dsh-kpi:hover::before,
+.dsh-page .dsh-kpi:focus-within::before {
+  opacity: 1;
+}
+
+.dsh-page .dsh-kpi:hover {
+  border-color: var(--fx-line-strong);
+  box-shadow: var(--fx-glow-hover);
+}
+
+.dsh-page .dsh-kpi-icon {
+  border: 1px solid var(--fx-line);
+  box-shadow: inset 0 0 14px -6px rgba(36, 155, 255, 0.55);
+}
+
+.dsh-page .dsh-kpi-value {
+  letter-spacing: -0.01em;
+}
+
+[data-mode='dark'] .dsh-page .dsh-kpi-value,
+[data-mode='dark'].dsh-page .dsh-kpi-value {
+  text-shadow: 0 0 22px rgba(36, 155, 255, 0.32);
+}
+
+.dsh-page .dsh-kpi-label {
+  letter-spacing: 0.02em;
+}
+
+/* ── 5. แถบตัวกรอง + คอนโทรล ────────────────────────────────────────────── */
+.dsh-page .dsh-toolbar {
+  background: var(--fx-glass);
+  border: 1px solid var(--fx-line);
+  box-shadow: var(--fx-glow-soft);
+  -webkit-backdrop-filter: blur(var(--fx-blur));
+  backdrop-filter: blur(var(--fx-blur));
+}
+
+.dsh-page .dsh-toolbar-label {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-mode='dark'] .dsh-page .dsh-select,
+[data-mode='dark'].dsh-page .dsh-select {
+  color: var(--color-text, #ecf2ff);
+  background: rgba(5, 11, 28, 0.72);
+  border-color: var(--fx-line);
+}
+
+.dsh-page .dsh-select:hover:not(:disabled) {
+  border-color: var(--fx-line-strong);
+}
+
+.dsh-page .dsh-select:focus-visible {
+  border-color: var(--fx-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.24);
+}
+
+/* ── 6. การ์ดเนื้อหา/ชาร์ต ──────────────────────────────────────────────── */
+.dsh-page .dsh-card {
+  position: relative;
+  background: var(--fx-glass);
+  border: 1px solid var(--fx-line);
+  box-shadow: var(--fx-glow-soft), var(--fx-glow-card);
+  -webkit-backdrop-filter: blur(var(--fx-blur));
+  backdrop-filter: blur(var(--fx-blur));
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dsh-page .dsh-card:hover {
+  border-color: var(--fx-line-strong);
+  box-shadow: var(--fx-glow-hover);
+}
+
+.dsh-page .dsh-card-head {
+  position: relative;
+  border-block-end: 1px solid var(--fx-line);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fx-blue) 8%, transparent),
+    transparent
+  );
+}
+
+/* ขีดเรืองแสงสั้น ๆ หน้าหัวการ์ด แทนการใส่ ::before ในมาร์กอัป */
+.dsh-page .dsh-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.01em;
+}
+
+.dsh-page .dsh-card-title::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--fx-rail);
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.65);
+}
+
+[data-mode='dark'] .dsh-page .dsh-card-badge,
+[data-mode='dark'].dsh-page .dsh-card-badge {
+  color: #d9ecff;
+  background: rgba(36, 155, 255, 0.16);
+  border: 1px solid rgba(36, 155, 255, 0.34);
+  box-shadow: 0 0 16px -8px rgba(36, 155, 255, 0.9);
+}
+
+.dsh-page .dsh-chart-box {
+  position: relative;
+}
+
+/* ── 7. ตาราง ───────────────────────────────────────────────────────────── */
+[data-mode='dark'] .dsh-page .dsh-table th,
+[data-mode='dark'].dsh-page .dsh-table th {
+  color: #9fc4ef;
+  background: rgba(5, 11, 28, 0.66);
+  border-block-end: 1px solid var(--fx-line);
+  letter-spacing: 0.07em;
+}
+
+.dsh-page .dsh-table td {
+  border-block-start: 1px solid var(--fx-line);
+}
+
+[data-mode='dark'] .dsh-page .dsh-table tbody tr:hover td,
+[data-mode='dark'].dsh-page .dsh-table tbody tr:hover td {
+  background: rgba(36, 155, 255, 0.1);
+}
+
+/* ── 8. ชิปหมวดหมู่ / หัวกลุ่มพับได้ ────────────────────────────────────── */
+[data-mode='dark'] .dsh-page .dsh-type-chip,
+[data-mode='dark'].dsh-page .dsh-type-chip {
+  color: var(--color-text-secondary, #b9cdea);
+  background: rgba(10, 22, 51, 0.6);
+  border-color: var(--fx-line);
+}
+
+.dsh-page .dsh-type-chip:hover {
+  border-color: var(--fx-line-strong);
+}
+
+.dsh-page .dsh-type-chip:focus-visible {
+  border-color: var(--fx-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.24);
+}
+
+.dsh-page .dsh-type-chip.is-active {
+  color: var(--fx-cyan);
+  border-color: rgba(0, 217, 255, 0.55);
+  background: rgba(0, 217, 255, 0.12);
+  box-shadow: 0 0 18px -8px rgba(0, 217, 255, 0.9);
+}
+
+[data-mode='dark'] .dsh-page .dsh-group,
+[data-mode='dark'].dsh-page .dsh-group {
+  border-top-color: var(--fx-line);
+}
+
+[data-mode='dark'] .dsh-page .dsh-group-head:hover,
+[data-mode='dark'].dsh-page .dsh-group-head:hover {
+  background: rgba(36, 155, 255, 0.08);
+}
+
+.dsh-page .dsh-group-head:focus-visible {
+  outline-color: var(--fx-cyan);
+}
+
+[data-mode='dark'] .dsh-page .dsh-group-count,
+[data-mode='dark'].dsh-page .dsh-group-count {
+  color: #bcd6f7;
+  background: rgba(36, 155, 255, 0.12);
+  border-color: var(--fx-line);
+}
+
+[data-mode='dark'] .dsh-page .dsh-school-group + .dsh-school-group,
+[data-mode='dark'].dsh-page .dsh-school-group + .dsh-school-group {
+  border-top-color: var(--fx-line);
+}
+
+/* ── 8.5 ป้ายสถานะ / ความเร่งด่วนในตารางหน้าแรก ─────────────────────────
+   global.css กำหนดสีตัวอักษรของป้ายเป็นค่าคงที่โทนเข้ม (#B91C1C, #065F46 ...)
+   ซึ่งบนพื้นเข้มของธีมนี้คอนทราสต์ไม่ผ่าน ที่นี่จึงเปลี่ยนมาอ่าน token สถานะ
+   (--status-* / --color-* ซึ่งสลับค่าตามโหมดอยู่แล้ว) แล้วทำเป็นป้ายเรืองแสง
+   พื้นโปร่ง 16% + ขอบ 36% — ตัวอักษรใช้สีสถานะเต็มความสว่างจึงอ่านชัด
+   ไม่แตะ .badge::before ของ design-system.css และไม่แก้ป้ายของหน้าอื่น */
+.dsh-page .badge {
+  border: 1px solid transparent;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* helper pattern: ทุกตัวใช้สูตรเดียวกัน ต่างกันแค่ตัวแปรสี */
+.dsh-page .badge-new,
+.dsh-page .badge-assigned,
+.dsh-page .badge-in_progress,
+.dsh-page .badge-pending,
+.dsh-page .badge-waiting_parts,
+.dsh-page .badge-waiting_user,
+.dsh-page .badge-resolved,
+.dsh-page .badge-closed,
+.dsh-page .badge-cancelled,
+.dsh-page .badge-priority-low,
+.dsh-page .badge-priority-normal,
+.dsh-page .badge-priority-high,
+.dsh-page .badge-priority-critical {
+  color: var(--fx-badge, var(--color-text-secondary));
+  background: color-mix(in srgb, var(--fx-badge, var(--color-muted)) 16%, transparent);
+  border-color: color-mix(in srgb, var(--fx-badge, var(--color-muted)) 36%, transparent);
+}
+
+.dsh-page .badge-new            { --fx-badge: var(--status-new, #ef4444); }
+.dsh-page .badge-assigned       { --fx-badge: var(--status-assigned, #f59e0b); }
+.dsh-page .badge-in_progress    { --fx-badge: var(--status-in-progress, #2563eb); }
+.dsh-page .badge-pending        { --fx-badge: var(--status-pending, #8b5cf6); }
+.dsh-page .badge-waiting_parts  { --fx-badge: var(--status-waiting-parts, #3182ce); }
+.dsh-page .badge-waiting_user   { --fx-badge: var(--status-waiting-user, #b49bf0); }
+.dsh-page .badge-resolved       { --fx-badge: var(--status-resolved, #0f9d6e); }
+.dsh-page .badge-closed         { --fx-badge: var(--status-closed, #9ca3af); }
+.dsh-page .badge-cancelled      { --fx-badge: var(--status-cancelled, #ef4444); }
+
+.dsh-page .badge-priority-low      { --fx-badge: var(--color-success, #0f9d6e); }
+.dsh-page .badge-priority-normal   { --fx-badge: var(--color-info, #0b84d6); }
+.dsh-page .badge-priority-high     { --fx-badge: var(--color-warning, #c77700); }
+.dsh-page .badge-priority-critical { --fx-badge: var(--color-danger, #dc2b3f); }
+
+/* เฉพาะโหมดมืดจึงใส่แสงเรือง — โหมดสว่างปล่อยให้แบน อ่านสบายตา */
+[data-mode='dark'] .dsh-page .badge-new,
+[data-mode='dark'] .dsh-page .badge-cancelled,
+[data-mode='dark'] .dsh-page .badge-priority-critical,
+[data-mode='dark'].dsh-page .badge-new,
+[data-mode='dark'].dsh-page .badge-cancelled,
+[data-mode='dark'].dsh-page .badge-priority-critical {
+  box-shadow: 0 0 16px -8px color-mix(in srgb, var(--fx-badge) 90%, transparent);
+}
+
+/* ── 9. ว่าง / กำลังโหลด ────────────────────────────────────────────────── */
+.dsh-page .dsh-empty,
+.dsh-page .dsh-loading {
+  letter-spacing: 0.01em;
+}
+
+[data-mode='dark'] .dsh-page .dsh-loading,
+[data-mode='dark'].dsh-page .dsh-loading {
+  text-shadow: 0 0 18px rgba(36, 155, 255, 0.3);
+}
+
+/* ── 10. แอนิเมชัน (ชื่อ fx-* จึงไม่ชนกับไฟล์อื่น) ──────────────────────── */
+@keyframes fx-orb-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+  to {
+    transform: translate3d(-28px, 22px, 0) scale(1.12);
+    opacity: 1;
+  }
+}
+
+@keyframes fx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* การ์ดไล่กันขึ้นทีละใบตอนเข้าหน้า — ไม่เกิน 6 ใบตามจำนวน KPI จริง */
+.dsh-page .dsh-kpi {
+  animation: fx-rise 0.42s ease both;
+}
+
+.dsh-page .dsh-kpi:nth-child(1) { animation-delay: 0.02s; }
+.dsh-page .dsh-kpi:nth-child(2) { animation-delay: 0.06s; }
+.dsh-page .dsh-kpi:nth-child(3) { animation-delay: 0.1s; }
+.dsh-page .dsh-kpi:nth-child(4) { animation-delay: 0.14s; }
+.dsh-page .dsh-kpi:nth-child(5) { animation-delay: 0.18s; }
+.dsh-page .dsh-kpi:nth-child(6) { animation-delay: 0.22s; }
+
+/* ── 11. จอเล็ก: ลดเบลอ/เงาเพื่อไม่ให้เฟรมตก และลดลายพื้นหลัง ───────────── */
+@media (max-width: 640px) {
+  .dsh-page {
+    --fx-blur: 8px;
+    --fx-grid-strength: 0.06;
+  }
+
+  .dsh-page::before {
+    inset: -16px -16px;
+  }
+
+  .dsh-page .dsh-card-title::before {
+    height: 12px;
+  }
+}
+
+/* ── 12. เคารพการปิดแอนิเมชันของระบบ ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .dsh-page .dsh-kpi,
+  .dsh-page .dsh-hero::after {
+    animation: none;
+  }
+
+  .dsh-page .dsh-kpi {
+    opacity: 1;
+    transform: none;
+  }
+
+  .dsh-page .dsh-card,
+  .dsh-page .dsh-kpi::before {
+    transition: none;
+  }
+}
+
+/* ── 13. ผู้ใช้ที่ตั้งค่า contrast สูง: ตัดแก้ว/แสงออก เหลือขอบคมชัด ─────── */
+@media (prefers-contrast: more) {
+  .dsh-page .dsh-hero,
+  .dsh-page .dsh-kpi,
+  .dsh-page .dsh-card,
+  .dsh-page .dsh-toolbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--color-border-strong, #35354b);
+    box-shadow: none;
+  }
+
+  .dsh-page::before {
+    display: none;
+  }
+}

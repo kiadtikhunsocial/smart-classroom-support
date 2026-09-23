@@ -6,12 +6,11 @@
 
 ใช้:
     # ในเครื่อง (รันจากโฟลเดอร์ backend)
-    DATABASE_URL='<neon>' JWT_SECRET=x PYTHONPATH=. python scripts/seed_admin.py --yes
+    SEED_ADMIN_PASSWORD='<unique-local-password>' python scripts/seed_admin.py --yes
     # ใน container
     python scripts/seed_admin.py --yes
 
-กำหนดรหัสผ่านเองได้ด้วย env `SEED_ADMIN_PASSWORD`
-(ถ้าไม่ตั้งจะใช้ค่าเริ่มต้นด้านล่าง — ต้องเปลี่ยนทันทีหลัง login ครั้งแรก)
+ต้องกำหนดรหัสผ่านเองด้วย env `SEED_ADMIN_PASSWORD` และใช้กับฐานข้อมูล local เท่านั้น
 """
 import os
 import sys
@@ -25,9 +24,9 @@ os.chdir(BASE_DIR)
 
 from app.models import Base, SessionLocal, User  # noqa: E402
 from app.main import hash_password  # noqa: E402
+from demo_safety import require_local_demo_database  # noqa: E402
 
 DEFAULT_USERNAME = "iwasuperadmin"
-DEFAULT_PASSWORD = "IwaScr2026!admin"
 
 
 def reset_and_seed(password: str) -> None:
@@ -62,9 +61,13 @@ def reset_and_seed(password: str) -> None:
 
 
 if __name__ == "__main__":
+    require_local_demo_database()
     confirmed = "--yes" in sys.argv or os.environ.get("CONFIRM_RESET", "").lower() == "yes"
     if not confirmed:
         print("⚠ สคริปต์นี้จะลบข้อมูลทั้งหมดในฐานข้อมูลที่ DATABASE_URL ชี้ไป")
         print("   ยืนยันด้วย:  python scripts/seed_admin.py --yes   (หรือ CONFIRM_RESET=yes)")
         sys.exit(1)
-    reset_and_seed(os.environ.get("SEED_ADMIN_PASSWORD") or DEFAULT_PASSWORD)
+    password = os.environ.get("SEED_ADMIN_PASSWORD", "")
+    if len(password) < 12:
+        raise SystemExit("SEED_ADMIN_PASSWORD must be set to at least 12 characters")
+    reset_and_seed(password)

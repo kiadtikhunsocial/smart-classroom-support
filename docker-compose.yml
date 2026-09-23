@@ -124,11 +124,30 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Vite ฝังค่านี้ตอน build → ต้องส่งเป็น build arg
-        # (ตั้งใน environment ไม่มีผล เพราะ bundle ถูก build ไปแล้ว)
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
+        # ปล่อยว่างโดยเจตนา: บันเดิลจะเรียก '/api' แบบ same-origin แล้ว vite preview
+        # proxy ส่งต่อไป service backend ให้ → ไม่ต้องพึ่ง CORS และไม่มี localhost
+        # ฝังในบันเดิล (ค่า localhost เคยทำให้เบราว์เซอร์ยิงไปเครื่องตัวเองแล้วล็อกอินไม่ผ่าน)
+        VITE_API_URL: ${FRONTEND_VITE_API_URL:-}
     container_name: smart_classroom_frontend
     restart: unless-stopped
+    # โหมด dev: mount ซอร์สจากเครื่องเข้าคอนเทนเนอร์ แล้วรัน vite dev server แทน vite preview
+    # → แก้ไฟล์ใน frontend/src แล้วเห็นผลที่ http://localhost:5173 ทันที ไม่ต้อง rebuild image
+    #   (เดิมใช้ vite preview เสิร์ฟ dist/ ที่บิลด์ตอน docker build จึงค้างเป็นโค้ดเก่าเสมอ)
+    # ถ้าจะกลับไปโหมด production-like (เสิร์ฟ dist ที่บิลด์ใน image) ให้คอมเมนต์
+    # command + volumes สองบรรทัดล่างออก แล้ว docker compose up -d --build frontend
+    command: sh -c "npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      # ใช้ตอน "รัน" โดย server.proxy / preview.proxy ใน vite.config.ts — ชื่อ service ในเครือข่าย compose
+      API_PROXY_TARGET: http://backend:8000
+      # bind mount จาก Windows/macOS ไม่ส่งอีเวนต์ inotify เข้าคอนเทนเนอร์ → HMR ไม่ทำงาน
+      # ค่านี้สั่งให้ vite วนเช็คไฟล์เอง (ดู server.watch ใน vite.config.ts)
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      # ซอร์สจริงจากเครื่อง — เขียนทับ /app ที่ copy ไว้ตอน build
+      - ./frontend:/app
+      # ต้องกัน /app/node_modules ไว้ด้วย volume แยก ไม่ให้ node_modules ของ Windows
+      # ทับของคอนเทนเนอร์ (esbuild/rollup เป็น binary คนละแพลตฟอร์ม → vite รันไม่ขึ้น)
+      - frontend_node_modules:/app/node_modules
     ports:
       - "5173:5173"
     depends_on:
@@ -141,3 +160,5 @@ volumes:
   backend_data:
   redis_data:
   minio_data:
+  # node_modules ของคอนเทนเนอร์ frontend (ติดตั้งด้วย node:20-alpine ตอน build image)
+  frontend_node_modules:

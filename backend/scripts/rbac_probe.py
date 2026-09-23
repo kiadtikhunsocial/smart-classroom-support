@@ -1,4 +1,4 @@
-import json, urllib.request
+import json, os, urllib.request
 
 BASE = "https://smart-classroom-backend-3tv7.onrender.com"
 
@@ -24,7 +24,8 @@ def login(u, p):
 
 
 if __name__ == "__main__":
-    users = [("iwasuperadmin", "IwaScr2026!admin"), ("test01", "test001"),
+    admin_password = os.environ.get("TEST_ADMIN_PASSWORD", "")
+    users = ([("iwasuperadmin", admin_password)] if admin_password else []) + [("test01", "test001"),
              ("test02", "test002"), ("test03", "test003"), ("test04", "test004"),
              ("test07", "test007")]
 

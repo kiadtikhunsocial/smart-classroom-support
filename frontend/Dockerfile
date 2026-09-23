@@ -11,7 +11,10 @@ COPY . .
 
 # Vite ฝังค่า env ลงใน bundle "ตอน build" ไม่ใช่ตอน run
 # → ต้องรับผ่าน build arg (การตั้ง environment ใน compose/Railway ไม่มีผลกับ bundle)
-ARG VITE_API_URL=http://localhost:8000/api
+# ห้าม default เป็น localhost: ค่านี้ถูกฝังลงบันเดิล แล้วเบราว์เซอร์ของผู้ใช้จะยิงไป
+# localhost ของเครื่องตัวเอง (คำขอไม่เคยถึง backend) — ปล่อยว่างไว้เพื่อให้ client.ts
+# fallback เป็น '/api' แบบ same-origin แล้วให้ proxy ของ vite preview ส่งต่อไป backend
+ARG VITE_API_URL=""
 ENV VITE_API_URL=$VITE_API_URL
 
 # Build production bundle — ถ้า build พังต้องให้ image build พังไปเลย

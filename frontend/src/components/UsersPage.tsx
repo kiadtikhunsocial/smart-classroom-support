@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { ASSIGNABLE_ROLES, ROLE_LABEL_FULL_TH, LEGACY_ROLE_LABEL_TH } from '../roleLabels';
 
-const ROLES = ['owner', 'super_admin', 'admin', 'admin_school', 'it_support', 'teacher', 'student'];
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'เจ้าของระบบ (Owner)', super_admin: 'ผู้ดูแลบริษัท', admin: 'ผู้ดูแลบริษัท (Admin)', admin_school: 'ผู้ดูแลโรงเรียน', it_support: 'เจ้าหน้าที่ IT',
-  teacher: 'ครู', student: 'นักเรียน',
-};
+const ROLES = ASSIGNABLE_ROLES;
+
+// ป้ายชื่อบทบาท: ใช้แหล่งกลางใน roleLabels.ts แทนแผนที่เดิมในไฟล์นี้ที่ drift ไปแล้ว
+// (ของเดิมตั้ง super_admin = 'ผู้ดูแลบริษัท' ซ้ำกับ admin)
+// บทบาทที่เลิกใช้ยังคงป้ายไว้ เพื่อให้บัญชีเก่าในตารางไม่แสดงเป็นรหัสดิบ
+// แต่เลือกใหม่ไม่ได้ เพราะไม่อยู่ใน ASSIGNABLE_ROLES
+const ROLE_LABELS: Record<string, string> = { ...ROLE_LABEL_FULL_TH, ...LEGACY_ROLE_LABEL_TH };
 
 // บทบาทที่ผู้ใช้ปัจจุบันเลือกได้เมื่อสร้าง/แก้ไข user (จำกัดตามสิทธิ์)
 function creatableRoles(myRole?: string): string[] {
-  if (myRole === 'admin_school') return ['teacher', 'student', 'it_support']; // ผู้ดูแลรร: สร้างได้แค่ ครู/นักเรียน/เจ้าหน้าที่ IT
+  if (myRole === 'admin_school') return ['it_support']; // ผู้ดูแลรร: สร้างได้แค่เจ้าหน้าที่ IT ของโรงเรียนตนเอง
   if (myRole === 'owner') return ROLES; // Owner: สร้างได้ทุกบทบาท
   return ROLES.filter((r) => r !== 'owner'); // super_admin/admin: สร้างได้ทุกบทบาทยกเว้น owner
 }
@@ -21,7 +24,7 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ line_user_id: '', line_display_name: '', line_email: '', organization_id: 0, role: 'teacher', is_active: true, password: '' });
+  const [form, setForm] = useState({ line_user_id: '', line_display_name: '', line_email: '', organization_id: 0, role: 'it_support', is_active: true, password: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
 
@@ -39,9 +42,9 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
   useEffect(() => { load(); }, []);
 
   const openAdd = () => {
-    // admin_school: ตั้ง org เป็นของตัวเองเสมอ + default role teacher
+    // admin_school: ตั้ง org เป็นของตัวเองเสมอ + บทบาทเริ่มต้นตามสิทธิ์ที่สร้างได้
     const myOrg = isSchoolAdmin ? (orgs.find((o) => o.id === myOrgId())?.id || 0) : 0;
-    setForm({ line_user_id: '', line_display_name: '', line_email: '', organization_id: myOrg, role: 'teacher', is_active: true, password: '' });
+    setForm({ line_user_id: '', line_display_name: '', line_email: '', organization_id: myOrg, role: allowedRoles[0] || 'it_support', is_active: true, password: '' });
     setEditingId(null);
     setShowForm(true);
   };
@@ -165,7 +168,12 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
             </svg>
             เพิ่มผู้ใช้
           </button>
-          <button className="btn btn-ghost" onClick={load}>⟳</button>
+          <button className="btn btn-ghost btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -180,13 +188,17 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
           <div className="repair-panel" style={{ width: 500, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editingId ? `แก้ไขผู้ใช้: ${form.line_user_id}` : 'เพิ่มผู้ใช้ใหม่'}</h3>
-              <button className="repair-panel-close" onClick={() => setShowForm(false)}>✕</button>
+              <button className="repair-panel-close" onClick={() => setShowForm(false)} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body">
               <form onSubmit={handleSave}>
                 <div className="form-group">
                   <label className="form-label">ชื่อผู้ใช้ (LINE User ID) *</label>
-                  <input className="form-input" value={form.line_user_id} onChange={(e) => setForm({ ...form, line_user_id: e.target.value })} placeholder="เช่น teacher01" disabled={!!editingId} />
+                  <input className="form-input" value={form.line_user_id} onChange={(e) => setForm({ ...form, line_user_id: e.target.value })} placeholder="เช่น itsupport01" disabled={!!editingId} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">ชื่อ (LINE Display Name)</label>

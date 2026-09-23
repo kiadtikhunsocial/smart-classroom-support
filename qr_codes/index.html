@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR อุปกรณ์ — ทุกโรงเรียน</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+       background: #f4f5f7; color: #16181d; }
+h1 { font-size: 1.4rem; margin: 0 0 4px; }
+p.sub { margin: 0 0 24px; color: #5a616e; font-size: .9rem; }
+h2 { font-size: 1.05rem; margin: 28px 0 12px; padding-bottom: 6px;
+     border-bottom: 2px solid #d8dbe2; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.card { background: #fff; border: 1px solid #d8dbe2; border-radius: 12px; padding: 12px;
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        page-break-inside: avoid; break-inside: avoid; }
+.card img { width: 100%; max-width: 160px; height: auto; image-rendering: pixelated; }
+.code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .8rem;
+        font-weight: 700; word-break: break-all; text-align: center; }
+.label { font-size: .78rem; color: #5a616e; text-align: center; line-height: 1.45; }
+ul.schools { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px;
+             grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+ul.schools a { display: block; background: #fff; border: 1px solid #d8dbe2; border-radius: 12px;
+               padding: 14px 16px; text-decoration: none; color: inherit; }
+ul.schools a:hover, ul.schools a:focus-visible { border-color: #3b6fd4; outline: none; }
+ul.schools strong { display: block; font-size: .98rem; }
+ul.schools span { font-size: .8rem; color: #5a616e; }
+@media print {
+  body { background: #fff; padding: 0; }
+  .card { border-color: #999; }
+}
+</style>
+</head>
+<body>
+  <h1>QR อุปกรณ์ทั้งระบบ</h1>
+  <p class="sub">6 โรงเรียน · 112 เครื่อง — เลือกโรงเรียนเพื่อดู/พิมพ์ QR</p>
+  <ul class="schools">
+    <li><a href="SCH-DEMO/index.html">
+      <strong>สาธิต</strong>
+      <span>SCH-DEMO · 12 เครื่อง</span>
+    </a></li>
+    <li><a href="SCH-M01/index.html">
+      <strong>หนองปลาไหล</strong>
+      <span>SCH-M01 · 20 เครื่อง</span>
+    </a></li>
+    <li><a href="SCH-M02/index.html">
+      <strong>อนุบาลเมืองใหม่</strong>
+      <span>SCH-M02 · 20 เครื่อง</span>
+    </a></li>
+    <li><a href="SCH-M03/index.html">
+      <strong>วัดราษฎร์บำรุง</strong>
+      <span>SCH-M03 · 20 เครื่อง</span>
+    </a></li>
+    <li><a href="SCH-M04/index.html">
+      <strong>เทศบาลสองพี่น้อง</strong>
+      <span>SCH-M04 · 20 เครื่อง</span>
+    </a></li>
+    <li><a href="SCH-M05/index.html">
+      <strong>สาธิตวิทยาลัยครู</strong>
+      <span>SCH-M05 · 20 เครื่อง</span>
+    </a></li>
+  </ul>
+</body>
+</html>

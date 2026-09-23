@@ -25,9 +25,10 @@ export default function DeviceList({ devices, onDeviceClick, onScanClick }: Devi
           onClick={() => onDeviceClick?.(device)}
         >
           <div className="device-icon">
-            {device.device_type === 'projector' ? '📽️' : 
-             device.device_type === 'ac' ? '❄️' : 
-             device.device_type === 'computer' ? '💻' : '📱'}
+            {/* ตัวย่อข้อความแทนอิโมจิ — แสดงผลเหมือนกันทุกเครื่อง */}
+            {device.device_type === 'projector' ? 'PRJ' :
+             device.device_type === 'ac' ? 'AC' :
+             device.device_type === 'computer' ? 'PC' : 'DEV'}
           </div>
           <div className="device-info">
             <div className="device-name">{device.device_type}</div>

@@ -11,13 +11,17 @@ export function TicketCard({ ticket, onView }: TicketCardProps) {
     <div className="ticket-card">
       <div className="ticket-card-header">
         <span className="ticket-id">{ticket.ticket_id}</span>
-        <span className="ticket-status-badge" style={{ backgroundColor: STATUS_COLOR[ticket.status] || '#718096' }}>
+        <span className="ticket-status-badge" style={{ backgroundColor: STATUS_COLOR[ticket.status] || 'var(--color-muted, #718096)' }}>
           {STATUS_LABEL[ticket.status] || ticket.status}
         </span>
       </div>
       <div className="ticket-title">{ticket.title}</div>
       {ticket.device_id && (
-        <div className="ticket-device">อุปกรณ์: {ticket.device_id}</div>
+        <div className="ticket-device">
+          อุปกรณ์: {ticket.device_label || ticket.device_type || ticket.device_id}
+          {/* รหัสยังต้องมีไว้ให้เจ้าหน้าที่อ้างอิงกับสติกเกอร์ แต่ไม่ใช่สิ่งแรกที่อ่าน */}
+          <span className="ticket-device-code"> ({ticket.device_id})</span>
+        </div>
       )}
       <div className="ticket-meta">
         <span className={`priority-${ticket.priority}`}>{ticket.priority}</span>

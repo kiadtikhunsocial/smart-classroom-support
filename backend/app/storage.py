@@ -25,11 +25,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import re
 import unicodedata
 import uuid
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local").lower()
 S3_BUCKET = os.environ.get("S3_BUCKET", "")
@@ -295,7 +298,8 @@ def _save_s3(content: bytes, key: str, original: str, mime: str, ext: str) -> di
 
         if isinstance(e, HTTPException):
             raise
-        raise _http_error(500, f"อัปโหลดไป cloud ล้มเหลว: {e}")
+        logger.exception("Cloud upload failed")
+        raise _http_error(502, "อัปโหลดไฟล์ไม่สำเร็จ กรุณาลองใหม่") from e
 
 
 def _s3_client():

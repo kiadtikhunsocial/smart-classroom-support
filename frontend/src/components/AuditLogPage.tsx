@@ -9,6 +9,8 @@ const ACTION_LABELS: Record<string, string> = {
   pm_generate: 'สร้างงาน PM ตามรอบ',
   pm_task_submit: 'ส่งผลตรวจ PM',
   pm_task_skip: 'ข้ามงาน PM',
+  // งาน PM ที่ปิดแล้วถูกแก้ย้อนหลังโดยผู้ดูแลระดับสูง — แยก action จากการบันทึกครั้งแรก
+  pm_task_edit: 'แก้ไขงาน PM ย้อนหลัง',
 };
 
 function fmtDateTime(value?: string | null): string {
@@ -98,7 +100,12 @@ export default function AuditLogPage({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         <div className="top-bar-actions">
-          <button className="btn btn-ghost" onClick={load} aria-label="โหลดใหม่">⟳</button>
+          <button className="btn btn-ghost btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -230,11 +237,17 @@ export default function AuditLogPage({ onBack }: { onBack: () => void }) {
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
         <button className="btn btn-ghost" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loading}>
-          ← ก่อนหน้า
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginRight: 6, verticalAlign: '-2px' }}>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          ก่อนหน้า
         </button>
         <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>หน้า {page + 1}</span>
         <button className="btn btn-ghost" onClick={() => setPage((p) => p + 1)} disabled={!hasNext || loading}>
-          ถัดไป →
+          ถัดไป
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginLeft: 6, verticalAlign: '-2px' }}>
+            <path d="M9 6l6 6-6 6" />
+          </svg>
         </button>
       </div>
 
@@ -243,7 +256,11 @@ export default function AuditLogPage({ onBack }: { onBack: () => void }) {
           <div className="repair-panel" style={{ width: 620, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{ACTION_LABELS[detail.action] || detail.action}</h3>
-              <button className="repair-panel-close" onClick={() => setDetail(null)} aria-label="ปิด">✕</button>
+              <button className="repair-panel-close" onClick={() => setDetail(null)} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body">
               <div className="form-row" style={{ marginBottom: 12 }}>

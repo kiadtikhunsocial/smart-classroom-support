@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 
+/**
+ * สีของ badge สถานะ lead — ใช้เป็น CSS property (background) จึงอ้าง var() ได้ตรง ๆ
+ * และเปลี่ยนตามธีมเองโดยไม่ต้อง re-render (มี fallback กันกรณี token ยังไม่โหลด)
+ */
 const LEAD_STATUS: Record<string, { label: string; color: string }> = {
-  new: { label: 'ใหม่', color: '#EF4444' },
-  contacted: { label: 'ติดต่อแล้ว', color: '#10B981' },
-  closed: { label: 'ปิดแล้ว', color: '#6B7280' },
+  new: { label: 'ใหม่', color: 'var(--status-new, #EF4444)' },
+  contacted: { label: 'ติดต่อแล้ว', color: 'var(--status-resolved, #10B981)' },
+  closed: { label: 'ปิดแล้ว', color: 'var(--status-closed, #6B7280)' },
+};
+
+/** ช่องทางที่ lead เข้ามา — WEB มาจากฟอร์มสมัครสมาชิกลูกค้า (/?customer=1) */
+const LEAD_SOURCE_LABEL: Record<string, string> = {
+  LINE: 'LINE',
+  WEB: 'เว็บไซต์',
 };
 
 function fmtDate(iso?: string | null): string {
@@ -88,7 +98,17 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
           </div>
         </div>
         <div className="top-bar-actions">
-          <button className="btn btn-ghost" onClick={() => { setLoading(true); loadLeads().catch((e) => setError(e.message)).finally(() => setLoading(false)); }}>⟳</button>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => { setLoading(true); loadLeads().catch((e) => setError(e.message)).finally(() => setLoading(false)); }}
+            aria-label="โหลดใหม่"
+            title="โหลดใหม่"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -102,8 +122,8 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 16 }}>
         {[
           { label: 'Lead ทั้งหมด', value: total, color: 'var(--color-primary)' },
-          { label: 'รอติดต่อกลับ', value: newCount, color: '#EF4444' },
-          { label: 'ติดต่อแล้ว', value: contacted, color: '#10B981' },
+          { label: 'รอติดต่อกลับ', value: newCount, color: 'var(--status-new, #EF4444)' },
+          { label: 'ติดต่อแล้ว', value: contacted, color: 'var(--status-resolved, #10B981)' },
         ].map((c) => (
           <div key={c.label} style={{
             background: 'var(--color-surface-raised, var(--color-surface))',
@@ -147,7 +167,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                 <thead>
                   <tr>
                     <th>ชื่อ</th><th>เบอร์</th><th>สนใจ / ต้องการ</th><th>สินค้า</th>
-                    <th>สถานะ</th><th>วันที่</th><th>จัดการ</th>
+                    <th>ช่องทาง</th><th>สถานะ</th><th>วันที่</th><th>จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -159,6 +179,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                         <td style={{ whiteSpace: 'nowrap' }}>{l.phone || '—'}</td>
                         <td style={{ fontSize: '0.82rem' }}>{l.interest || '—'}</td>
                         <td style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>{l.products || '—'}</td>
+                        <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{LEAD_SOURCE_LABEL[l.source] || l.source || 'LINE'}</td>
                         <td>
                           <span style={{
                             display: 'inline-block', padding: '2px 10px', borderRadius: 999,
@@ -192,7 +213,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                                 onClick={() => removeLead(l.id, l.name)}
                                 title="ลบ lead"
                               >
-                                🗑
+                                ลบ
                               </button>
                             )}
                           </div>

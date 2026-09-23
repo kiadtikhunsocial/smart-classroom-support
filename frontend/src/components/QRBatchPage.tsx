@@ -6,6 +6,7 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
   const [devices, setDevices] = useState<any[]>([]);
   const [orgs, setOrgs] = useState<any[]>([]);
   const [orgFilter, setOrgFilter] = useState<number | ''>('');
+  const [typeFilter, setTypeFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [qrMap, setQrMap] = useState<Record<string, string>>({});
@@ -31,7 +32,7 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
     setError(null);
     const map: Record<string, string> = {};
     try {
-      for (const d of devices) {
+      for (const d of visibleDevices) {
         map[d.device_id] = await QRCode.toDataURL(qrUrlFor(d), { width: 200, margin: 1 });
       }
       setQrMap(map);
@@ -46,7 +47,7 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
     if (Object.keys(qrMap).length === 0) { alert('กด "สร้าง QR ทั้งหมด" ก่อนพิมพ์'); return; }
     const win = window.open('', '_blank', 'width=800,height=600');
     if (!win) return;
-    const rows = devices
+    const rows = visibleDevices
       .map((d) => {
         const url = qrUrlFor(d);
         return `
@@ -57,12 +58,23 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
           </div>`;
       })
       .join('');
-    win.document.write(`<html><head><title>QR Batch — ${devices.length} อุปกรณ์</title>
+    win.document.write(`<html><head><title>QR Batch — ${visibleDevices.length} อุปกรณ์</title>
       <style>@media print { body { margin: 10mm; } }</style></head>
-      <body><h3 style="font-family:sans-serif">QR ติดอุปกรณ์ (${devices.length} เครื่อง)</h3>${rows}
+      <body><h3 style="font-family:sans-serif">QR ติดอุปกรณ์ (${visibleDevices.length} เครื่อง)${typeFilter ? ` — หมวด ${typeFilter}` : ''}</h3>${rows}
       <script>window.onload = () => setTimeout(() => window.print(), 300);<${''}/script></body></html>`);
     win.document.close();
   };
+
+  // ─── หมวดหมู่อุปกรณ์ที่มีอยู่จริง + จำนวนของแต่ละหมวด ───
+  const typeCounts = devices.reduce<Record<string, number>>((acc, d) => {
+    const t = d.device_type || 'Other';
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+  const typeOptions = Object.keys(typeCounts).sort((a, b) => a.localeCompare(b, 'th'));
+  const visibleDevices = typeFilter
+    ? devices.filter((d) => (d.device_type || 'Other') === typeFilter)
+    : devices;
 
   return (
     <div className="page-content">
@@ -73,7 +85,12 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
           </button>
           <div>
             <h1 className="top-bar-title">พิมพ์ QR (Batch)</h1>
-            <span className="top-bar-subtitle">QR ทั้งหมด {devices.length} เครื่อง — พิมพ์เป็นชุด พร้อมรหัสอ่านง่ายใต้ QR (TOR 1.5.4)</span>
+            <span className="top-bar-subtitle">
+              {typeFilter
+                ? `${visibleDevices.length} เครื่อง · หมวด ${typeFilter} (ทั้งหมด ${devices.length})`
+                : `QR ทั้งหมด ${devices.length} เครื่อง · ${typeOptions.length} หมวดหมู่`}
+              {' '}— พิมพ์เป็นชุด พร้อมรหัสอ่านง่ายใต้ QR (TOR 1.5.4)
+            </span>
           </div>
         </div>
         <div className="top-bar-actions">
@@ -81,10 +98,23 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
             <option value="">ทุกโรงเรียน</option>
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          <button className="btn btn-secondary" onClick={genAll} disabled={generating || devices.length === 0}>
+          <select
+            className="form-select"
+            style={{ width: 200 }}
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            aria-label="กรองตามหมวดหมู่อุปกรณ์"
+            disabled={loading || typeOptions.length === 0}
+          >
+            <option value="">ทุกหมวดหมู่อุปกรณ์</option>
+            {typeOptions.map((t) => (
+              <option key={t} value={t}>{t} ({typeCounts[t]})</option>
+            ))}
+          </select>
+          <button className="btn btn-secondary" onClick={genAll} disabled={generating || visibleDevices.length === 0}>
             {generating ? 'กำลังสร้าง...' : 'สร้าง QR ทั้งหมด'}
           </button>
-          <button className="btn btn-primary" onClick={printBatch} disabled={Object.keys(qrMap).length === 0}>🖨️ พิมพ์ ({devices.length})</button>
+          <button className="btn btn-primary" onClick={printBatch} disabled={Object.keys(qrMap).length === 0}>พิมพ์ ({visibleDevices.length})</button>
         </div>
       </div>
 
@@ -99,7 +129,7 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
       ) : (
         <div className="panel-card">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-            {devices.map((d) => (
+            {visibleDevices.map((d) => (
               <div key={d.device_id} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 12, textAlign: 'center' }}>
                 <div style={{ fontWeight: 600, fontSize: '0.85rem', wordBreak: 'break-all' }}>{d.device_id}</div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)', margin: '2px 0 8px' }}>{d.device_type}{d.brand ? ` · ${d.brand}` : ''}</div>

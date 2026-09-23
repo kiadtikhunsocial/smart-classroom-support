@@ -5,6 +5,36 @@
     <link rel="icon" type="image/png" href="/favicon-32.png" />
     <link rel="apple-touch-icon" href="/logo.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="ระบบจัดการแจ้งซ่อมอุปกรณ์ห้องเรียนอัจฉริยะ — แจ้งซ่อม ติดตามสถานะ และดูแลอุปกรณ์ในที่เดียว" />
+    <!-- ธีมของแอปถูกเลือกจากหน้าตั้งค่า (theme.ts) ไม่ใช่จาก prefers-color-scheme
+         ของ OS จึงตั้ง theme-color เป็น navy ค่าเดียวให้ตรงกับค่าเริ่มต้น (dark)
+         ถ้าผู้ใช้สลับเป็นโหมดสว่าง applyThemePrefs() จะอัปเดต tag นี้ตอน runtime -->
+    <meta name="theme-color" content="#050B1C" />
+    <meta name="color-scheme" content="dark light" />
+    <!-- พื้นก่อน CSS ภายนอกโหลดเสร็จ — กันจอขาวกระพริบหนึ่งเฟรมตอนเปิดแอป
+         (initTheme() ใน main.tsx ทำงานหลัง bundle โหลด ซึ่งช้ากว่า paint ครั้งแรก)
+         html:not([data-mode]) = ช่วงก่อน initTheme() ทาธีม → ใช้ navy ตามค่าเริ่มต้น
+         หลัง initTheme() attribute ถูกตั้ง → กฎด้านล่างเข้าคุม จึงไม่มี navy
+         โผล่ที่ขอบล่างเมื่อผู้ใช้เลือกโหมดสว่างและเนื้อหาสั้นกว่าจอ -->
+    <style>
+      html,
+      body {
+        margin: 0;
+      }
+      html:not([data-mode]),
+      html[data-mode='dark'] {
+        background-color: #050b1c;
+      }
+      html[data-mode='light'] {
+        background-color: #f7f8fb;
+      }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+    />
     <title>IWA Smart Classroom Support</title>
   </head>
   <body>

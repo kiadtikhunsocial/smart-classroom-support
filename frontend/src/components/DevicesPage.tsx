@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../api/client';
 
@@ -10,6 +10,128 @@ const DEVICE_TYPES = [
 
 const DEVICE_STATUSES = ['active', 'inactive', 'decommissioned'];
 
+//: เกณฑ์ "ใกล้หมดประกัน" ต้องตรงกับ pm_rules.WARRANTY_WARN_DAYS ของ backend (PM Rule 2)
+const WARRANTY_WARN_DAYS = 30;
+
+const DEVICE_STATUS_LABELS: Record<string, string> = {
+  active: 'ใช้งานอยู่',
+  inactive: 'พักการใช้งาน',
+  decommissioned: 'ปลดระวาง',
+};
+
+const TICKET_STATUS_LABELS: Record<string, string> = {
+  new: 'รอรับเรื่อง',
+  assigned: 'มอบหมายแล้ว',
+  in_progress: 'กำลังดำเนินการ',
+  pending: 'รอดำเนินการต่อ',
+  waiting_parts: 'รออะไหล่',
+  waiting_user: 'รอผู้แจ้งยืนยัน',
+  resolved: 'ซ่อมเสร็จ รอยืนยัน',
+  closed: 'ปิดงาน',
+  cancelled: 'ยกเลิก',
+};
+
+type WarrantyStatus = 'active' | 'expiring' | 'expired' | 'unknown';
+
+/** สถานะประกันจาก warranty_until — ใช้ทั้งในตารางและแผงรายละเอียด */
+const warrantyInfo = (value: any): { status: WarrantyStatus; label: string; short: string; daysLeft: number | null } => {
+  if (!value) return { status: 'unknown', label: 'ไม่มีข้อมูลวันสิ้นสุดประกัน', short: 'ไม่มีข้อมูล', daysLeft: null };
+  const until = new Date(value);
+  if (Number.isNaN(until.getTime())) {
+    return { status: 'unknown', label: 'ไม่มีข้อมูลวันสิ้นสุดประกัน', short: 'ไม่มีข้อมูล', daysLeft: null };
+  }
+  const days = Math.floor((until.getTime() - Date.now()) / 86400000);
+  if (days < 0) {
+    return { status: 'expired', label: `หมดประกันมาแล้ว ${Math.abs(days)} วัน`, short: 'หมดประกัน', daysLeft: days };
+  }
+  if (days <= WARRANTY_WARN_DAYS) {
+    return { status: 'expiring', label: `ใกล้หมดประกัน — เหลือ ${days} วัน`, short: `เหลือ ${days} วัน`, daysLeft: days };
+  }
+  return { status: 'active', label: `อยู่ในระยะประกัน — เหลือ ${days} วัน`, short: `เหลือ ${days} วัน`, daysLeft: days };
+};
+
+// ใช้ fallback ใน var() เพราะธีมบางชุดยังไม่ประกาศ --color-warning
+const WARRANTY_COLOR: Record<WarrantyStatus, string> = {
+  active: 'var(--color-success, #15803d)',
+  expiring: 'var(--color-warning, #b45309)',
+  expired: 'var(--color-danger, #b91c1c)',
+  unknown: 'var(--color-text-tertiary, #94a3b8)',
+};
+
+/** วันที่แบบไทย ไม่มีเวลา — ข้อมูลทรัพย์สินเป็นระดับวัน */
+const fmtDateTh = (v: any): string => {
+  if (!v) return '—';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString('th-TH', { dateStyle: 'medium' });
+};
+
+const fmtDateTimeTh = (v: any): string => {
+  if (!v) return '—';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+/** อายุอุปกรณ์จากวันจัดซื้อ — PM Rule 3 ใช้เกณฑ์เดียวกันคือนับจาก purchase_date */
+const deviceAgeText = (v: any): string => {
+  if (!v) return 'ไม่ทราบ (ไม่มีวันจัดซื้อ)';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return 'ไม่ทราบ';
+  const months = Math.max(0, Math.round((Date.now() - d.getTime()) / 2629800000));
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  if (years <= 0) return `${rest} เดือน`;
+  return rest ? `${years} ปี ${rest} เดือน` : `${years} ปี`;
+};
+
+/** แถวข้อมูล label/value ในแผงรายละเอียด */
+function DetailRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)' }}>{label}</span>
+      <span
+        style={{
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          overflowWrap: 'anywhere',
+          fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// รหัสอุปกรณ์ต้องขึ้นต้นด้วยรหัสโรงเรียน — logic ต้องให้ผลตรงกับ _org_code_token
+// ใน backend/app/main.py (A–Z0–9 ยาวไม่เกิน 8, ไม่มี code → ORG<id>)
+const orgCodeToken = (org: { id?: number; code?: string | null } | undefined): string => {
+  if (!org) return '';
+  const token = String(org.code ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8);
+  if (token) return token;
+  return org.id != null ? `ORG${org.id}` : '';
+};
+
+// เติมรหัสโรงเรียนให้รหัสที่ผู้ใช้พิมพ์เอง (คืน '' = ให้ backend สร้างอัตโนมัติ)
+const withOrgPrefix = (raw: string, token: string): string => {
+  const cleaned = raw.replace(/\s+/g, '').toUpperCase().replace(/^-+|-+$/g, '');
+  if (!cleaned || !token) return cleaned;
+  if (cleaned === token) return '';
+  return cleaned.startsWith(`${token}-`) ? cleaned : `${token}-${cleaned}`;
+};
+
+/** ISO datetime จาก backend → ค่าของ <input type="date"> (YYYY-MM-DD) */
+const toDateInput = (value: any): string =>
+  value ? String(value).slice(0, 10) : '';
+
+/** ค่าจาก <input type="date"> → ISO แบบมี timezone (+07:00)
+ *  ส่งเป็น date เปล่าจะได้ datetime แบบไม่มี tz ซึ่งเทียบกับคอลัมน์ timestamptz
+ *  ใน PM Rule ไม่ได้ จึงผูกเวลาเที่ยงคืนตามเวลาไทยไปเลย
+ */
+const dateInputToIso = (value: string): string | null =>
+  value ? `${value}T00:00:00+07:00` : null;
+
 const EMPTY_FORM = {
   device_id: '',
   organization_id: 0,
@@ -20,6 +142,8 @@ const EMPTY_FORM = {
   serial_number: '',
   firmware_version: '',
   status: 'active',
+  purchase_date: '',
+  warranty_until: '',
   notes: '',
 };
 
@@ -37,6 +161,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orgFilter, setOrgFilter] = useState<number | ''>(isSuperAdmin ? '' : (currentOrgId ?? ''));
+  const [typeFilter, setTypeFilter] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,6 +171,14 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [rooms, setRooms] = useState<any[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(false);
+  // แผงรายละเอียดอุปกรณ์: เปิดจากแถวในตาราง แล้วดึงข้อมูลล่าสุด + ใบงานล่าสุดของเครื่องนั้น
+  const [detailDevice, setDetailDevice] = useState<any | null>(null);
+  const [detailData, setDetailData] = useState<any | null>(null);
+  const [detailRecent, setDetailRecent] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  // กันผลลัพธ์ของเครื่องที่กดก่อนหน้ามาทับ เมื่อผู้ใช้กดสลับเครื่องเร็ว ๆ
+  const detailReqRef = useRef<string | null>(null);
 
   // QR content: URL + device token (ตาม TOR — ไม่ฝังข้อมูลอุปกรณ์ใน QR, ย้ายได้ไม่ต้องพิมพ์ใหม่)
   const qrUrlFor = (d: any) =>
@@ -72,10 +205,37 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
     a.click();
   };
 
+  const openDetail = async (d: any) => {
+    detailReqRef.current = d.device_id;
+    setDetailDevice(d);
+    setDetailData(null);
+    setDetailRecent(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    const [full, recent] = await Promise.all([
+      api.getDevice(d.device_id).catch(() => null),
+      api.getDeviceRecent(d.device_id).catch(() => null),
+    ]);
+    if (detailReqRef.current !== d.device_id) return; // เปลี่ยนเครื่องไปแล้ว
+    if (full) setDetailData(full);
+    else setDetailError('โหลดข้อมูลล่าสุดไม่สำเร็จ — กำลังแสดงข้อมูลจากรายการอุปกรณ์แทน');
+    setDetailRecent(recent?.recent_ticket ?? null);
+    setDetailLoading(false);
+  };
+
+  const closeDetail = () => {
+    detailReqRef.current = null;
+    setDetailDevice(null);
+    setDetailData(null);
+    setDetailRecent(null);
+    setDetailError(null);
+    setDetailLoading(false);
+  };
+
   const load = () => {
     setLoading(true);
     Promise.all([
-      api.listDevices(500, orgFilter === '' ? undefined : orgFilter),
+      api.listAllDevices(orgFilter === '' ? undefined : orgFilter),
       api.listOrganizations(),
     ])
       .then(([d, o]) => { setDevices(d); setOrgs(o); })
@@ -102,11 +262,20 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
       serial_number: d.serial_number || '',
       firmware_version: d.firmware_version || '',
       status: d.status || 'active',
+      purchase_date: toDateInput(d.purchase_date),
+      warranty_until: toDateInput(d.warranty_until),
       notes: d.notes || '',
     });
     setEditingId(d.device_id);
     setShowForm(true);
   };
+
+  // โรงเรียนที่ฟอร์มกำลังอ้างถึง + prefix รหัสอุปกรณ์ของโรงเรียนนั้น
+  const formOrgId = Number(lockedToOwnSchool ? (currentOrgId ?? form.organization_id) : form.organization_id);
+  const selectedOrg = orgs.find((o) => o.id === formOrgId);
+  const devicePrefix = orgCodeToken(selectedOrg);
+  // รหัสที่จะถูกส่งจริง ('' = ให้ระบบสร้างต่อท้าย prefix เอง)
+  const previewDeviceId = withOrgPrefix(form.device_id, devicePrefix);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,11 +292,14 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           serial_number: form.serial_number,
           firmware_version: form.firmware_version,
           status: form.status,
+          // ล้างช่องวันที่ให้ว่างได้ → ส่ง null (PATCH ใช้ exclude_unset จึงต้องส่งค่ามาจริง)
+          purchase_date: dateInputToIso(form.purchase_date),
+          warranty_until: dateInputToIso(form.warranty_until),
           notes: form.notes,
         });
       } else {
         await api.createDevice({
-          device_id: form.device_id || undefined,
+          device_id: previewDeviceId || undefined,
           organization_id: form.organization_id,
           room_code: form.room_code || undefined,
           device_type: form.device_type,
@@ -136,6 +308,8 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           serial_number: form.serial_number || undefined,
           firmware_version: form.firmware_version || undefined,
           status: form.status,
+          purchase_date: dateInputToIso(form.purchase_date) ?? undefined,
+          warranty_until: dateInputToIso(form.warranty_until) ?? undefined,
           notes: form.notes || undefined,
         });
       }
@@ -182,7 +356,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
     const floor = window.prompt('ชั้น (เช่น 1, 2 หรือเว้นว่าง):') || '';
     try {
       await api.createRoom(orgId, { code, name, building, floor: floor || undefined });
-      alert('✅ เพิ่มห้องเรียบร้อย');
+      alert('เพิ่มห้องเรียบร้อย');
       await loadRooms(orgId);
       setForm((f: any) => ({ ...f, room_code: code })); // เลือกห้องที่เพิ่งสร้าง
     } catch (err: any) {
@@ -196,6 +370,36 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showForm, form.organization_id]);
 
+  // ─── หมวดหมู่อุปกรณ์: นับจำนวนจริงในรายการ + เรียงตามลำดับใน DEVICE_TYPES ───
+  const typeCounts = devices.reduce<Record<string, number>>((acc, d) => {
+    const t = d.device_type || 'Other';
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+  const typeOptions = Object.keys(typeCounts).sort((a, b) => {
+    const ia = DEVICE_TYPES.indexOf(a);
+    const ib = DEVICE_TYPES.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b, 'th');
+  });
+  const visibleDevices = typeFilter
+    ? devices.filter((d) => (d.device_type || 'Other') === typeFilter)
+    : devices;
+
+  // สรุปสถานะประกันของรายการที่เห็นอยู่ — ให้ผู้ดูแลรู้ภาพรวมก่อนไล่ดูรายเครื่อง
+  const warrantySummary = useMemo(() => {
+    const acc = { total: visibleDevices.length, active: 0, expiring: 0, expired: 0, unknown: 0 };
+    for (const d of visibleDevices) acc[warrantyInfo(d.warranty_until).status] += 1;
+    return acc;
+  }, [visibleDevices]);
+
+  // แผงรายละเอียดใช้ข้อมูลล่าสุดถ้าโหลดมาได้ ไม่ได้ก็ใช้แถวที่กดมา
+  const detailView = detailData || detailDevice;
+  const detailWarranty = warrantyInfo(detailView?.warranty_until);
+  const detailOpenTicket = detailView?.open_ticket ?? null;
+
   return (
     <div className="page-content">
       <div className="top-bar">
@@ -207,7 +411,16 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           </button>
           <div>
             <h1 className="top-bar-title">อุปกรณ์ทั้งหมด</h1>
-            <span className="top-bar-subtitle">{devices.length} เครื่อง</span>
+            <span className="top-bar-subtitle">
+              {typeFilter
+                ? `${visibleDevices.length} เครื่อง · หมวด ${typeFilter} (ทั้งหมด ${devices.length})`
+                : `${devices.length} เครื่อง · ${typeOptions.length} หมวดหมู่`}
+              {!loading && warrantySummary.total > 0 && (
+                ` · ประกันปกติ ${warrantySummary.active} · ใกล้หมด ${warrantySummary.expiring}`
+                + ` · หมดแล้ว ${warrantySummary.expired}`
+                + (warrantySummary.unknown ? ` · ไม่มีข้อมูล ${warrantySummary.unknown}` : '')
+              )}
+            </span>
           </div>
         </div>
         <div className="top-bar-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -217,13 +430,31 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
               {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           )}
+          <select
+            className="form-select"
+            style={{ width: 210 }}
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            aria-label="กรองตามหมวดหมู่อุปกรณ์"
+            disabled={loading || typeOptions.length === 0}
+          >
+            <option value="">ทุกหมวดหมู่อุปกรณ์</option>
+            {typeOptions.map((t) => (
+              <option key={t} value={t}>{t} ({typeCounts[t]})</option>
+            ))}
+          </select>
           <button className="btn btn-primary" onClick={openAdd} disabled={!canManage}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6, verticalAlign: 'middle' }}>
               <path d="M12 5v14M5 12h14"/>
             </svg>
             เพิ่มอุปกรณ์
           </button>
-          <button className="btn btn-ghost" onClick={load}>⟳</button>
+          <button className="btn btn-ghost btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -239,14 +470,38 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editingId ? `แก้ไข ${editingId}` : 'เพิ่มอุปกรณ์ใหม่'}</h3>
-              <button className="repair-panel-close" onClick={() => setShowForm(false)}>✕</button>
+              <button className="repair-panel-close" onClick={() => setShowForm(false)} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body">
               <form onSubmit={handleSave}>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">รหัสอุปกรณ์ (DEV-xxxx)</label>
-                    <input className="form-input" value={form.device_id} onChange={(e) => setForm({ ...form, device_id: e.target.value })} placeholder="เว้นว่าง = สร้างอัตโนมัติ" disabled={!!editingId} />
+                    <label className="form-label" htmlFor="device-id-input">รหัสอุปกรณ์</label>
+                    <input
+                      id="device-id-input"
+                      className="form-input"
+                      value={form.device_id}
+                      onChange={(e) => setForm({ ...form, device_id: e.target.value })}
+                      placeholder={devicePrefix ? `เว้นว่าง = สร้างอัตโนมัติ (${devicePrefix}-…)` : 'เว้นว่าง = สร้างอัตโนมัติ'}
+                      disabled={!!editingId}
+                      aria-describedby="device-id-hint"
+                    />
+                    {!editingId && (
+                      <div
+                        id="device-id-hint"
+                        style={{ marginTop: 4, fontSize: '0.75rem', color: 'var(--color-text-tertiary)', overflowWrap: 'anywhere' }}
+                      >
+                        {!devicePrefix
+                          ? 'เลือกโรงเรียนก่อน — รหัสอุปกรณ์จะผูกกับรหัสของโรงเรียนนั้น'
+                          : previewDeviceId
+                            ? `จะบันทึกเป็น ${previewDeviceId}`
+                            : `แต่ละโรงเรียนมีรหัสของตัวเอง ระบบจะขึ้นต้นด้วย ${devicePrefix}- เพื่อไม่ให้รหัสซ้ำกับโรงเรียนอื่น`}
+                      </div>
+                    )}
                   </div>
                   <div className="form-group">
                     <label className="form-label">โรงเรียน *</label>
@@ -324,6 +579,33 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                     </select>
                   </div>
                 </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="device-purchase-date">วันที่จัดซื้อ</label>
+                    <input
+                      id="device-purchase-date"
+                      type="date"
+                      className="form-input"
+                      value={form.purchase_date}
+                      max={form.warranty_until || undefined}
+                      onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="device-warranty-until">วันหมดประกัน</label>
+                    <input
+                      id="device-warranty-until"
+                      type="date"
+                      className="form-input"
+                      value={form.warranty_until}
+                      min={form.purchase_date || undefined}
+                      onChange={(e) => setForm({ ...form, warranty_until: e.target.value })}
+                    />
+                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>
+                      ใช้แจ้งเตือน “ประกันใกล้หมด” ใน PM (ภายใน 30 วัน)
+                    </div>
+                  </div>
+                </div>
                 <div className="form-group">
                   <label className="form-label">หมายเหตุ</label>
                   <textarea className="form-textarea" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -346,7 +628,11 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           <div className="repair-panel" style={{ width: 380, maxWidth: '95vw', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">QR Code — {qrDevice.device_id}</h3>
-              <button className="repair-panel-close" onClick={() => setQrDevice(null)}>✕</button>
+              <button className="repair-panel-close" onClick={() => setQrDevice(null)} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
               {qrDataUrl ? (
@@ -365,8 +651,165 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                 สแกนด้วยกล้องมือถือ → เปิดหน้าแจ้งซ่อมให้อุปกรณ์นี้ทันที
               </div>
               <button className="btn btn-primary" onClick={downloadQr} disabled={!qrDataUrl}>
-                ⬇ ดาวน์โหลด PNG
+                ดาวน์โหลด PNG
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* แผงรายละเอียดอุปกรณ์ */}
+      {detailDevice && (
+        <div className="panel-overlay" onClick={closeDetail}>
+          <div className="repair-panel" style={{ width: 640, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()}>
+            <div className="repair-panel-header">
+              <h3 className="repair-panel-title">รายละเอียดอุปกรณ์ — {detailDevice.device_id}</h3>
+              <button className="repair-panel-close" onClick={closeDetail} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="repair-panel-body">
+              {detailLoading && (
+                <div className="loading-state" style={{ padding: '16px 0' }}>
+                  <div className="spinner" style={{ width: 24, height: 24 }} />
+                  <span>กำลังโหลดข้อมูลล่าสุด...</span>
+                </div>
+              )}
+
+              {detailError && (
+                <div style={{ padding: '8px 12px', background: 'var(--color-warning-light, rgba(180,83,9,0.12))', color: 'var(--color-warning, #b45309)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', marginBottom: 12 }}>
+                  {detailError}
+                </div>
+              )}
+
+              {detailView && (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+                    <span className={`badge badge-${detailView.status}`}>
+                      {DEVICE_STATUS_LABELS[detailView.status] || detailView.status}
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: WARRANTY_COLOR[detailWarranty.status] }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} aria-hidden="true" />
+                      {detailWarranty.label}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 2 }}>
+                    {detailView.device_type}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginBottom: 16 }}>
+                    {[detailView.brand, detailView.model].filter(Boolean).join(' ') || 'ไม่ระบุยี่ห้อ/รุ่น'}
+                  </div>
+
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>
+                    ข้อมูลทะเบียนทรัพย์สิน
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
+                    <DetailRow label="รหัสอุปกรณ์" value={detailView.device_id} mono />
+                    <DetailRow label="หมายเลขสินค้า (Serial)" value={detailView.serial_number || 'ไม่ระบุ'} mono />
+                    <DetailRow label="เฟิร์มแวร์" value={detailView.firmware_version || '—'} />
+                    <DetailRow label="วันที่จัดซื้อ" value={fmtDateTh(detailView.purchase_date)} />
+                    <DetailRow label="อายุใช้งาน" value={deviceAgeText(detailView.purchase_date)} />
+                    <DetailRow label="ประกันสิ้นสุด" value={fmtDateTh(detailView.warranty_until)} />
+                  </div>
+
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>
+                    ตำแหน่งติดตั้ง
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
+                    <DetailRow label="โรงเรียน" value={detailView.organization_name || '—'} />
+                    <DetailRow label="รหัสโรงเรียน" value={detailView.organization_code || '—'} mono />
+                    <DetailRow
+                      label="ห้อง"
+                      value={
+                        detailView.room_name
+                          ? `${detailView.room_name}${detailView.room_code ? ` (${detailView.room_code})` : ''}`
+                          : detailView.room_code || 'ไม่ระบุห้อง'
+                      }
+                    />
+                    <DetailRow
+                      label="อาคาร / ชั้น"
+                      value={[detailView.building, detailView.floor ? `ชั้น ${detailView.floor}` : ''].filter(Boolean).join(' · ') || '—'}
+                    />
+                    <DetailRow
+                      label="พิกัด"
+                      value={
+                        detailView.gps_lat != null && detailView.gps_lng != null ? (
+                          <a
+                            href={`https://www.google.com/maps?q=${detailView.gps_lat},${detailView.gps_lng}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {Number(detailView.gps_lat).toFixed(5)}, {Number(detailView.gps_lng).toFixed(5)}
+                          </a>
+                        ) : (
+                          '—'
+                        )
+                      }
+                    />
+                    <DetailRow label="QR ผูกกับเครื่อง" value={detailView.qr_token ? 'มีแล้ว' : 'ยังไม่มี'} />
+                  </div>
+
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>
+                    งานซ่อม
+                  </div>
+                  {detailView.has_open_ticket && detailOpenTicket ? (
+                    <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--color-danger-light, rgba(185,28,28,0.10))', color: 'var(--color-danger, #b91c1c)', fontSize: '0.82rem', marginBottom: 10 }}>
+                      มีใบงานค้างอยู่ <strong>{detailOpenTicket.ticket_id || detailOpenTicket.ticket_no}</strong>
+                      {detailOpenTicket.status ? ` · ${TICKET_STATUS_LABELS[detailOpenTicket.status] || detailOpenTicket.status}` : ''}
+                      {detailOpenTicket.title ? ` — ${detailOpenTicket.title}` : ''}
+                      <div style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: 2 }}>
+                        แจ้งซ้ำไม่ได้ ให้ติดตามจากใบงานนี้
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginBottom: 10 }}>
+                      ไม่มีใบงานค้างในขณะนี้
+                    </div>
+                  )}
+
+                  {detailRecent ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
+                      <DetailRow label="ใบงานล่าสุด" value={detailRecent.ticket_id} mono />
+                      <DetailRow label="สถานะ" value={TICKET_STATUS_LABELS[detailRecent.status] || detailRecent.status} />
+                      <DetailRow label="อาการที่แจ้ง" value={detailRecent.title || '—'} />
+                      <DetailRow label="แจ้งเมื่อ" value={fmtDateTimeTh(detailRecent.created_at)} />
+                      <DetailRow label="ปิดงานเมื่อ" value={fmtDateTimeTh(detailRecent.closed_at)} />
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-tertiary)', marginBottom: 18 }}>
+                      ยังไม่เคยมีประวัติแจ้งซ่อมของเครื่องนี้
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>
+                    หมายเหตุ / ข้อมูลจัดซื้อ
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.82rem', lineHeight: 1.6, color: 'var(--color-text-secondary)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    {detailView.notes || 'ไม่มีหมายเหตุ'}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => { const d = detailView; closeDetail(); showQr(d); }}
+                    >
+                      ดู QR Code
+                    </button>
+                    {canManage && (
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => { const d = detailView; closeDetail(); openEdit(d); }}
+                      >
+                        แก้ไขข้อมูล
+                      </button>
+                    )}
+                    <button className="btn btn-ghost" onClick={closeDetail}>ปิด</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -380,13 +823,17 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
               <div className="spinner" />
               <span>กำลังโหลด...</span>
             </div>
-          ) : devices.length === 0 ? (
+          ) : visibleDevices.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px' }}>
               <svg className="empty-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="2" y="4" width="20" height="14" rx="2"/>
                 <path d="M2 10h20M12 14v6"/>
               </svg>
-              <span className="empty-text">ไม่มีอุปกรณ์ — กด "เพิ่มอุปกรณ์" เพื่อเพิ่มเครื่องแรก</span>
+              <span className="empty-text">
+                {typeFilter
+                  ? `ไม่มีอุปกรณ์ในหมวด "${typeFilter}" — เลือก "ทุกหมวดหมู่อุปกรณ์" เพื่อดูทั้งหมด`
+                  : 'ไม่มีอุปกรณ์ — กด "เพิ่มอุปกรณ์" เพื่อเพิ่มเครื่องแรก'}
+              </span>
             </div>
           ) : (
             <div className="table-wrap">
@@ -396,34 +843,72 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                     <th>รหัส</th>
                     <th>ประเภท</th>
                     <th>ยี่ห้อ/รุ่น</th>
+                    <th>Serial No.</th>
                     <th>ห้อง</th>
                     <th>โรงเรียน</th>
+                    <th>ประกัน</th>
                     <th>สถานะ</th>
-                    {canManage && <th>จัดการ</th>}
+                    <th>จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {devices.map((d) => (
+                  {visibleDevices.map((d) => (
                     <tr key={d.device_id}>
-                      <td className="table-id">{d.device_id}</td>
+                      <td className="table-id">
+                        <button
+                          type="button"
+                          onClick={() => openDetail(d)}
+                          title="ดูรายละเอียดอุปกรณ์"
+                          style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--color-primary, #2563eb)', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                          {d.device_id}
+                        </button>
+                      </td>
                       <td>{d.device_type}</td>
                       <td>{d.brand || '—'} {d.model || ''}</td>
-                      <td>{d.room_name || d.room_code || '—'}</td>
+                      <td style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.8rem' }}>
+                        {d.serial_number || '—'}
+                      </td>
+                      <td>
+                        {d.room_name || d.room_code || '—'}
+                        {d.building && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>
+                            {d.building}{d.floor ? ` · ชั้น ${d.floor}` : ''}
+                          </div>
+                        )}
+                      </td>
                       <td>{d.organization_name || '—'}</td>
                       <td>
-                        <span className={`badge badge-${d.status}`}>{d.status}</span>
+                        {(() => {
+                          const w = warrantyInfo(d.warranty_until);
+                          return (
+                            <span
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: WARRANTY_COLOR[w.status], whiteSpace: 'nowrap' }}
+                              title={`${w.label} · สิ้นสุด ${fmtDateTh(d.warranty_until)}`}
+                            >
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} aria-hidden="true" />
+                              {w.short}
+                            </span>
+                          );
+                        })()}
                       </td>
-                      {canManage && (
-                        <td>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => showQr(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>QR</button>
-                            <button className="btn btn-secondary btn-sm" onClick={() => openEdit(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>แก้ไข</button>
-                            <button className="btn btn-danger btn-sm" disabled={busy === d.device_id} onClick={() => handleDelete(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>
-                              {busy === d.device_id ? '...' : 'ลบ'}
-                            </button>
-                          </div>
-                        </td>
-                      )}
+                      <td>
+                        <span className={`badge badge-${d.status}`}>{DEVICE_STATUS_LABELS[d.status] || d.status}</span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => openDetail(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>รายละเอียด</button>
+                          {canManage && (
+                            <>
+                              <button className="btn btn-secondary btn-sm" onClick={() => showQr(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>QR</button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => openEdit(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>แก้ไข</button>
+                              <button className="btn btn-danger btn-sm" disabled={busy === d.device_id} onClick={() => handleDelete(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>
+                                {busy === d.device_id ? '...' : 'ลบ'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,0 +1,685 @@
+/* ============================================================================
+   public-report.css — หน้าแจ้งซ่อมสาธารณะ / สแกน QR (PublicNoLoginReportView)
+   ----------------------------------------------------------------------------
+   ต่อยอดจาก public-home.css: ใช้ตัวแปรสี --ph-* ที่ประกาศบน .ph-page ทั้งหมด
+   จึงได้ธีม navy + glass + neon ชุดเดียวกัน ทุกกฎถูก scope ใต้ .ph-page
+   ไม่มีผลกับ dashboard หรือหน้าที่ใช้ธีม light/dark เดิม
+   ========================================================================== */
+
+.pr-main {
+  max-width: 720px;
+}
+
+/* ─── ส่วนหัว ────────────────────────────────────────────────────────────── */
+
+.pr-head {
+  text-align: center;
+}
+
+.pr-title {
+  margin: 0 0 12px;
+  font-size: clamp(1.5rem, 5vw, 2.4rem);
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.pr-sub {
+  margin: 0 auto;
+  max-width: 560px;
+  font-size: clamp(0.85rem, 2.3vw, 0.96rem);
+  line-height: 1.75;
+  color: var(--ph-text-2);
+}
+
+/* ─── แถบขั้นตอน ─────────────────────────────────────────────────────────── */
+
+.pr-steps {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.pr-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--ph-text-3);
+}
+
+/* เส้นเชื่อมระหว่างขั้น — ซ่อนที่ขั้นแรกเพื่อไม่ให้ยื่นออกนอกแถว */
+.pr-step::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: 50%;
+  left: -50%;
+  height: 1px;
+  background: var(--ph-line);
+}
+
+.pr-step:first-child::before {
+  display: none;
+}
+
+.pr-step.is-done::before,
+.pr-step.is-current::before {
+  background: linear-gradient(90deg, rgba(34, 227, 160, 0.35), var(--ph-blue));
+}
+
+.pr-step-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  border-radius: 50%;
+  border: 1px solid var(--ph-line);
+  background: rgba(5, 11, 28, 0.9);
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: all 0.25s ease;
+}
+
+.pr-step-label {
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.pr-step.is-done {
+  color: #a6f3d6;
+}
+
+.pr-step.is-done .pr-step-dot {
+  border-color: rgba(34, 227, 160, 0.5);
+  background: rgba(34, 227, 160, 0.16);
+  color: var(--ph-ok);
+}
+
+.pr-step.is-current {
+  color: #fff;
+}
+
+.pr-step.is-current .pr-step-dot {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--ph-blue), var(--ph-purple));
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(36, 155, 255, 0.16), 0 0 22px rgba(124, 77, 255, 0.5);
+}
+
+.pr-step.is-current .pr-step-label {
+  font-weight: 700;
+}
+
+/* ─── การ์ดหลัก ──────────────────────────────────────────────────────────── */
+
+.pr-card {
+  animation: ph-rise 0.35s ease both;
+}
+
+.pr-btn-scan {
+  width: 100%;
+  padding: 15px 20px;
+  font-size: 0.92rem;
+}
+
+.pr-btn-full {
+  width: 100%;
+}
+
+.pr-btn-submit {
+  margin-top: 6px;
+  padding: 15px 20px;
+  font-size: 0.92rem;
+}
+
+/* ─── กรอบกล้องสแกน ──────────────────────────────────────────────────────── */
+
+.pr-scanner {
+  width: 100%;
+  max-width: 380px;
+  margin: 16px auto 0;
+  border-radius: var(--ph-radius);
+  overflow: hidden;
+  background: #05060d;
+}
+
+.pr-scanner.is-active {
+  min-height: 250px;
+  border: 1px solid var(--ph-line-strong);
+  box-shadow: inset 0 0 40px rgba(36, 155, 255, 0.14), 0 0 26px rgba(36, 155, 255, 0.18);
+}
+
+/* html5-qrcode ฝัง video/สรุปผลของตัวเองไว้ข้างใน — บังคับให้พอดีกรอบ */
+.pr-scanner video,
+.pr-scanner canvas,
+.pr-scanner img {
+  display: block;
+  width: 100% !important; /* จำเป็น: ไลบรารีกำหนด width แบบ inline */
+  height: auto !important;
+  border-radius: var(--ph-radius);
+}
+
+.pr-scanner #public-qr-reader__dashboard_section_csr button {
+  font: inherit;
+}
+
+/* ─── ช่องทางสำรอง (พิมพ์โค้ดใต้สติกเกอร์) ───────────────────────────────── */
+
+.pr-fallback {
+  margin-top: 22px;
+  padding: 16px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px dashed var(--ph-line);
+  background: rgba(5, 11, 28, 0.45);
+}
+
+.pr-fallback-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.pr-fallback-icon {
+  display: inline-flex;
+  color: var(--ph-text-3);
+  flex-shrink: 0;
+}
+
+.pr-inline-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pr-inline-row .pr-input {
+  flex: 1 1 190px;
+  min-width: 0;
+}
+
+.pr-inline-row .ph-btn {
+  flex-shrink: 0;
+}
+
+/* ─── ฟอร์ม ──────────────────────────────────────────────────────────────── */
+
+.pr-form {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pr-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.pr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.pr-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ph-text-2);
+}
+
+.pr-label-inline {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.pr-req {
+  color: var(--ph-danger);
+}
+
+.pr-input,
+.pr-textarea,
+.pr-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid var(--ph-line);
+  background: rgba(5, 11, 28, 0.72);
+  color: var(--ph-text);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.pr-textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+
+.pr-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ph-text-2) 50%),
+    linear-gradient(135deg, var(--ph-text-2) 50%, transparent 50%);
+  background-position: calc(100% - 19px) calc(50% + 2px), calc(100% - 14px) calc(50% + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+/* option list ถูกวาดโดยระบบปฏิบัติการ — ต้องกำหนดสีเองไม่ให้ขาวบนขาว */
+.pr-select option {
+  background: var(--ph-navy-900);
+  color: var(--ph-text);
+}
+
+.pr-input::placeholder,
+.pr-textarea::placeholder {
+  color: var(--ph-text-3);
+}
+
+.pr-input:focus,
+.pr-textarea:focus,
+.pr-select:focus {
+  outline: none;
+  border-color: var(--ph-blue);
+  background: rgba(5, 11, 28, 0.92);
+  box-shadow: 0 0 0 3px rgba(36, 155, 255, 0.18);
+}
+
+.pr-input.has-error,
+.pr-textarea.has-error {
+  border-color: rgba(255, 95, 122, 0.6);
+}
+
+.pr-field-err {
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #ffb3c1;
+}
+
+/* ─── อัปโหลดรูป ─────────────────────────────────────────────────────────── */
+
+.pr-file {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 14px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px dashed var(--ph-line);
+  background: rgba(5, 11, 28, 0.55);
+  color: var(--ph-text-2);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.pr-file::file-selector-button {
+  margin-right: 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line-strong);
+  background: rgba(36, 155, 255, 0.16);
+  color: var(--ph-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.pr-file::file-selector-button:hover {
+  background: rgba(36, 155, 255, 0.3);
+}
+
+.pr-thumbs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.pr-thumb {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ph-line);
+}
+
+.pr-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pr-thumb-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: rgba(5, 11, 28, 0.82);
+  color: #fff;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.pr-thumb-remove:hover,
+.pr-thumb-remove:focus-visible {
+  background: var(--ph-danger);
+}
+
+/* ─── การ์ดอุปกรณ์ที่สแกนได้ ─────────────────────────────────────────────── */
+
+.pr-device {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 15px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid rgba(34, 227, 160, 0.3);
+  background: linear-gradient(135deg, rgba(34, 227, 160, 0.1), rgba(36, 155, 255, 0.08));
+}
+
+.pr-device-main {
+  min-width: 0;
+}
+
+.pr-device-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #8ff3ce;
+}
+
+.pr-device-id {
+  font-size: 0.95rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pr-device-meta {
+  margin-top: 3px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--ph-text-2);
+  overflow-wrap: anywhere;
+}
+
+/* ป้ายสถานะประกัน — ผู้แจ้งเห็นทันทีว่าเครื่องนี้ยังเคลมได้หรือไม่
+   สีสื่อความหมายคู่กับข้อความเสมอ (ไม่ใช้สีเพียงอย่างเดียว) */
+.pr-warranty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pr-warranty-ok {
+  border-color: rgba(34, 227, 160, 0.4);
+  background: rgba(34, 227, 160, 0.12);
+  color: #8ff3ce;
+}
+
+.pr-warranty-warn {
+  border-color: rgba(255, 184, 61, 0.45);
+  background: rgba(255, 184, 61, 0.12);
+  color: #ffe3b3;
+}
+
+.pr-warranty-expired {
+  border-color: rgba(255, 107, 107, 0.45);
+  background: rgba(255, 107, 107, 0.12);
+  color: #ffc9c9;
+}
+
+.pr-checking {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 14px;
+  font-size: 0.8rem;
+  color: var(--ph-text-3);
+}
+
+/* ─── กล่องเตือนงานค้าง ──────────────────────────────────────────────────── */
+
+.pr-block {
+  padding: 16px;
+  margin-bottom: 18px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid rgba(255, 184, 61, 0.42);
+  background: rgba(255, 184, 61, 0.1);
+  color: #ffe3b3;
+}
+
+.pr-block-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.pr-block-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--ph-warn);
+}
+
+.pr-block-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.pr-block-no {
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
+.pr-block-meta {
+  margin-top: 3px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.pr-block-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #9fd4ff;
+  text-decoration: none;
+}
+
+.pr-block-link:hover,
+.pr-block-link:focus-visible {
+  color: var(--ph-cyan);
+  text-decoration: underline;
+}
+
+.pr-note {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 184, 61, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pr-note .pr-label {
+  color: #ffe3b3;
+}
+
+.pr-note-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+/* ─── ผลลัพธ์สำเร็จ ──────────────────────────────────────────────────────── */
+
+.pr-success {
+  text-align: center;
+  padding: 6px 0;
+}
+
+.pr-success-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(34, 227, 160, 0.45);
+  background: rgba(34, 227, 160, 0.14);
+  color: var(--ph-ok);
+  box-shadow: 0 0 0 6px rgba(34, 227, 160, 0.08), 0 0 30px rgba(34, 227, 160, 0.3);
+}
+
+.pr-success-title {
+  margin: 0 0 6px;
+  font-size: clamp(1.1rem, 3.4vw, 1.4rem);
+  font-weight: 700;
+}
+
+.pr-success-sub {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  color: var(--ph-text-3);
+}
+
+.pr-ticket-no {
+  font-size: clamp(1.1rem, 4.4vw, 1.6rem);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  word-break: break-all;
+  background: linear-gradient(100deg, #ffffff, #9fd4ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.pr-success-meta {
+  margin: 12px auto 0;
+  max-width: 460px;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--ph-text-2);
+  overflow-wrap: anywhere;
+}
+
+.pr-success-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+/* ─── ลิงก์แบบปุ่มข้อความ ────────────────────────────────────────────────── */
+
+.pr-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #9fd4ff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.pr-link-btn:hover,
+.pr-link-btn:focus-visible {
+  color: var(--ph-cyan);
+  background: rgba(36, 155, 255, 0.1);
+}
+
+.pr-back-row {
+  margin-top: 18px;
+  text-align: center;
+}
+
+/* ─── จอเล็ก ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .pr-steps {
+    gap: 6px;
+  }
+
+  .pr-step-dot {
+    width: 29px;
+    height: 29px;
+    font-size: 0.76rem;
+  }
+
+  .pr-step::before {
+    top: 14px;
+  }
+
+  .pr-step-label {
+    font-size: 0.7rem;
+  }
+
+  .pr-device {
+    flex-direction: column;
+  }
+
+  .pr-device .pr-link-btn {
+    padding-left: 0;
+  }
+
+  .pr-inline-row .ph-btn,
+  .pr-success-actions .ph-btn {
+    flex: 1 1 100%;
+  }
+}

@@ -1,0 +1,1174 @@
+{
+  "base_url": "https://iwasmart-service.vercel.app/scan",
+  "total_devices": 112,
+  "schools": [
+    {
+      "org_code": "SCH-DEMO",
+      "org_name": "สาธิต",
+      "directory": "SCH-DEMO",
+      "device_count": 12,
+      "devices": [
+        {
+          "device_id": "SCHDEMO-B2-201-AP-01",
+          "device_type": "Access Point",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ 201",
+          "label": "Access Point · TP-Link EAP610 · ห้องคอมพิวเตอร์ 201",
+          "file": "SCH-DEMO/03-network/SCHDEMO-B2-201-AP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B2-201-AP-01"
+        },
+        {
+          "device_id": "SCHDEMO-B2-201-COMP-01",
+          "device_type": "Computer Notebook",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ 201",
+          "label": "Computer Notebook · Acer Aspire 3 · ห้องคอมพิวเตอร์ 201",
+          "file": "SCH-DEMO/02-computer/SCHDEMO-B2-201-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B2-201-COMP-01"
+        },
+        {
+          "device_id": "SCHDEMO-B2-201-RTR-01",
+          "device_type": "Router",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ 201",
+          "label": "Router · TP-Link Archer AX55 · ห้องคอมพิวเตอร์ 201",
+          "file": "SCH-DEMO/03-network/SCHDEMO-B2-201-RTR-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B2-201-RTR-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-CAM-01",
+          "device_type": "Camera",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "Camera · TIPS AI Camera (built-in) · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/04-audio-video/SCHDEMO-B3-301-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-CAM-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "Computer AIO · TIPS OPS Mini PC i7-13650HX · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/02-computer/SCHDEMO-B3-301-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-COMP-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "Interactive Display · TIPS iClassBoard 75\" 4K · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/01-display/SCHDEMO-B3-301-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-DISP-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-PRN-01",
+          "device_type": "Printer",
+          "category": "อุปกรณ์ต่อพ่วง",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "Printer · Epson L3250 Ink Tank · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/05-peripheral/SCHDEMO-B3-301-PRN-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-PRN-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "Speaker · TIPS ชุดลำโพงซาวด์บาร์ + Subwoofer · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/04-audio-video/SCHDEMO-B3-301-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-SPK-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-SW-01",
+          "device_type": "Software (Phonics Hero)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "Software (Phonics Hero) · Phonics Hero Phonics Hero · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/07-software/SCHDEMO-B3-301-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-SW-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-SW-02",
+          "device_type": "Software (Picaro)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "Software (Picaro) · Cambridge English Picaro - The Online English Adventure · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/07-software/SCHDEMO-B3-301-SW-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-SW-02"
+        },
+        {
+          "device_id": "SCHDEMO-B3-301-UPS-01",
+          "device_type": "UPS",
+          "category": "ไฟฟ้า/สำรองไฟ",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 301",
+          "label": "UPS · APC Back-UPS 650VA · ห้องเรียนปฐมวัย 301",
+          "file": "SCH-DEMO/06-power/SCHDEMO-B3-301-UPS-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-301-UPS-01"
+        },
+        {
+          "device_id": "SCHDEMO-B3-302-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนปฐมวัย 302",
+          "label": "Interactive Display · TIPS iClassBoard 75\" 4K · ห้องเรียนปฐมวัย 302",
+          "file": "SCH-DEMO/01-display/SCHDEMO-B3-302-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHDEMO-B3-302-DISP-01"
+        }
+      ]
+    },
+    {
+      "org_code": "SCH-M01",
+      "org_name": "หนองปลาไหล",
+      "directory": "SCH-M01",
+      "device_count": 20,
+      "devices": [
+        {
+          "device_id": "SCHM01-B1-101-CAM-01",
+          "device_type": "Camera",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ป.1/1",
+          "label": "Camera · TIPS AI Camera (built-in) · ห้องเรียน ป.1/1",
+          "file": "SCH-M01/04-audio-video/SCHM01-B1-101-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-101-CAM-01"
+        },
+        {
+          "device_id": "SCHM01-B1-101-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียน ป.1/1",
+          "label": "Computer AIO · TIPS OPS Mini PC i7-13650HX · ห้องเรียน ป.1/1",
+          "file": "SCH-M01/02-computer/SCHM01-B1-101-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-101-COMP-01"
+        },
+        {
+          "device_id": "SCHM01-B1-101-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ป.1/1",
+          "label": "Interactive Display · TIPS iClassBoard 75\" 4K · ห้องเรียน ป.1/1",
+          "file": "SCH-M01/01-display/SCHM01-B1-101-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-101-DISP-01"
+        },
+        {
+          "device_id": "SCHM01-B1-101-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ป.1/1",
+          "label": "Speaker · TIPS Soundbar + Subwoofer · ห้องเรียน ป.1/1",
+          "file": "SCH-M01/04-audio-video/SCHM01-B1-101-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-101-SPK-01"
+        },
+        {
+          "device_id": "SCHM01-B1-102-CAM-01",
+          "device_type": "Visualizer",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ป.2/1",
+          "label": "Visualizer · IPEVO V4K Pro · ห้องเรียน ป.2/1",
+          "file": "SCH-M01/01-display/SCHM01-B1-102-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-102-CAM-01"
+        },
+        {
+          "device_id": "SCHM01-B1-102-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียน ป.2/1",
+          "label": "Computer AIO · HP ProOne 440 G9 · ห้องเรียน ป.2/1",
+          "file": "SCH-M01/02-computer/SCHM01-B1-102-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-102-COMP-01"
+        },
+        {
+          "device_id": "SCHM01-B1-102-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ป.2/1",
+          "label": "Interactive Display · Samsung WM75B · ห้องเรียน ป.2/1",
+          "file": "SCH-M01/01-display/SCHM01-B1-102-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-102-DISP-01"
+        },
+        {
+          "device_id": "SCHM01-B1-102-MIC-01",
+          "device_type": "Microphone",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ป.2/1",
+          "label": "Microphone · Shure MX418 · ห้องเรียน ป.2/1",
+          "file": "SCH-M01/04-audio-video/SCHM01-B1-102-MIC-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B1-102-MIC-01"
+        },
+        {
+          "device_id": "SCHM01-B2-201-COMP-01",
+          "device_type": "Computer Desktop",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์",
+          "label": "Computer Desktop · Dell OptiPlex 7010 · ห้องคอมพิวเตอร์",
+          "file": "SCH-M01/02-computer/SCHM01-B2-201-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-201-COMP-01"
+        },
+        {
+          "device_id": "SCHM01-B2-201-COMP-02",
+          "device_type": "Computer Notebook",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์",
+          "label": "Computer Notebook · Lenovo ThinkPad E14 Gen 5 · ห้องคอมพิวเตอร์",
+          "file": "SCH-M01/02-computer/SCHM01-B2-201-COMP-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-201-COMP-02"
+        },
+        {
+          "device_id": "SCHM01-B2-201-COMP-03",
+          "device_type": "Computer Tablet",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์",
+          "label": "Computer Tablet · Samsung Galaxy Tab A9+ · ห้องคอมพิวเตอร์",
+          "file": "SCH-M01/02-computer/SCHM01-B2-201-COMP-03.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-201-COMP-03"
+        },
+        {
+          "device_id": "SCHM01-B2-201-PRN-01",
+          "device_type": "Printer",
+          "category": "อุปกรณ์ต่อพ่วง",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์",
+          "label": "Printer · Brother DCP-T720DW · ห้องคอมพิวเตอร์",
+          "file": "SCH-M01/05-peripheral/SCHM01-B2-201-PRN-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-201-PRN-01"
+        },
+        {
+          "device_id": "SCHM01-B2-202-AP-01",
+          "device_type": "Access Point",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องเครือข่าย",
+          "label": "Access Point · TP-Link EAP610 · ห้องเครือข่าย",
+          "file": "SCH-M01/03-network/SCHM01-B2-202-AP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-202-AP-01"
+        },
+        {
+          "device_id": "SCHM01-B2-202-RTR-01",
+          "device_type": "Router",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องเครือข่าย",
+          "label": "Router · MikroTik hAP ax3 · ห้องเครือข่าย",
+          "file": "SCH-M01/03-network/SCHM01-B2-202-RTR-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-202-RTR-01"
+        },
+        {
+          "device_id": "SCHM01-B2-202-SW-01",
+          "device_type": "Switch",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องเครือข่าย",
+          "label": "Switch · Cisco CBS250-24T · ห้องเครือข่าย",
+          "file": "SCH-M01/03-network/SCHM01-B2-202-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-202-SW-01"
+        },
+        {
+          "device_id": "SCHM01-B2-202-UPS-01",
+          "device_type": "UPS",
+          "category": "ไฟฟ้า/สำรองไฟ",
+          "building": null,
+          "room": "ห้องเครือข่าย",
+          "label": "UPS · APC BX1100LI-MS · ห้องเครือข่าย",
+          "file": "SCH-M01/06-power/SCHM01-B2-202-UPS-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B2-202-UPS-01"
+        },
+        {
+          "device_id": "SCHM01-B3-301-PJT-01",
+          "device_type": "Projector",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องสมุดดิจิทัล",
+          "label": "Projector · Epson EB-X51 · ห้องสมุดดิจิทัล",
+          "file": "SCH-M01/01-display/SCHM01-B3-301-PJT-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B3-301-PJT-01"
+        },
+        {
+          "device_id": "SCHM01-B3-301-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องสมุดดิจิทัล",
+          "label": "Speaker · JBL Control 25-1 · ห้องสมุดดิจิทัล",
+          "file": "SCH-M01/04-audio-video/SCHM01-B3-301-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B3-301-SPK-01"
+        },
+        {
+          "device_id": "SCHM01-B3-301-SW-01",
+          "device_type": "Software (Phonics Hero)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องสมุดดิจิทัล",
+          "label": "Software (Phonics Hero) · Phonics Hero Phonics Hero School · ห้องสมุดดิจิทัล",
+          "file": "SCH-M01/07-software/SCHM01-B3-301-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B3-301-SW-01"
+        },
+        {
+          "device_id": "SCHM01-B3-301-SW-02",
+          "device_type": "Software (Picaro)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องสมุดดิจิทัล",
+          "label": "Software (Picaro) · Picaro Picaro Classroom Suite · ห้องสมุดดิจิทัล",
+          "file": "SCH-M01/07-software/SCHM01-B3-301-SW-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM01-B3-301-SW-02"
+        }
+      ]
+    },
+    {
+      "org_code": "SCH-M02",
+      "org_name": "อนุบาลเมืองใหม่",
+      "directory": "SCH-M02",
+      "device_count": 20,
+      "devices": [
+        {
+          "device_id": "SCHM02-B1-A11-CAM-01",
+          "device_type": "Camera",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/1",
+          "label": "Camera · TIPS AI Camera (built-in) · ห้องเรียนอนุบาล 1/1",
+          "file": "SCH-M02/04-audio-video/SCHM02-B1-A11-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A11-CAM-01"
+        },
+        {
+          "device_id": "SCHM02-B1-A11-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/1",
+          "label": "Computer AIO · TIPS OPS Mini PC i7-13650HX · ห้องเรียนอนุบาล 1/1",
+          "file": "SCH-M02/02-computer/SCHM02-B1-A11-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A11-COMP-01"
+        },
+        {
+          "device_id": "SCHM02-B1-A11-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/1",
+          "label": "Interactive Display · TIPS iClassBoard 75\" 4K · ห้องเรียนอนุบาล 1/1",
+          "file": "SCH-M02/01-display/SCHM02-B1-A11-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A11-DISP-01"
+        },
+        {
+          "device_id": "SCHM02-B1-A11-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/1",
+          "label": "Speaker · TIPS Soundbar + Subwoofer · ห้องเรียนอนุบาล 1/1",
+          "file": "SCH-M02/04-audio-video/SCHM02-B1-A11-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A11-SPK-01"
+        },
+        {
+          "device_id": "SCHM02-B1-A12-CAM-01",
+          "device_type": "Visualizer",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/2",
+          "label": "Visualizer · IPEVO V4K Pro · ห้องเรียนอนุบาล 1/2",
+          "file": "SCH-M02/01-display/SCHM02-B1-A12-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A12-CAM-01"
+        },
+        {
+          "device_id": "SCHM02-B1-A12-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/2",
+          "label": "Computer AIO · HP ProOne 440 G9 · ห้องเรียนอนุบาล 1/2",
+          "file": "SCH-M02/02-computer/SCHM02-B1-A12-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A12-COMP-01"
+        },
+        {
+          "device_id": "SCHM02-B1-A12-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/2",
+          "label": "Interactive Display · Samsung WM75B · ห้องเรียนอนุบาล 1/2",
+          "file": "SCH-M02/01-display/SCHM02-B1-A12-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A12-DISP-01"
+        },
+        {
+          "device_id": "SCHM02-B1-A12-MIC-01",
+          "device_type": "Microphone",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนอนุบาล 1/2",
+          "label": "Microphone · Shure MX418 · ห้องเรียนอนุบาล 1/2",
+          "file": "SCH-M02/04-audio-video/SCHM02-B1-A12-MIC-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B1-A12-MIC-01"
+        },
+        {
+          "device_id": "SCHM02-B2-B21-COMP-01",
+          "device_type": "Computer Desktop",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องปฏิบัติการคอมพิวเตอร์",
+          "label": "Computer Desktop · Dell OptiPlex 7010 · ห้องปฏิบัติการคอมพิวเตอร์",
+          "file": "SCH-M02/02-computer/SCHM02-B2-B21-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B21-COMP-01"
+        },
+        {
+          "device_id": "SCHM02-B2-B21-COMP-02",
+          "device_type": "Computer Notebook",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องปฏิบัติการคอมพิวเตอร์",
+          "label": "Computer Notebook · Lenovo ThinkPad E14 Gen 5 · ห้องปฏิบัติการคอมพิวเตอร์",
+          "file": "SCH-M02/02-computer/SCHM02-B2-B21-COMP-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B21-COMP-02"
+        },
+        {
+          "device_id": "SCHM02-B2-B21-COMP-03",
+          "device_type": "Computer Tablet",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องปฏิบัติการคอมพิวเตอร์",
+          "label": "Computer Tablet · Samsung Galaxy Tab A9+ · ห้องปฏิบัติการคอมพิวเตอร์",
+          "file": "SCH-M02/02-computer/SCHM02-B2-B21-COMP-03.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B21-COMP-03"
+        },
+        {
+          "device_id": "SCHM02-B2-B21-PRN-01",
+          "device_type": "Printer",
+          "category": "อุปกรณ์ต่อพ่วง",
+          "building": null,
+          "room": "ห้องปฏิบัติการคอมพิวเตอร์",
+          "label": "Printer · Brother DCP-T720DW · ห้องปฏิบัติการคอมพิวเตอร์",
+          "file": "SCH-M02/05-peripheral/SCHM02-B2-B21-PRN-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B21-PRN-01"
+        },
+        {
+          "device_id": "SCHM02-B2-B22-AP-01",
+          "device_type": "Access Point",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องสื่อการเรียนรู้",
+          "label": "Access Point · TP-Link EAP610 · ห้องสื่อการเรียนรู้",
+          "file": "SCH-M02/03-network/SCHM02-B2-B22-AP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B22-AP-01"
+        },
+        {
+          "device_id": "SCHM02-B2-B22-RTR-01",
+          "device_type": "Router",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องสื่อการเรียนรู้",
+          "label": "Router · MikroTik hAP ax3 · ห้องสื่อการเรียนรู้",
+          "file": "SCH-M02/03-network/SCHM02-B2-B22-RTR-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B22-RTR-01"
+        },
+        {
+          "device_id": "SCHM02-B2-B22-SW-01",
+          "device_type": "Switch",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องสื่อการเรียนรู้",
+          "label": "Switch · Cisco CBS250-24T · ห้องสื่อการเรียนรู้",
+          "file": "SCH-M02/03-network/SCHM02-B2-B22-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B22-SW-01"
+        },
+        {
+          "device_id": "SCHM02-B2-B22-UPS-01",
+          "device_type": "UPS",
+          "category": "ไฟฟ้า/สำรองไฟ",
+          "building": null,
+          "room": "ห้องสื่อการเรียนรู้",
+          "label": "UPS · APC BX1100LI-MS · ห้องสื่อการเรียนรู้",
+          "file": "SCH-M02/06-power/SCHM02-B2-B22-UPS-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B2-B22-UPS-01"
+        },
+        {
+          "device_id": "SCHM02-B3-C31-PJT-01",
+          "device_type": "Projector",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องประชุมเล็ก",
+          "label": "Projector · Epson EB-X51 · ห้องประชุมเล็ก",
+          "file": "SCH-M02/01-display/SCHM02-B3-C31-PJT-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B3-C31-PJT-01"
+        },
+        {
+          "device_id": "SCHM02-B3-C31-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องประชุมเล็ก",
+          "label": "Speaker · JBL Control 25-1 · ห้องประชุมเล็ก",
+          "file": "SCH-M02/04-audio-video/SCHM02-B3-C31-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B3-C31-SPK-01"
+        },
+        {
+          "device_id": "SCHM02-B3-C31-SW-01",
+          "device_type": "Software (Phonics Hero)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องประชุมเล็ก",
+          "label": "Software (Phonics Hero) · Phonics Hero Phonics Hero School · ห้องประชุมเล็ก",
+          "file": "SCH-M02/07-software/SCHM02-B3-C31-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B3-C31-SW-01"
+        },
+        {
+          "device_id": "SCHM02-B3-C31-SW-02",
+          "device_type": "Software (Picaro)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องประชุมเล็ก",
+          "label": "Software (Picaro) · Picaro Picaro Classroom Suite · ห้องประชุมเล็ก",
+          "file": "SCH-M02/07-software/SCHM02-B3-C31-SW-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM02-B3-C31-SW-02"
+        }
+      ]
+    },
+    {
+      "org_code": "SCH-M03",
+      "org_name": "วัดราษฎร์บำรุง",
+      "directory": "SCH-M03",
+      "device_count": 20,
+      "devices": [
+        {
+          "device_id": "SCHM03-B1-111-CAM-01",
+          "device_type": "Camera",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ป.3/1",
+          "label": "Camera · TIPS AI Camera (built-in) · ห้องเรียน ป.3/1",
+          "file": "SCH-M03/04-audio-video/SCHM03-B1-111-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-111-CAM-01"
+        },
+        {
+          "device_id": "SCHM03-B1-111-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียน ป.3/1",
+          "label": "Computer AIO · TIPS OPS Mini PC i7-13650HX · ห้องเรียน ป.3/1",
+          "file": "SCH-M03/02-computer/SCHM03-B1-111-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-111-COMP-01"
+        },
+        {
+          "device_id": "SCHM03-B1-111-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ป.3/1",
+          "label": "Interactive Display · TIPS iClassBoard 75\" 4K · ห้องเรียน ป.3/1",
+          "file": "SCH-M03/01-display/SCHM03-B1-111-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-111-DISP-01"
+        },
+        {
+          "device_id": "SCHM03-B1-111-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ป.3/1",
+          "label": "Speaker · TIPS Soundbar + Subwoofer · ห้องเรียน ป.3/1",
+          "file": "SCH-M03/04-audio-video/SCHM03-B1-111-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-111-SPK-01"
+        },
+        {
+          "device_id": "SCHM03-B1-112-CAM-01",
+          "device_type": "Visualizer",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ป.4/1",
+          "label": "Visualizer · IPEVO V4K Pro · ห้องเรียน ป.4/1",
+          "file": "SCH-M03/01-display/SCHM03-B1-112-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-112-CAM-01"
+        },
+        {
+          "device_id": "SCHM03-B1-112-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียน ป.4/1",
+          "label": "Computer AIO · HP ProOne 440 G9 · ห้องเรียน ป.4/1",
+          "file": "SCH-M03/02-computer/SCHM03-B1-112-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-112-COMP-01"
+        },
+        {
+          "device_id": "SCHM03-B1-112-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ป.4/1",
+          "label": "Interactive Display · Samsung WM75B · ห้องเรียน ป.4/1",
+          "file": "SCH-M03/01-display/SCHM03-B1-112-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-112-DISP-01"
+        },
+        {
+          "device_id": "SCHM03-B1-112-MIC-01",
+          "device_type": "Microphone",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ป.4/1",
+          "label": "Microphone · Shure MX418 · ห้องเรียน ป.4/1",
+          "file": "SCH-M03/04-audio-video/SCHM03-B1-112-MIC-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B1-112-MIC-01"
+        },
+        {
+          "device_id": "SCHM03-B2-211-COMP-01",
+          "device_type": "Computer Desktop",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ 1",
+          "label": "Computer Desktop · Dell OptiPlex 7010 · ห้องคอมพิวเตอร์ 1",
+          "file": "SCH-M03/02-computer/SCHM03-B2-211-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-211-COMP-01"
+        },
+        {
+          "device_id": "SCHM03-B2-211-COMP-02",
+          "device_type": "Computer Notebook",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ 1",
+          "label": "Computer Notebook · Lenovo ThinkPad E14 Gen 5 · ห้องคอมพิวเตอร์ 1",
+          "file": "SCH-M03/02-computer/SCHM03-B2-211-COMP-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-211-COMP-02"
+        },
+        {
+          "device_id": "SCHM03-B2-211-COMP-03",
+          "device_type": "Computer Tablet",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ 1",
+          "label": "Computer Tablet · Samsung Galaxy Tab A9+ · ห้องคอมพิวเตอร์ 1",
+          "file": "SCH-M03/02-computer/SCHM03-B2-211-COMP-03.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-211-COMP-03"
+        },
+        {
+          "device_id": "SCHM03-B2-211-PRN-01",
+          "device_type": "Printer",
+          "category": "อุปกรณ์ต่อพ่วง",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ 1",
+          "label": "Printer · Brother DCP-T720DW · ห้องคอมพิวเตอร์ 1",
+          "file": "SCH-M03/05-peripheral/SCHM03-B2-211-PRN-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-211-PRN-01"
+        },
+        {
+          "device_id": "SCHM03-B2-212-AP-01",
+          "device_type": "Access Point",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องพักครู",
+          "label": "Access Point · TP-Link EAP610 · ห้องพักครู",
+          "file": "SCH-M03/03-network/SCHM03-B2-212-AP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-212-AP-01"
+        },
+        {
+          "device_id": "SCHM03-B2-212-RTR-01",
+          "device_type": "Router",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องพักครู",
+          "label": "Router · MikroTik hAP ax3 · ห้องพักครู",
+          "file": "SCH-M03/03-network/SCHM03-B2-212-RTR-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-212-RTR-01"
+        },
+        {
+          "device_id": "SCHM03-B2-212-SW-01",
+          "device_type": "Switch",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องพักครู",
+          "label": "Switch · Cisco CBS250-24T · ห้องพักครู",
+          "file": "SCH-M03/03-network/SCHM03-B2-212-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-212-SW-01"
+        },
+        {
+          "device_id": "SCHM03-B2-212-UPS-01",
+          "device_type": "UPS",
+          "category": "ไฟฟ้า/สำรองไฟ",
+          "building": null,
+          "room": "ห้องพักครู",
+          "label": "UPS · APC BX1100LI-MS · ห้องพักครู",
+          "file": "SCH-M03/06-power/SCHM03-B2-212-UPS-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B2-212-UPS-01"
+        },
+        {
+          "device_id": "SCHM03-B3-311-PJT-01",
+          "device_type": "Projector",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องโสตทัศนูปกรณ์",
+          "label": "Projector · Epson EB-X51 · ห้องโสตทัศนูปกรณ์",
+          "file": "SCH-M03/01-display/SCHM03-B3-311-PJT-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B3-311-PJT-01"
+        },
+        {
+          "device_id": "SCHM03-B3-311-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องโสตทัศนูปกรณ์",
+          "label": "Speaker · JBL Control 25-1 · ห้องโสตทัศนูปกรณ์",
+          "file": "SCH-M03/04-audio-video/SCHM03-B3-311-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B3-311-SPK-01"
+        },
+        {
+          "device_id": "SCHM03-B3-311-SW-01",
+          "device_type": "Software (Phonics Hero)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องโสตทัศนูปกรณ์",
+          "label": "Software (Phonics Hero) · Phonics Hero Phonics Hero School · ห้องโสตทัศนูปกรณ์",
+          "file": "SCH-M03/07-software/SCHM03-B3-311-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B3-311-SW-01"
+        },
+        {
+          "device_id": "SCHM03-B3-311-SW-02",
+          "device_type": "Software (Picaro)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องโสตทัศนูปกรณ์",
+          "label": "Software (Picaro) · Picaro Picaro Classroom Suite · ห้องโสตทัศนูปกรณ์",
+          "file": "SCH-M03/07-software/SCHM03-B3-311-SW-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM03-B3-311-SW-02"
+        }
+      ]
+    },
+    {
+      "org_code": "SCH-M04",
+      "org_name": "เทศบาลสองพี่น้อง",
+      "directory": "SCH-M04",
+      "device_count": 20,
+      "devices": [
+        {
+          "device_id": "SCHM04-B1-D101-CAM-01",
+          "device_type": "Camera",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ม.1/1",
+          "label": "Camera · TIPS AI Camera (built-in) · ห้องเรียน ม.1/1",
+          "file": "SCH-M04/04-audio-video/SCHM04-B1-D101-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D101-CAM-01"
+        },
+        {
+          "device_id": "SCHM04-B1-D101-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียน ม.1/1",
+          "label": "Computer AIO · TIPS OPS Mini PC i7-13650HX · ห้องเรียน ม.1/1",
+          "file": "SCH-M04/02-computer/SCHM04-B1-D101-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D101-COMP-01"
+        },
+        {
+          "device_id": "SCHM04-B1-D101-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ม.1/1",
+          "label": "Interactive Display · TIPS iClassBoard 75\" 4K · ห้องเรียน ม.1/1",
+          "file": "SCH-M04/01-display/SCHM04-B1-D101-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D101-DISP-01"
+        },
+        {
+          "device_id": "SCHM04-B1-D101-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ม.1/1",
+          "label": "Speaker · TIPS Soundbar + Subwoofer · ห้องเรียน ม.1/1",
+          "file": "SCH-M04/04-audio-video/SCHM04-B1-D101-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D101-SPK-01"
+        },
+        {
+          "device_id": "SCHM04-B1-D102-CAM-01",
+          "device_type": "Visualizer",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ม.1/2",
+          "label": "Visualizer · IPEVO V4K Pro · ห้องเรียน ม.1/2",
+          "file": "SCH-M04/01-display/SCHM04-B1-D102-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D102-CAM-01"
+        },
+        {
+          "device_id": "SCHM04-B1-D102-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียน ม.1/2",
+          "label": "Computer AIO · HP ProOne 440 G9 · ห้องเรียน ม.1/2",
+          "file": "SCH-M04/02-computer/SCHM04-B1-D102-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D102-COMP-01"
+        },
+        {
+          "device_id": "SCHM04-B1-D102-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียน ม.1/2",
+          "label": "Interactive Display · Samsung WM75B · ห้องเรียน ม.1/2",
+          "file": "SCH-M04/01-display/SCHM04-B1-D102-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D102-DISP-01"
+        },
+        {
+          "device_id": "SCHM04-B1-D102-MIC-01",
+          "device_type": "Microphone",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียน ม.1/2",
+          "label": "Microphone · Shure MX418 · ห้องเรียน ม.1/2",
+          "file": "SCH-M04/04-audio-video/SCHM04-B1-D102-MIC-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-D102-MIC-01"
+        },
+        {
+          "device_id": "SCHM04-B1-E101-PJT-01",
+          "device_type": "Projector",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องสมุด",
+          "label": "Projector · Epson EB-X51 · ห้องสมุด",
+          "file": "SCH-M04/01-display/SCHM04-B1-E101-PJT-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-E101-PJT-01"
+        },
+        {
+          "device_id": "SCHM04-B1-E101-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องสมุด",
+          "label": "Speaker · JBL Control 25-1 · ห้องสมุด",
+          "file": "SCH-M04/04-audio-video/SCHM04-B1-E101-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-E101-SPK-01"
+        },
+        {
+          "device_id": "SCHM04-B1-E101-SW-01",
+          "device_type": "Software (Phonics Hero)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องสมุด",
+          "label": "Software (Phonics Hero) · Phonics Hero Phonics Hero School · ห้องสมุด",
+          "file": "SCH-M04/07-software/SCHM04-B1-E101-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-E101-SW-01"
+        },
+        {
+          "device_id": "SCHM04-B1-E101-SW-02",
+          "device_type": "Software (Picaro)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องสมุด",
+          "label": "Software (Picaro) · Picaro Picaro Classroom Suite · ห้องสมุด",
+          "file": "SCH-M04/07-software/SCHM04-B1-E101-SW-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B1-E101-SW-02"
+        },
+        {
+          "device_id": "SCHM04-B2-D201-COMP-01",
+          "device_type": "Computer Desktop",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ ม.ต้น",
+          "label": "Computer Desktop · Dell OptiPlex 7010 · ห้องคอมพิวเตอร์ ม.ต้น",
+          "file": "SCH-M04/02-computer/SCHM04-B2-D201-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D201-COMP-01"
+        },
+        {
+          "device_id": "SCHM04-B2-D201-COMP-02",
+          "device_type": "Computer Notebook",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ ม.ต้น",
+          "label": "Computer Notebook · Lenovo ThinkPad E14 Gen 5 · ห้องคอมพิวเตอร์ ม.ต้น",
+          "file": "SCH-M04/02-computer/SCHM04-B2-D201-COMP-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D201-COMP-02"
+        },
+        {
+          "device_id": "SCHM04-B2-D201-COMP-03",
+          "device_type": "Computer Tablet",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ ม.ต้น",
+          "label": "Computer Tablet · Samsung Galaxy Tab A9+ · ห้องคอมพิวเตอร์ ม.ต้น",
+          "file": "SCH-M04/02-computer/SCHM04-B2-D201-COMP-03.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D201-COMP-03"
+        },
+        {
+          "device_id": "SCHM04-B2-D201-PRN-01",
+          "device_type": "Printer",
+          "category": "อุปกรณ์ต่อพ่วง",
+          "building": null,
+          "room": "ห้องคอมพิวเตอร์ ม.ต้น",
+          "label": "Printer · Brother DCP-T720DW · ห้องคอมพิวเตอร์ ม.ต้น",
+          "file": "SCH-M04/05-peripheral/SCHM04-B2-D201-PRN-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D201-PRN-01"
+        },
+        {
+          "device_id": "SCHM04-B2-D202-AP-01",
+          "device_type": "Access Point",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องเซิร์ฟเวอร์",
+          "label": "Access Point · TP-Link EAP610 · ห้องเซิร์ฟเวอร์",
+          "file": "SCH-M04/03-network/SCHM04-B2-D202-AP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D202-AP-01"
+        },
+        {
+          "device_id": "SCHM04-B2-D202-RTR-01",
+          "device_type": "Router",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องเซิร์ฟเวอร์",
+          "label": "Router · MikroTik hAP ax3 · ห้องเซิร์ฟเวอร์",
+          "file": "SCH-M04/03-network/SCHM04-B2-D202-RTR-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D202-RTR-01"
+        },
+        {
+          "device_id": "SCHM04-B2-D202-SW-01",
+          "device_type": "Switch",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องเซิร์ฟเวอร์",
+          "label": "Switch · Cisco CBS250-24T · ห้องเซิร์ฟเวอร์",
+          "file": "SCH-M04/03-network/SCHM04-B2-D202-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D202-SW-01"
+        },
+        {
+          "device_id": "SCHM04-B2-D202-UPS-01",
+          "device_type": "UPS",
+          "category": "ไฟฟ้า/สำรองไฟ",
+          "building": null,
+          "room": "ห้องเซิร์ฟเวอร์",
+          "label": "UPS · APC BX1100LI-MS · ห้องเซิร์ฟเวอร์",
+          "file": "SCH-M04/06-power/SCHM04-B2-D202-UPS-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM04-B2-D202-UPS-01"
+        }
+      ]
+    },
+    {
+      "org_code": "SCH-M05",
+      "org_name": "สาธิตวิทยาลัยครู",
+      "directory": "SCH-M05",
+      "device_count": 20,
+      "devices": [
+        {
+          "device_id": "SCHM05-B1-S101-CAM-01",
+          "device_type": "Camera",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 1",
+          "label": "Camera · TIPS AI Camera (built-in) · ห้องเรียนสาธิต 1",
+          "file": "SCH-M05/04-audio-video/SCHM05-B1-S101-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S101-CAM-01"
+        },
+        {
+          "device_id": "SCHM05-B1-S101-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 1",
+          "label": "Computer AIO · TIPS OPS Mini PC i7-13650HX · ห้องเรียนสาธิต 1",
+          "file": "SCH-M05/02-computer/SCHM05-B1-S101-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S101-COMP-01"
+        },
+        {
+          "device_id": "SCHM05-B1-S101-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 1",
+          "label": "Interactive Display · TIPS iClassBoard 75\" 4K · ห้องเรียนสาธิต 1",
+          "file": "SCH-M05/01-display/SCHM05-B1-S101-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S101-DISP-01"
+        },
+        {
+          "device_id": "SCHM05-B1-S101-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 1",
+          "label": "Speaker · TIPS Soundbar + Subwoofer · ห้องเรียนสาธิต 1",
+          "file": "SCH-M05/04-audio-video/SCHM05-B1-S101-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S101-SPK-01"
+        },
+        {
+          "device_id": "SCHM05-B1-S102-CAM-01",
+          "device_type": "Visualizer",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 2",
+          "label": "Visualizer · IPEVO V4K Pro · ห้องเรียนสาธิต 2",
+          "file": "SCH-M05/01-display/SCHM05-B1-S102-CAM-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S102-CAM-01"
+        },
+        {
+          "device_id": "SCHM05-B1-S102-COMP-01",
+          "device_type": "Computer AIO",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 2",
+          "label": "Computer AIO · HP ProOne 440 G9 · ห้องเรียนสาธิต 2",
+          "file": "SCH-M05/02-computer/SCHM05-B1-S102-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S102-COMP-01"
+        },
+        {
+          "device_id": "SCHM05-B1-S102-DISP-01",
+          "device_type": "Interactive Display",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 2",
+          "label": "Interactive Display · Samsung WM75B · ห้องเรียนสาธิต 2",
+          "file": "SCH-M05/01-display/SCHM05-B1-S102-DISP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S102-DISP-01"
+        },
+        {
+          "device_id": "SCHM05-B1-S102-MIC-01",
+          "device_type": "Microphone",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องเรียนสาธิต 2",
+          "label": "Microphone · Shure MX418 · ห้องเรียนสาธิต 2",
+          "file": "SCH-M05/04-audio-video/SCHM05-B1-S102-MIC-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B1-S102-MIC-01"
+        },
+        {
+          "device_id": "SCHM05-B2-S201-COMP-01",
+          "device_type": "Computer Desktop",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องปฏิบัติการ IT",
+          "label": "Computer Desktop · Dell OptiPlex 7010 · ห้องปฏิบัติการ IT",
+          "file": "SCH-M05/02-computer/SCHM05-B2-S201-COMP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S201-COMP-01"
+        },
+        {
+          "device_id": "SCHM05-B2-S201-COMP-02",
+          "device_type": "Computer Notebook",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องปฏิบัติการ IT",
+          "label": "Computer Notebook · Lenovo ThinkPad E14 Gen 5 · ห้องปฏิบัติการ IT",
+          "file": "SCH-M05/02-computer/SCHM05-B2-S201-COMP-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S201-COMP-02"
+        },
+        {
+          "device_id": "SCHM05-B2-S201-COMP-03",
+          "device_type": "Computer Tablet",
+          "category": "คอมพิวเตอร์",
+          "building": null,
+          "room": "ห้องปฏิบัติการ IT",
+          "label": "Computer Tablet · Samsung Galaxy Tab A9+ · ห้องปฏิบัติการ IT",
+          "file": "SCH-M05/02-computer/SCHM05-B2-S201-COMP-03.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S201-COMP-03"
+        },
+        {
+          "device_id": "SCHM05-B2-S201-PRN-01",
+          "device_type": "Printer",
+          "category": "อุปกรณ์ต่อพ่วง",
+          "building": null,
+          "room": "ห้องปฏิบัติการ IT",
+          "label": "Printer · Brother DCP-T720DW · ห้องปฏิบัติการ IT",
+          "file": "SCH-M05/05-peripheral/SCHM05-B2-S201-PRN-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S201-PRN-01"
+        },
+        {
+          "device_id": "SCHM05-B2-S202-AP-01",
+          "device_type": "Access Point",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องควบคุมระบบ",
+          "label": "Access Point · TP-Link EAP610 · ห้องควบคุมระบบ",
+          "file": "SCH-M05/03-network/SCHM05-B2-S202-AP-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S202-AP-01"
+        },
+        {
+          "device_id": "SCHM05-B2-S202-RTR-01",
+          "device_type": "Router",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องควบคุมระบบ",
+          "label": "Router · MikroTik hAP ax3 · ห้องควบคุมระบบ",
+          "file": "SCH-M05/03-network/SCHM05-B2-S202-RTR-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S202-RTR-01"
+        },
+        {
+          "device_id": "SCHM05-B2-S202-SW-01",
+          "device_type": "Switch",
+          "category": "ระบบเครือข่าย",
+          "building": null,
+          "room": "ห้องควบคุมระบบ",
+          "label": "Switch · Cisco CBS250-24T · ห้องควบคุมระบบ",
+          "file": "SCH-M05/03-network/SCHM05-B2-S202-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S202-SW-01"
+        },
+        {
+          "device_id": "SCHM05-B2-S202-UPS-01",
+          "device_type": "UPS",
+          "category": "ไฟฟ้า/สำรองไฟ",
+          "building": null,
+          "room": "ห้องควบคุมระบบ",
+          "label": "UPS · APC BX1100LI-MS · ห้องควบคุมระบบ",
+          "file": "SCH-M05/06-power/SCHM05-B2-S202-UPS-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B2-S202-UPS-01"
+        },
+        {
+          "device_id": "SCHM05-B3-S301-PJT-01",
+          "device_type": "Projector",
+          "category": "จอแสดงภาพ",
+          "building": null,
+          "room": "ห้องประชุมใหญ่",
+          "label": "Projector · Epson EB-X51 · ห้องประชุมใหญ่",
+          "file": "SCH-M05/01-display/SCHM05-B3-S301-PJT-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B3-S301-PJT-01"
+        },
+        {
+          "device_id": "SCHM05-B3-S301-SPK-01",
+          "device_type": "Speaker",
+          "category": "ภาพและเสียง",
+          "building": null,
+          "room": "ห้องประชุมใหญ่",
+          "label": "Speaker · JBL Control 25-1 · ห้องประชุมใหญ่",
+          "file": "SCH-M05/04-audio-video/SCHM05-B3-S301-SPK-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B3-S301-SPK-01"
+        },
+        {
+          "device_id": "SCHM05-B3-S301-SW-01",
+          "device_type": "Software (Phonics Hero)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องประชุมใหญ่",
+          "label": "Software (Phonics Hero) · Phonics Hero Phonics Hero School · ห้องประชุมใหญ่",
+          "file": "SCH-M05/07-software/SCHM05-B3-S301-SW-01.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B3-S301-SW-01"
+        },
+        {
+          "device_id": "SCHM05-B3-S301-SW-02",
+          "device_type": "Software (Picaro)",
+          "category": "ซอฟต์แวร์",
+          "building": null,
+          "room": "ห้องประชุมใหญ่",
+          "label": "Software (Picaro) · Picaro Picaro Classroom Suite · ห้องประชุมใหญ่",
+          "file": "SCH-M05/07-software/SCHM05-B3-S301-SW-02.png",
+          "url": "https://iwasmart-service.vercel.app/scan?device=SCHM05-B3-S301-SW-02"
+        }
+      ]
+    }
+  ]
+}

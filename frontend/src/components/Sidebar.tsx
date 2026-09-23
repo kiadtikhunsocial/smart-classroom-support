@@ -101,6 +101,16 @@ const menuItems: MenuItem[] = [
     ),
   },
   {
+    id: 'registrations',
+    label: 'อนุมัติสมาชิก',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="9" cy="8" r="4"/>
+        <path d="M2 20c0-3.5 3.2-6 7-6M16 17l2 2 4-4"/>
+      </svg>
+    ),
+  },
+  {
     id: 'users',
     label: 'Users',
     icon: (
@@ -166,22 +176,23 @@ const adminMenuItems = menuItems.filter((i) => i.id === 'schools');
 // super_admin   : เห็นทุกอย่าง
 // admin         : จัดการรร ตัวเอง (อุปกรณ์/ติcket/user/รายงาน) — ไม่เห็นโรงเรียนอื่น/ตั้งค่าระบบ
 // it_support    : ทำงานซ่อม (อุปกรณ์/สแกน/ticket/รายงาน) — ไม่จัดการ user/ตั้งค่า
-// teacher/student: แจ้งซ่อม + ติดตาม — เห็นแค่ Dashboard/สแกน/Tickets ของตัวเอง
+// ไม่มีบทบาท teacher/student แล้ว — ผู้แจ้งซ่อมใช้หน้าแจ้งซ่อม/สแกน QR โดยไม่ต้องมีบัญชี
+// บัญชีเก่าที่ยังติดบทบาทเดิมจะตกไปที่ LEGACY_FALLBACK_MENUS (เมนูจำกัดที่สุด)
 // หมายเหตุสิทธิ์ฝั่ง backend: /api/pm/* → owner/super_admin/admin/it_support,
 // /api/audit-logs → owner/super_admin/admin เท่านั้น (admin_school จึงไม่เห็นสองเมนูนี้)
 const ROLE_MENUS: Record<string, string[]> = {
-  owner: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'users', 'reports', 'audit', 'settings', 'profile'],
-  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'users', 'reports', 'audit', 'settings', 'profile'],
-  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'users', 'reports', 'audit', 'settings', 'profile'],
-  admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'users', 'reports', 'settings', 'profile'],
+  owner: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
+  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
+  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
+  admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'registrations', 'users', 'reports', 'settings', 'profile'],
   it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'reports', 'settings', 'profile'],
-  teacher: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
-  student: ['dashboard', 'scan', 'tickets', 'settings', 'profile'],
 };
+
+export const LEGACY_FALLBACK_MENUS = ['dashboard', 'tickets', 'settings', 'profile'];
 
 // it_support ที่มีสังกัด (สร้างโดย admin_school) ไม่เห็น ยอดขาย (sales) / การตั้งค่าโรงเรียน
 export function visibleMenusForRole(role: string | undefined, organizationId?: number | null): string[] {
-  const base = ROLE_MENUS[role || ''] || ROLE_MENUS.teacher;
+  const base = ROLE_MENUS[role || ''] || LEGACY_FALLBACK_MENUS;
   let menus = [...base];
   if (role === 'it_support' && organizationId) {
     menus = menus.filter((m) => m !== 'sales');
@@ -192,7 +203,7 @@ export function visibleMenusForRole(role: string | undefined, organizationId?: n
 export { ROLE_MENUS };
 
 // เรียงเมนูตามลำดับเดิมใน menuItems
-const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'users', 'reports', 'audit', 'settings', 'profile'];
+const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'];
 
 function visibleMenusFor(role: string | undefined, organizationId?: number | null): MenuItem[] {
   const allowed = visibleMenusForRole(role, organizationId);
@@ -202,8 +213,41 @@ function visibleMenusFor(role: string | undefined, organizationId?: number | nul
     .filter(Boolean);
 }
 
-export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart Classroom', userRole, userOrgId, userName, userAvatar, open, onClose, onLogout }: SidebarProps) {
+// ─── หมวดหมู่เมนู (จัดกลุ่มเพื่อการอ่าน ไม่เกี่ยวกับสิทธิ์) ──────────────────
+// สิทธิ์การมองเห็นยังคุมด้วย ROLE_MENUS/visibleMenusForRole เท่านั้น
+// กลุ่มไหนไม่มีเมนูที่ผู้ใช้เห็นได้เลย จะไม่ถูก render ทั้งกลุ่ม
+const MENU_GROUPS: { label: string; ids: string[] }[] = [
+  { label: 'ภาพรวม', ids: ['dashboard', 'reports'] },
+  { label: 'งานซ่อม', ids: ['tickets', 'scan', 'pm'] },
+  { label: 'คลังอุปกรณ์', ids: ['devices', 'qrbatch', 'kb'] },
+  { label: 'จัดการระบบ', ids: ['schools', 'registrations', 'users', 'sales', 'audit'] },
+  { label: 'บัญชีของฉัน', ids: ['settings', 'profile'] },
+];
+
+export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart Classroom Support', userRole, userOrgId, userName, userAvatar, open, onClose, onLogout }: SidebarProps) {
   const visibleItems = visibleMenusFor(userRole, userOrgId);
+
+  // เมนูที่ยังไม่ได้จัดกลุ่ม (เผื่อมีการเพิ่ม id ใหม่ในอนาคต) — ต้องไม่หายไปจาก UI
+  const groupedIds: Record<string, true> = {};
+  MENU_GROUPS.forEach((g) => g.ids.forEach((id) => { groupedIds[id] = true; }));
+  const ungroupedItems = visibleItems.filter((i) => !groupedIds[i.id]);
+
+  const renderLink = (item: MenuItem) => (
+    <li key={item.id}>
+      <button
+        type="button"
+        className={`sidebar-link${activeMenu === item.id ? ' active' : ''}`}
+        onClick={() => { onMenuChange(item.id); onClose?.(); }}
+        aria-current={activeMenu === item.id ? 'page' : undefined}
+      >
+        <span className="sidebar-link-icon">{item.icon}</span>
+        <span className="sidebar-link-label">{item.label}</span>
+        {item.badge !== undefined && item.badge > 0 && (
+          <span className="sidebar-link-badge" aria-label={`${item.badge} รายการใหม่`}>{item.badge}</span>
+        )}
+      </button>
+    </li>
+  );
 
   return (
     <>
@@ -217,7 +261,7 @@ export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart 
                 <img src="/logo.jpg" alt="IWA" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
               </div>
               <div>
-                <div className="sidebar-brand-text">Smart Classroom</div>
+                <div className="sidebar-brand-text">Smart Classroom Support</div>
                 <div className="sidebar-brand-sub">{schoolName}</div>
               </div>
             </a>
@@ -229,26 +273,29 @@ export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart 
           </div>
         </div>
 
-        <nav className="sidebar-nav">
-          <div className="sidebar-nav-section">
-            <span className="sidebar-nav-section-label">เมนูหลัก</span>
-          </div>
-          <ul className="sidebar-nav-items">
-            {visibleItems.map((item) => (
-              <li key={item.id}>
-                <button
-                  className={`sidebar-link${activeMenu === item.id ? ' active' : ''}`}
-                  onClick={() => { onMenuChange(item.id); onClose?.(); }}
-                >
-                  <span className="sidebar-link-icon">{item.icon}</span>
-                  <span className="sidebar-link-label">{item.label}</span>
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className="sidebar-link-badge">{item.badge}</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
+        <nav className="sidebar-nav" aria-label="เมนูหลัก">
+          {MENU_GROUPS.map((group) => {
+            const items = group.ids
+              .map((id) => visibleItems.find((i) => i.id === id))
+              .filter((i): i is MenuItem => Boolean(i));
+            if (items.length === 0) return null;
+            return (
+              <div className="sidebar-group" key={group.label}>
+                <span className="sidebar-nav-section-label">{group.label}</span>
+                <ul className="sidebar-nav-items">
+                  {items.map(renderLink)}
+                </ul>
+              </div>
+            );
+          })}
+          {ungroupedItems.length > 0 && (
+            <div className="sidebar-group">
+              <span className="sidebar-nav-section-label">อื่น ๆ</span>
+              <ul className="sidebar-nav-items">
+                {ungroupedItems.map(renderLink)}
+              </ul>
+            </div>
+          )}
         </nav>
 
         <div className="sidebar-footer">

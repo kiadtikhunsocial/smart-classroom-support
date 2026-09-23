@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const BASE = (typeof __VITE_API_URL__ !== 'undefined' ? __VITE_API_URL__ : import.meta.env.VITE_API_URL) || 'http://localhost:8000/api';
+// ใช้ base เดียวกับ client.ts เพื่อไม่ให้สองไฟล์ resolve URL คนละแบบ
+import { API_BASE as BASE } from '../api/client';
 
 type Msg = { role: 'user' | 'bot'; text: string };
 
@@ -31,7 +32,7 @@ export default function AIChatWidget({ user }: { user?: any }) {
     if (open && !greeted) {
       setMessages((m) => [
         ...m,
-        { role: 'bot', text: 'สวัสดีค่ะ วันนี้มีอะไรให้ช่วยคะ? ถามได้เลยเรื่องอุปกรณ์เรียนหรือแจ้งซ่อม 📚' },
+        { role: 'bot', text: 'สวัสดีค่ะ วันนี้มีอะไรให้ช่วยคะ? ถามได้เลยเรื่องอุปกรณ์เรียนหรือแจ้งซ่อม' },
       ]);
       setGreeted(true);
     }
@@ -74,7 +75,7 @@ export default function AIChatWidget({ user }: { user?: any }) {
       const data = await res.json();
       setMessages((m) => [
         ...m,
-        { role: 'bot', text: data?.reply || 'ขออภัย ไม่ได้คำตอบจากผู้ช่วยค่ะ ลองใหม่อีกครั้งนะคะ 🙏' },
+        { role: 'bot', text: data?.reply || 'ขออภัย ไม่ได้คำตอบจากผู้ช่วยค่ะ ลองใหม่อีกครั้งนะคะ' },
       ]);
     } catch (e: any) {
       setMessages((m) => [
@@ -118,7 +119,6 @@ export default function AIChatWidget({ user }: { user?: any }) {
           boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
         }}
       >
-        <span style={{ fontSize: 20 }}>💬</span>
         <span>คุยกับผู้ช่วย AI</span>
       </button>
 
@@ -156,13 +156,16 @@ export default function AIChatWidget({ user }: { user?: any }) {
               justifyContent: 'space-between',
             }}
           >
-            <span>🤖 ผู้ช่วย AI</span>
+            <span>ผู้ช่วย AI</span>
             <button
               onClick={() => setOpen(false)}
-              style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}
+              style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', lineHeight: 0, padding: 2, display: 'inline-flex' }}
               title="ปิด"
+              aria-label="ปิด"
             >
-              ✕
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
             </button>
           </div>
 
@@ -191,11 +194,14 @@ export default function AIChatWidget({ user }: { user?: any }) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 15,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: '0.03em',
+                      color: 'var(--color-primary, #2563eb)',
                       flexShrink: 0,
                     }}
                   >
-                    🤖
+                    AI
                   </div>
                   <div
                     style={{
@@ -245,11 +251,14 @@ export default function AIChatWidget({ user }: { user?: any }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 15,
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: '0.03em',
+                    color: 'var(--color-primary, #2563eb)',
                     flexShrink: 0,
                   }}
                 >
-                  🤖
+                  AI
                 </div>
                 <div
                   style={{

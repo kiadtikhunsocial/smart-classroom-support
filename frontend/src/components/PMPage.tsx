@@ -116,8 +116,10 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
   const [runningRules, setRunningRules] = useState(false);
   const [flagUpdatingId, setFlagUpdatingId] = useState<number | null>(null);
 
-  // ฟอร์มแผน PM
+  // ฟอร์มแผน PM — editingPlanId = null คือกำลังสร้างแผนใหม่
   const [showPlanForm, setShowPlanForm] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<number | null>(null);
+  const [deletingPlanId, setDeletingPlanId] = useState<number | null>(null);
   const [planForm, setPlanForm] = useState({
     name: '',
     device_type: '',
@@ -127,6 +129,8 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
   });
 
   const canManagePlans = PLAN_MANAGE_ROLES.includes(userRole || '');
+  // ผู้ดูแลระดับสูงแก้ไขงานที่ปิดแล้ว (done/skipped) ย้อนหลังได้ด้วย
+  const canEditAnyTask = canManagePlans;
   const effectiveOrgId = isGlobalScope
     ? (orgFilter === '' ? undefined : orgFilter)
     : (currentOrgId ?? undefined);
@@ -224,12 +228,29 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
 
   const openSubmit = (task: any) => {
     const items: any[] = Array.isArray(task.checklist) ? task.checklist : [];
+    // งานที่เคยบันทึกผลไว้แล้ว (กรณีผู้ดูแลแก้ย้อนหลัง) — เติมค่าเดิมกลับเข้าฟอร์ม
+    const prev: any[] = Array.isArray(task.result) ? task.result : [];
+    const toResult = (label: string, index: number): ChecklistResult => {
+      const p = prev.find((x) => typeof x?.item === 'string' && x.item === label) ?? prev[index];
+      return {
+        item: label,
+        value: p ? p.value !== false : true,
+        note: typeof p?.note === 'string' ? p.note : '',
+      };
+    };
     setResults(
       items.length > 0
-        ? items.map((raw, i) => ({ item: checklistItemLabel(raw, i), value: true, note: '' }))
-        : [{ item: 'ตรวจสภาพทั่วไปของอุปกรณ์', value: true, note: '' }],
+        ? items.map((raw, i) => toResult(checklistItemLabel(raw, i), i))
+        : prev.length > 0
+          ? prev.map((p, i) =>
+              toResult(
+                typeof p?.item === 'string' && p.item.trim() ? p.item.trim() : `รายการตรวจที่ ${i + 1}`,
+                i,
+              ),
+            )
+          : [{ item: 'ตรวจสภาพทั่วไปของอุปกรณ์', value: true, note: '' }],
     );
-    setPhotos([]);
+    setPhotos(Array.isArray(task.photos) ? task.photos.filter((u: any) => typeof u === 'string') : []);
     setPanelError(null);
     setSubmitTask(task);
   };
@@ -311,6 +332,49 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
     }
   };
 
+  const closePlanForm = () => {
+    setShowPlanForm(false);
+    setEditingPlanId(null);
+    setPanelError(null);
+    setPlanForm({ name: '', device_type: '', interval_days: 90, checklistText: '', is_active: true });
+  };
+
+  /** เปิดฟอร์มพร้อมค่าเดิมของแผน — checklist เก็บเป็น string หรือ object ก็ได้ */
+  const openEditPlan = (plan: any) => {
+    setPanelError(null);
+    setEditingPlanId(plan.id);
+    setPlanForm({
+      name: plan.name || '',
+      device_type: plan.device_type || '',
+      interval_days: Number(plan.interval_days) > 0 ? Number(plan.interval_days) : 90,
+      checklistText: Array.isArray(plan.checklist)
+        ? plan.checklist.map((c: any, i: number) => checklistItemLabel(c, i)).join('\n')
+        : '',
+      is_active: plan.is_active !== false,
+    });
+    setShowPlanForm(true);
+  };
+
+  const handleDeletePlan = async (plan: any) => {
+    const ok = window.confirm(
+      `ลบแผน "${plan.name}" ?\nประวัติงาน PM ที่ทำเสร็จแล้วจะยังอยู่ แต่แผนนี้จะไม่ออกงานใหม่อีก`
+    );
+    if (!ok) return;
+    setDeletingPlanId(plan.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.deletePMPlan(plan.id);
+      setNotice(`ลบแผน "${plan.name}" แล้ว`);
+      loadPlans();
+    } catch (err: any) {
+      // 409 = ยังมีงานค้าง — backend ส่งข้อความไทยมาแล้ว (แนะนำให้ปิดใช้งานแผนแทนการลบ)
+      setError(err?.message || 'ลบแผน PM ไม่สำเร็จ');
+    } finally {
+      setDeletingPlanId(null);
+    }
+  };
+
   const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (planForm.name.trim().length < 3) {
@@ -324,16 +388,27 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean);
-      await api.createPMPlan({
-        name: planForm.name.trim(),
-        device_type: planForm.device_type || undefined,
-        interval_days: planForm.interval_days,
-        checklist,
-        is_active: planForm.is_active,
-      });
-      setShowPlanForm(false);
-      setPlanForm({ name: '', device_type: '', interval_days: 90, checklistText: '', is_active: true });
-      setNotice('สร้างแผน PM แล้ว — กด "สร้างงานตามรอบ" เพื่อออกงานให้อุปกรณ์ที่ถึงกำหนด');
+      if (editingPlanId != null) {
+        await api.updatePMPlan(editingPlanId, {
+          name: planForm.name.trim(),
+          // เว้นว่าง = ใช้กับอุปกรณ์ทุกชนิด (ส่ง null เพื่อล้างค่าเดิม)
+          device_type: planForm.device_type.trim() || null,
+          interval_days: planForm.interval_days,
+          checklist,
+          is_active: planForm.is_active,
+        });
+        setNotice('บันทึกการแก้ไขแผน PM แล้ว');
+      } else {
+        await api.createPMPlan({
+          name: planForm.name.trim(),
+          device_type: planForm.device_type || undefined,
+          interval_days: planForm.interval_days,
+          checklist,
+          is_active: planForm.is_active,
+        });
+        setNotice('สร้างแผน PM แล้ว — กด "สร้างงานตามรอบ" เพื่อออกงานให้อุปกรณ์ที่ถึงกำหนด');
+      }
+      closePlanForm();
       loadPlans();
     } catch (err: any) {
       setPanelError(err?.message || 'บันทึกแผน PM ไม่สำเร็จ');
@@ -427,8 +502,12 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
             className="btn btn-ghost"
             onClick={() => { loadTasks(); loadPlans(); if (tab === 'flags') loadFlags(); }}
             aria-label="โหลดใหม่"
+            title="โหลดใหม่"
           >
-            ⟳
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
           </button>
         </div>
       </div>
@@ -463,7 +542,11 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
       {notice && (
         <div style={{ padding: '10px 14px', background: 'var(--color-success-light)', color: 'var(--color-success)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', marginBottom: 16, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <span>{notice}</span>
-          <button className="btn btn-ghost" style={{ padding: '0 6px', minHeight: 0 }} onClick={() => setNotice(null)} aria-label="ปิดข้อความ">✕</button>
+          <button className="btn btn-ghost" style={{ padding: '0 6px', minHeight: 0, lineHeight: 0 }} onClick={() => setNotice(null)} aria-label="ปิดข้อความ" title="ปิดข้อความ">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -592,7 +675,21 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                                   </button>
                                 </div>
                               ) : (
-                                <span style={{ fontSize: '0.78rem', color: 'var(--color-text-tertiary)' }}>ปิดแล้ว</span>
+                                canEditAnyTask ? (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--color-text-tertiary)' }}>ปิดแล้ว</span>
+                                    <button
+                                      className="btn btn-ghost"
+                                      style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                                      onClick={() => openSubmit(t)}
+                                      title="แก้ไขผลตรวจย้อนหลัง (สิทธิ์ผู้ดูแลระบบ)"
+                                    >
+                                      แก้ไขผลตรวจ
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: '0.78rem', color: 'var(--color-text-tertiary)' }}>ปิดแล้ว</span>
+                                )
                               )}
                             </td>
                           </tr>
@@ -629,6 +726,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                       <th>รอบ (วัน)</th>
                       <th>รายการตรวจ</th>
                       <th>สถานะ</th>
+                      {canManagePlans && <th style={{ textAlign: 'right' }}>จัดการ</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -647,6 +745,28 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                             {p.is_active ? 'ใช้งาน' : 'ปิดใช้งาน'}
                           </span>
                         </td>
+                        {canManagePlans && (
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                              onClick={() => openEditPlan(p)}
+                              disabled={deletingPlanId === p.id}
+                            >
+                              แก้ไข
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              style={{ padding: '4px 10px', fontSize: '0.78rem', color: 'var(--color-danger)' }}
+                              onClick={() => handleDeletePlan(p)}
+                              disabled={deletingPlanId === p.id}
+                            >
+                              {deletingPlanId === p.id ? 'กำลังลบ...' : 'ลบ'}
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -814,7 +934,11 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
           <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">ผลตรวจ {submitTask.task_no}</h3>
-              <button className="repair-panel-close" onClick={closeSubmit} aria-label="ปิด">✕</button>
+              <button className="repair-panel-close" onClick={closeSubmit} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body">
               <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginBottom: 12 }}>
@@ -873,9 +997,12 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                             type="button"
                             onClick={() => setPhotos((p) => p.filter((x) => x !== url))}
                             aria-label="ลบรูป"
-                            style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: 'var(--color-danger)', color: '#fff', cursor: 'pointer', fontSize: '0.7rem', lineHeight: '20px', padding: 0 }}
+                            title="ลบรูป"
+                            style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: 'var(--color-danger)', color: '#fff', cursor: 'pointer', lineHeight: 0, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                           >
-                            ✕
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+                              <path d="M18 6L6 18M6 6l12 12" />
+                            </svg>
                           </button>
                         </div>
                       ))}
@@ -884,7 +1011,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                 </div>
 
                 {results.some((r) => !r.value) && (
-                  <div style={{ padding: '8px 12px', background: 'var(--color-warning-light)', color: '#B45309', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', marginBottom: 12 }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--color-warning-light)', color: 'var(--badge-warning-text, #B45309)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', marginBottom: 12 }}>
                     มีรายการไม่ผ่าน — ระบบจะเปิด Ticket ซ่อมให้อุปกรณ์นี้อัตโนมัติเมื่อบันทึก
                   </div>
                 )}
@@ -912,7 +1039,11 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
           <div className="repair-panel" style={{ width: 460, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">ข้ามงาน {skipTask.task_no}</h3>
-              <button className="repair-panel-close" onClick={() => setSkipTask(null)} aria-label="ปิด">✕</button>
+              <button className="repair-panel-close" onClick={() => setSkipTask(null)} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body">
               <form onSubmit={handleSkip}>
@@ -945,11 +1076,15 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
 
       {/* ─── Panel: เพิ่มแผน PM ─────────────────────────────────── */}
       {showPlanForm && (
-        <div className="panel-overlay" onClick={() => setShowPlanForm(false)}>
+        <div className="panel-overlay" onClick={closePlanForm}>
           <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
-              <h3 className="repair-panel-title">เพิ่มแผน PM</h3>
-              <button className="repair-panel-close" onClick={() => setShowPlanForm(false)} aria-label="ปิด">✕</button>
+              <h3 className="repair-panel-title">{editingPlanId != null ? 'แก้ไขแผน PM' : 'เพิ่มแผน PM'}</h3>
+              <button className="repair-panel-close" onClick={closePlanForm} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body">
               <form onSubmit={handleSavePlan}>
@@ -1015,9 +1150,9 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                 )}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังบันทึก...' : 'บันทึกแผน'}
+                    {saving ? 'กำลังบันทึก...' : (editingPlanId != null ? 'บันทึกการแก้ไข' : 'บันทึกแผน')}
                   </button>
-                  <button type="button" className="btn btn-ghost" onClick={() => setShowPlanForm(false)}>ยกเลิก</button>
+                  <button type="button" className="btn btn-ghost" onClick={closePlanForm}>ยกเลิก</button>
                 </div>
               </form>
             </div>

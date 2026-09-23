@@ -1,5 +1,5 @@
 """ทดสอบครบ: flow แจ้งซ่อมของ chatbot + LINE webhook (postback/กันซ้ำ) + regression RBAC"""
-import warnings, json
+import warnings, json, os
 warnings.filterwarnings("ignore")
 
 from fastapi.testclient import TestClient
@@ -70,4 +70,7 @@ kb = c.post("/api/kb/articles", json={"title": "TEST-merge-smoke", "device_type"
 print("  admin_school สร้างบทความ ->", kb.status_code)
 if kb.status_code == 201:
     print("     ลบ:", c.delete(f"/api/kb/articles/{kb.json()['kb_id']}", headers=H).status_code)
-print("  owner login ->", c.post("/api/auth/login", json={"username": "iwasuperadmin", "password": "IwaScr2026!admin"}).status_code)
+if os.environ.get("TEST_ADMIN_PASSWORD"):
+    print("  owner login ->", c.post("/api/auth/login", json={
+        "username": "iwasuperadmin", "password": os.environ["TEST_ADMIN_PASSWORD"],
+    }).status_code)

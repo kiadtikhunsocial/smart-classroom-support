@@ -30,9 +30,51 @@ from app.models import SessionLocal  # noqa: E402
 
 client = TestClient(app)
 
-# อุปกรณ์ที่ scripts/seed_db.py สร้างไว้: Interactive Display ห้อง 301
-SEEDED_DEVICE_ID = "DEV-2024-00123"
+# ห้องที่ scripts/seed_db.py สร้างไว้ — มีอุปกรณ์หลายเครื่อง ใช้ทดสอบเคสระบุกำกวม
 SEEDED_ROOM_CODE = "301"
+
+
+def _lookup_seeded_device() -> str | None:
+    """รหัสอุปกรณ์ในห้อง 301 จากฐานข้อมูลจริง (None = ยังไม่ seed / ต่อ DB ไม่ได้)
+
+    ห้ามฮาร์ดโค้ด: รูปแบบรหัสใหม่ผูกกับโรงเรียน/อาคาร/ห้อง (เช่น
+    SCHDEMO-B3-301-DISP-01) และ scripts/seed_db.py ขอเลขจาก generate_device_id
+    ตอนรัน จึงเดารหัสล่วงหน้าไม่ได้
+
+    เลือกเครื่องที่ยังไม่มีใบงานค้างก่อน ไม่อย่างนั้น test_registered_device_creates_ticket
+    จะเข้าทางกันแจ้งซ้ำ (TOR 1.5.2) แล้วได้ duplicate=True กับเลขใบของ seed data
+    ใช้ฟังก์ชันนี้ตอน import module จึงไม่เรียก pytest.skip ข้างใน (skip นอก test
+    จะกลายเป็น error) — คืน None แล้วให้ _require_seeded_device จัดการ
+    """
+    from app.main import OPEN_TICKET_STATUSES
+
+    try:
+        db = SessionLocal()
+    except Exception:  # pragma: no cover - ขึ้นกับ environment
+        return None
+    try:
+        return db.execute(
+            sa_text(
+                "SELECT d.device_id FROM devices d "
+                "JOIN rooms r ON r.id = d.room_id "
+                "WHERE r.code = :room "
+                # EXISTS = false มาก่อน true ใน ORDER BY ASC → เครื่องที่ไม่มีใบค้างขึ้นก่อน
+                "ORDER BY EXISTS ("
+                "  SELECT 1 FROM repair_tickets t "
+                "  WHERE t.device_id = d.device_id "
+                "    AND t.status::text = ANY(:open)"
+                "), d.device_id "
+                "LIMIT 1"
+            ),
+            {"room": SEEDED_ROOM_CODE, "open": list(OPEN_TICKET_STATUSES)},
+        ).scalar()
+    except Exception:  # pragma: no cover - ขึ้นกับ environment
+        return None
+    finally:
+        db.close()
+
+
+SEEDED_DEVICE_ID = _lookup_seeded_device()
 
 HEADERS = {"X-N8N-Secret": TEST_SECRET}
 
@@ -86,13 +128,9 @@ def _query(sql: str, params: dict):
 
 
 def _require_seeded_device() -> None:
-    rows = _query(
-        "SELECT device_id FROM devices WHERE device_id = :d",
-        {"d": SEEDED_DEVICE_ID},
-    )
-    if not rows:
+    if not SEEDED_DEVICE_ID:
         pytest.skip(
-            f"ยังไม่มีอุปกรณ์ {SEEDED_DEVICE_ID} ในฐานข้อมูล "
+            f"ยังไม่มีอุปกรณ์ในห้อง {SEEDED_ROOM_CODE} หรือต่อฐานข้อมูลไม่ได้ "
             "— รัน `python scripts/seed_db.py` ก่อน"
         )
 
@@ -117,7 +155,12 @@ def _status_history_count(ticket_no: str) -> int:
 
 def test_requires_n8n_secret():
     """endpoint automation ต้องไม่เปิดให้เรียกโดยไม่มี secret (§39 RBAC/Least Privilege)"""
-    res = client.post("/api/line/create-ticket", json=_payload(deviceId=SEEDED_DEVICE_ID))
+    # ไม่เรียก _require_seeded_device: เทสต์นี้ตรวจแค่ชั้น auth จึงต้องผ่านแม้ยังไม่ seed
+    # (deviceId ต้องเป็น str ตาม schema — ถ้ายังไม่ seed ใช้ค่าสมมุติ เพราะ 401 เกิดก่อนค้นอุปกรณ์)
+    res = client.post(
+        "/api/line/create-ticket",
+        json=_payload(deviceId=SEEDED_DEVICE_ID or "SCHDEMO-B3-301-DISP-01"),
+    )
     assert res.status_code == 401, res.text
 
 
@@ -233,20 +276,104 @@ def test_room_number_is_not_matched_as_device_code(created_tickets):
         assert res.status_code in (409, 422), res.text
 
 
+def _devices_without_open_ticket(count: int):
+    """รหัสอุปกรณ์ที่ยังไม่มีใบงานค้าง จำนวน count เครื่อง (skip ถ้าไม่พอ)
+
+    ใช้ OPEN_TICKET_STATUSES จาก app.main ชุดเดียวกับ find_open_ticket เพื่อไม่ให้
+    เทสต์ไปโดนเครื่องที่มีใบค้างอยู่ ซึ่งจะเข้าทางกันแจ้งซ้ำแล้วคืนเลขใบของ
+    seed data — fixture cleanup จะลบข้อมูลตั้งต้นทิ้ง
+    """
+    from app.main import OPEN_TICKET_STATUSES
+
+    rows = _query(
+        "SELECT d.device_id FROM devices d "
+        "WHERE NOT EXISTS ("
+        "  SELECT 1 FROM repair_tickets t "
+        "  WHERE t.device_id = d.device_id AND t.status::text = ANY(:open)"
+        ") ORDER BY d.device_id LIMIT :n",
+        {"open": list(OPEN_TICKET_STATUSES), "n": count},
+    )
+    if len(rows) < count:
+        pytest.skip(
+            f"ต้องมีอุปกรณ์ที่ไม่มีใบงานค้างอย่างน้อย {count} เครื่อง แต่พบ {len(rows)} "
+            "— รัน `python scripts/seed_db.py` ก่อน"
+        )
+    return [r["device_id"] for r in rows]
+
+
+def _ticket_count_of_device(device_id: str) -> int:
+    rows = _query(
+        "SELECT count(*) AS c FROM repair_tickets WHERE device_id = :d",
+        {"d": device_id},
+    )
+    return rows[0]["c"] if rows else 0
+
+
 def test_ticket_numbers_are_unique(created_tickets):
-    """§11: แจ้งอุปกรณ์เดียวกันติดกัน 2 ครั้ง → เลข ticket ต้องไม่ซ้ำ"""
+    """§11: ใบงานต่างใบต้องได้เลข ticket ไม่ซ้ำ (สร้างจาก 2 เครื่องที่ไม่มีใบค้าง)
+
+    เดิมยิงอุปกรณ์เดิม 2 ครั้งเพื่อให้ได้ 2 ใบ ซึ่งตอนนี้ถูกกันแจ้งซ้ำ (TOR 1.5.2)
+    endpoint จะคืนเลขใบเดิมพร้อม duplicate=True — พฤติกรรมนั้นทดสอบแยกที่
+    test_duplicate_report_appends_to_open_ticket
+    """
     _require_seeded_device()
+    devices = _devices_without_open_ticket(2)
 
     numbers = []
-    for i in range(2):
+    for i, device_id in enumerate(devices, 1):
         res = client.post(
             "/api/line/create-ticket",
-            json=_payload(deviceId=SEEDED_DEVICE_ID, problemDetail=f"ทดสอบเลขไม่ซ้ำ #{i + 1}"),
+            json=_payload(deviceId=device_id, problemDetail=f"ทดสอบเลขไม่ซ้ำ #{i}"),
             headers=HEADERS,
         )
         assert res.status_code == 201, res.text
-        ticket_no = res.json()["ticket_no"]
-        created_tickets.append(ticket_no)
-        numbers.append(ticket_no)
+        body = res.json()
+        assert not body.get("duplicate"), f"เครื่อง {device_id} ไม่ควรมีใบค้างอยู่: {body}"
+        created_tickets.append(body["ticket_no"])
+        numbers.append(body["ticket_no"])
 
     assert len(set(numbers)) == len(numbers), f"Ticket Number ซ้ำ: {numbers}"
+
+
+def test_duplicate_report_appends_to_open_ticket(created_tickets):
+    """TOR 1.5.2: แจ้งเครื่องเดิมซ้ำขณะมีใบค้าง → ไม่เปิดใบใหม่ แต่ต่ออาการเข้าใบเดิม"""
+    _require_seeded_device()
+    device_id = _devices_without_open_ticket(1)[0]
+
+    first = client.post(
+        "/api/line/create-ticket",
+        json=_payload(deviceId=device_id, problemDetail="จอไม่มีภาพ (ใบแรก)"),
+        headers=HEADERS,
+    )
+    assert first.status_code == 201, first.text
+    first_no = first.json()["ticket_no"]
+    created_tickets.append(first_no)
+
+    before = _ticket_count_of_device(device_id)
+
+    second = client.post(
+        "/api/line/create-ticket",
+        json=_payload(deviceId=device_id, problemDetail="เสียงไม่ออกด้วย (แจ้งเพิ่ม)"),
+        headers=HEADERS,
+    )
+    assert second.status_code == 201, second.text
+    body = second.json()
+    if body["ticket_no"] != first_no:  # pragma: no cover - เจอเมื่อ guardrail ถูกถอด
+        created_tickets.append(body["ticket_no"])
+        pytest.fail(f"ต้องคืนเลขใบเดิม {first_no} ไม่เปิดใบใหม่: {second.text}")
+
+    assert body["duplicate"] is True
+    assert body["code"] == "DUPLICATE_OPEN_TICKET"
+    assert body["note_added"] is True
+    assert body["status_label"], "ต้องมีป้ายสถานะภาษาไทยให้ n8n ตอบผู้แจ้ง"
+    assert _ticket_count_of_device(device_id) == before, (
+        "จำนวนใบงานของอุปกรณ์ต้องไม่เพิ่มจากการแจ้งซ้ำ"
+    )
+    # §13: อาการที่แจ้งเพิ่มต้องถูกบันทึกเป็น ticket_updates ของใบเดิม
+    notes = _query(
+        "SELECT count(*) AS c FROM ticket_updates u "
+        "JOIN repair_tickets t ON t.id = u.ticket_id "
+        "WHERE t.ticket_id = :t AND u.note LIKE :p",
+        {"t": first_no, "p": "[แจ้งเพิ่มจากผู้ใช้ LINE]%"},
+    )
+    assert notes and notes[0]["c"] >= 1, "ต้องบันทึกอาการที่แจ้งเพิ่มเข้าใบเดิม"

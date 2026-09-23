@@ -12,7 +12,9 @@ services:
     runtime: python
     plan: free
     buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    # Both migrations are repeatable. Run them before serving requests so an
+    # existing Neon database has the membership columns and all role labels.
+    startCommand: "cd backend && python scripts/migrate_membership.py && python scripts/migrate_role_enum.py --apply && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     envVars:
       # Pin Python 3.11 — โค้ดทดสอบบน 3.11 และ Pillow 12.3.0 (ใน requirements.txt) มี wheel cp311

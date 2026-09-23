@@ -1,0 +1,1156 @@
+/* ============================================================================
+   public-home.css — หน้าแรกสาธารณะ (PublicHomeView)
+   ----------------------------------------------------------------------------
+   ธีม: Premium futuristic smart-school (navy เข้ม + glassmorphism + neon
+   blue/purple) ทุกค่าสีถูกประกาศเป็น custom property บน .ph-page เท่านั้น
+   จึงไม่รบกวนธีม light/dark ของหน้าอื่นในระบบ (dashboard ใช้ token ของตัวเอง)
+   ========================================================================== */
+
+.ph-page {
+  /* ── โทนสีหลัก ── */
+  --ph-navy-950: #050b1c;
+  --ph-navy-900: #0a1633;
+  --ph-navy-800: #0e1d42;
+  --ph-blue: #249bff;
+  --ph-cyan: #00d9ff;
+  --ph-purple: #7c4dff;
+  --ph-magenta: #c94cff;
+
+  --ph-text: #eaf2ff;
+  --ph-text-2: #a8bbd8;
+  --ph-text-3: #6e82a6;
+
+  /* ── พื้นผิวกระจก ── */
+  --ph-glass: rgba(14, 29, 66, 0.55);
+  --ph-glass-strong: rgba(10, 22, 51, 0.82);
+  --ph-line: rgba(124, 164, 255, 0.16);
+  --ph-line-strong: rgba(36, 155, 255, 0.45);
+
+  --ph-radius: 18px;
+  --ph-radius-sm: 12px;
+  --ph-shadow: 0 24px 60px rgba(2, 6, 20, 0.55);
+  --ph-glow-blue: 0 0 0 1px rgba(36, 155, 255, 0.35), 0 0 28px rgba(36, 155, 255, 0.22);
+
+  --ph-ok: #22e3a0;
+  --ph-warn: #ffb83d;
+  --ph-danger: #ff5f7a;
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ph-navy-950);
+  color: var(--ph-text);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── ชั้นพื้นหลังตกแต่ง ─────────────────────────────────────────────────── */
+
+.ph-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ph-bg-aurora {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+}
+
+.ph-bg-aurora-1 {
+  width: 46vw;
+  height: 46vw;
+  min-width: 320px;
+  min-height: 320px;
+  top: -14vw;
+  left: -8vw;
+  background: radial-gradient(circle, rgba(36, 155, 255, 0.5), transparent 68%);
+  animation: ph-drift-a 22s ease-in-out infinite alternate;
+}
+
+.ph-bg-aurora-2 {
+  width: 42vw;
+  height: 42vw;
+  min-width: 300px;
+  min-height: 300px;
+  top: 6vw;
+  right: -10vw;
+  background: radial-gradient(circle, rgba(124, 77, 255, 0.48), transparent 68%);
+  animation: ph-drift-b 26s ease-in-out infinite alternate;
+}
+
+.ph-bg-aurora-3 {
+  width: 52vw;
+  height: 40vw;
+  min-width: 320px;
+  bottom: -18vw;
+  left: 22vw;
+  background: radial-gradient(circle, rgba(201, 76, 255, 0.3), transparent 70%);
+  animation: ph-drift-a 30s ease-in-out infinite alternate-reverse;
+}
+
+/* เส้นวงจรบาง ๆ — ใช้ gradient สองชั้นแทนรูปภาพ เพื่อไม่เพิ่ม request */
+.ph-bg-grid {
+  position: absolute;
+  inset: -2px;
+  background-image:
+    linear-gradient(rgba(124, 164, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 164, 255, 0.055) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, #000 35%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, #000 35%, transparent 78%);
+}
+
+.ph-bg-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(36, 155, 255, 0.1), transparent 70%),
+    linear-gradient(180deg, rgba(5, 11, 28, 0) 40%, rgba(5, 11, 28, 0.85) 100%);
+}
+
+@keyframes ph-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(4%, 5%, 0) scale(1.1); }
+}
+
+@keyframes ph-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.05); }
+  to   { transform: translate3d(-5%, 4%, 0) scale(0.95); }
+}
+
+/* ─── แถบบน ──────────────────────────────────────────────────────────────── */
+
+.ph-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px clamp(16px, 4vw, 44px);
+  background: linear-gradient(180deg, rgba(5, 11, 28, 0.92), rgba(5, 11, 28, 0.62));
+  border-bottom: 1px solid var(--ph-line);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.ph-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+
+.ph-brand-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: linear-gradient(140deg, rgba(36, 155, 255, 0.24), rgba(124, 77, 255, 0.24));
+  border: 1px solid var(--ph-line-strong);
+  box-shadow: 0 0 22px rgba(36, 155, 255, 0.22);
+}
+
+.ph-brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.ph-brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ph-brand-text strong {
+  font-size: 0.98rem;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+}
+
+.ph-brand-text small {
+  font-size: 0.74rem;
+  color: var(--ph-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ph-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ph-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 227, 160, 0.3);
+  background: rgba(34, 227, 160, 0.08);
+  color: #8ff3ce;
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ph-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ph-ok);
+  box-shadow: 0 0 10px var(--ph-ok);
+  animation: ph-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ph-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+
+.ph-login-link {
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ph-text-2);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ph-login-link:hover,
+.ph-login-link:focus-visible {
+  color: #fff;
+  border-color: var(--ph-line-strong);
+  background: rgba(36, 155, 255, 0.14);
+  box-shadow: var(--ph-glow-blue);
+}
+
+/* ─── โครงหลัก ───────────────────────────────────────────────────────────── */
+
+.ph-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 64px) clamp(16px, 4vw, 28px) 56px;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(20px, 3vw, 30px);
+}
+
+/* ─── Hero ───────────────────────────────────────────────────────────────── */
+
+.ph-hero {
+  text-align: center;
+}
+
+.ph-eyebrow {
+  display: inline-block;
+  padding: 6px 14px;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line);
+  background: rgba(124, 77, 255, 0.12);
+  color: #c9b8ff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.ph-hero-title {
+  margin: 0 0 14px;
+  font-size: clamp(1.7rem, 5.6vw, 3.1rem);
+  line-height: 1.22;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.ph-hero-accent {
+  background: linear-gradient(100deg, var(--ph-cyan), var(--ph-blue) 45%, var(--ph-magenta));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ph-hero-sub {
+  margin: 0 auto 28px;
+  max-width: 620px;
+  font-size: clamp(0.88rem, 2.4vw, 1rem);
+  line-height: 1.75;
+  color: var(--ph-text-2);
+}
+
+.ph-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  text-align: left;
+}
+
+.ph-action-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--ph-radius);
+  border: 1px solid var(--ph-line);
+  background: var(--ph-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ขอบเรืองแสงด้านบนของการ์ด */
+.ph-action-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ph-line-strong), transparent);
+}
+
+.ph-action-card:hover,
+.ph-action-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--ph-line-strong);
+  box-shadow: var(--ph-shadow), 0 0 32px rgba(36, 155, 255, 0.2);
+  outline: none;
+}
+
+.ph-action-primary {
+  border-color: rgba(36, 155, 255, 0.4);
+  background:
+    linear-gradient(135deg, rgba(36, 155, 255, 0.16), rgba(124, 77, 255, 0.12)),
+    var(--ph-glass);
+}
+
+.ph-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  border: 1px solid var(--ph-line-strong);
+  background: linear-gradient(140deg, rgba(0, 217, 255, 0.18), rgba(124, 77, 255, 0.22));
+  color: var(--ph-cyan);
+  box-shadow: inset 0 0 18px rgba(36, 155, 255, 0.18);
+}
+
+.ph-action-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ph-action-body strong {
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.ph-action-body small {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--ph-text-3);
+}
+
+.ph-action-arrow {
+  flex-shrink: 0;
+  color: var(--ph-text-3);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.ph-action-card:hover .ph-action-arrow,
+.ph-action-card:focus-visible .ph-action-arrow {
+  transform: translateX(4px);
+  color: var(--ph-cyan);
+}
+
+/* ─── จุดเด่น ────────────────────────────────────────────────────────────── */
+
+.ph-highlights {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  text-align: left;
+}
+
+.ph-highlight {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid var(--ph-line);
+  background: rgba(10, 22, 51, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ph-highlight-icon {
+  display: inline-flex;
+  color: var(--ph-blue);
+}
+
+.ph-highlight-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.ph-highlight-desc {
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--ph-text-3);
+}
+
+/* ─── การ์ดกระจก ─────────────────────────────────────────────────────────── */
+
+.ph-card {
+  position: relative;
+  padding: clamp(18px, 3.4vw, 30px);
+  border-radius: var(--ph-radius);
+  border: 1px solid var(--ph-line);
+  background: var(--ph-glass-strong);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--ph-shadow);
+}
+
+.ph-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: var(--ph-radius) var(--ph-radius) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(0, 217, 255, 0.55), rgba(201, 76, 255, 0.45), transparent);
+}
+
+.ph-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.ph-card-title {
+  margin: 0;
+  font-size: clamp(1.02rem, 2.6vw, 1.22rem);
+  font-weight: 700;
+}
+
+.ph-card-tag {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ph-text-3);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line);
+}
+
+/* ─── ฟอร์มค้นหา ─────────────────────────────────────────────────────────── */
+
+.ph-track-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ph-input-wrap {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.ph-input-icon {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  color: var(--ph-text-3);
+  pointer-events: none;
+}
+
+.ph-input {
+  width: 100%;
+  padding: 14px 16px 14px 42px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid var(--ph-line);
+  background: rgba(5, 11, 28, 0.7);
+  color: var(--ph-text);
+  font: inherit;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.ph-input::placeholder {
+  color: var(--ph-text-3);
+  letter-spacing: 0.02em;
+}
+
+.ph-input:focus {
+  outline: none;
+  border-color: var(--ph-blue);
+  background: rgba(5, 11, 28, 0.9);
+  box-shadow: 0 0 0 3px rgba(36, 155, 255, 0.18), 0 0 24px rgba(36, 155, 255, 0.22);
+}
+
+.ph-input:focus + .ph-input-icon,
+.ph-input-wrap:focus-within .ph-input-icon {
+  color: var(--ph-cyan);
+}
+
+/* ─── ปุ่ม ───────────────────────────────────────────────────────────────── */
+
+.ph-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid var(--ph-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ph-text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ph-btn:hover:not(:disabled),
+.ph-btn:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--ph-line-strong);
+  background: rgba(36, 155, 255, 0.14);
+  outline: none;
+}
+
+.ph-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ph-btn-primary {
+  border-color: transparent;
+  background: linear-gradient(120deg, var(--ph-blue), var(--ph-purple));
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(36, 155, 255, 0.3);
+}
+
+.ph-btn-primary:hover:not(:disabled),
+.ph-btn-primary:focus-visible:not(:disabled) {
+  background: linear-gradient(120deg, var(--ph-cyan), var(--ph-magenta));
+  box-shadow: 0 14px 34px rgba(124, 77, 255, 0.4);
+}
+
+.ph-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: ph-spin 0.7s linear infinite;
+}
+
+@keyframes ph-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ph-hint {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--ph-text-3);
+}
+
+.ph-hint code {
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--ph-line);
+  background: rgba(36, 155, 255, 0.1);
+  color: #9fd4ff;
+  font-size: 0.75rem;
+}
+
+/* ─── ชิปใบงานที่ดูล่าสุด ────────────────────────────────────────────────── */
+
+.ph-recent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.ph-recent-label {
+  font-size: 0.76rem;
+  color: var(--ph-text-3);
+}
+
+.ph-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line);
+  background: rgba(124, 77, 255, 0.1);
+  color: #d5c6ff;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.ph-chip:hover:not(:disabled),
+.ph-chip:focus-visible:not(:disabled) {
+  border-color: rgba(201, 76, 255, 0.55);
+  background: rgba(201, 76, 255, 0.2);
+  color: #fff;
+  outline: none;
+}
+
+.ph-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── แจ้งเตือน ──────────────────────────────────────────────────────────── */
+
+.ph-alert {
+  margin-top: 16px;
+  padding: 13px 16px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid var(--ph-line);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--ph-text-2);
+}
+
+.ph-alert-info {
+  border-color: rgba(36, 155, 255, 0.35);
+  background: rgba(36, 155, 255, 0.1);
+  color: #b5dcff;
+}
+
+.ph-alert-warn {
+  border-color: rgba(255, 184, 61, 0.35);
+  background: rgba(255, 184, 61, 0.1);
+  color: #ffd79a;
+}
+
+.ph-alert-danger {
+  border-color: rgba(255, 95, 122, 0.38);
+  background: rgba(255, 95, 122, 0.1);
+  color: #ffb3c1;
+}
+
+.ph-alert-success {
+  border-color: rgba(34, 227, 160, 0.35);
+  background: rgba(34, 227, 160, 0.1);
+  color: #a6f3d6;
+}
+
+/* ─── ผลการค้นหา ─────────────────────────────────────────────────────────── */
+
+.ph-result {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--ph-line);
+  animation: ph-rise 0.35s ease both;
+}
+
+@keyframes ph-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ph-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ph-result-no {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ph-result-no-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ph-text-3);
+}
+
+.ph-result-no strong {
+  font-size: clamp(1rem, 3.4vw, 1.35rem);
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  background: linear-gradient(100deg, #ffffff, #9fd4ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* badge จาก global.css ถูกออกแบบมาสำหรับพื้นสว่าง — ปรับให้เข้ากับพื้นเข้ม */
+.ph-page .badge.ph-status-badge {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line-strong);
+  background: rgba(36, 155, 255, 0.14);
+  color: #b5dcff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ph-page .badge.badge-resolved.ph-status-badge,
+.ph-page .badge.badge-closed.ph-status-badge {
+  border-color: rgba(34, 227, 160, 0.4);
+  background: rgba(34, 227, 160, 0.14);
+  color: #a6f3d6;
+}
+
+.ph-page .badge.badge-pending.ph-status-badge,
+.ph-page .badge.badge-waiting_parts.ph-status-badge,
+.ph-page .badge.badge-waiting_user.ph-status-badge {
+  border-color: rgba(255, 184, 61, 0.4);
+  background: rgba(255, 184, 61, 0.14);
+  color: #ffd79a;
+}
+
+.ph-page .badge.badge-cancelled.ph-status-badge {
+  border-color: rgba(255, 95, 122, 0.42);
+  background: rgba(255, 95, 122, 0.14);
+  color: #ffb3c1;
+}
+
+.ph-page .badge.badge-new.ph-status-badge {
+  border-color: rgba(201, 76, 255, 0.42);
+  background: rgba(201, 76, 255, 0.14);
+  color: #e3c8ff;
+}
+
+.ph-result-title {
+  margin: 14px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ph-text);
+}
+
+/* ─── แถบความคืบหน้า + ขั้นตอน ───────────────────────────────────────────── */
+
+.ph-progress {
+  position: relative;
+  height: 4px;
+  margin: 24px 0 18px;
+  border-radius: 999px;
+  background: rgba(124, 164, 255, 0.12);
+  overflow: hidden;
+}
+
+.ph-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ph-cyan), var(--ph-blue) 55%, var(--ph-magenta));
+  box-shadow: 0 0 16px rgba(36, 155, 255, 0.55);
+  transition: width 0.5s ease;
+}
+
+.ph-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.ph-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--ph-text-3);
+}
+
+.ph-step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--ph-line);
+  background: rgba(5, 11, 28, 0.8);
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: all 0.25s ease;
+}
+
+.ph-step-label {
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.ph-step.is-done {
+  color: #a6f3d6;
+}
+
+.ph-step.is-done .ph-step-dot {
+  border-color: rgba(34, 227, 160, 0.5);
+  background: rgba(34, 227, 160, 0.16);
+  color: var(--ph-ok);
+}
+
+.ph-step.is-current {
+  color: #fff;
+}
+
+.ph-step.is-current .ph-step-dot {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--ph-blue), var(--ph-purple));
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(36, 155, 255, 0.16), 0 0 22px rgba(124, 77, 255, 0.5);
+}
+
+.ph-step.is-current .ph-step-label {
+  font-weight: 700;
+}
+
+/* ─── ข้อมูลสรุป ─────────────────────────────────────────────────────────── */
+
+.ph-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.ph-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px solid var(--ph-line);
+  background: rgba(5, 11, 28, 0.55);
+  min-width: 0;
+}
+
+.ph-meta-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ph-text-3);
+}
+
+.ph-meta-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ph-text);
+  overflow-wrap: anywhere;
+}
+
+.ph-meta-sub {
+  font-size: 0.75rem;
+  color: var(--ph-text-3);
+  overflow-wrap: anywhere;
+}
+
+.ph-sub-title {
+  margin: 28px 0 14px;
+  font-size: 0.96rem;
+  font-weight: 700;
+}
+
+/* ─── ไทม์ไลน์ ───────────────────────────────────────────────────────────── */
+
+.ph-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 22px;
+  position: relative;
+}
+
+.ph-timeline::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 5px;
+  width: 1px;
+  background: linear-gradient(180deg, var(--ph-cyan), rgba(124, 77, 255, 0.5), transparent);
+}
+
+.ph-timeline-item {
+  position: relative;
+  padding: 0 0 18px;
+}
+
+.ph-timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.ph-timeline-dot {
+  position: absolute;
+  top: 6px;
+  left: -21px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ph-navy-950);
+  border: 2px solid var(--ph-blue);
+  box-shadow: 0 0 12px rgba(36, 155, 255, 0.6);
+}
+
+.ph-timeline-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ph-timeline-status {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ph-text);
+}
+
+.ph-timeline-note {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ph-text-2);
+  overflow-wrap: anywhere;
+}
+
+.ph-timeline-time {
+  font-size: 0.73rem;
+  color: var(--ph-text-3);
+}
+
+.ph-empty {
+  margin: 0;
+  padding: 16px;
+  border-radius: var(--ph-radius-sm);
+  border: 1px dashed var(--ph-line);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ph-text-3);
+}
+
+.ph-result-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+/* ─── การ์ดช่วยเหลือ ─────────────────────────────────────────────────────── */
+
+.ph-help-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ph-help-list li {
+  position: relative;
+  padding-left: 26px;
+  font-size: 0.84rem;
+  line-height: 1.7;
+  color: var(--ph-text-2);
+}
+
+.ph-help-list li::before {
+  content: '';
+  position: absolute;
+  top: 0.62em;
+  left: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ph-cyan);
+  box-shadow: 0 0 10px var(--ph-cyan);
+}
+
+/* ─── ท้ายหน้า ───────────────────────────────────────────────────────────── */
+
+.ph-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 20px clamp(16px, 4vw, 44px);
+  border-top: 1px solid var(--ph-line);
+  background: rgba(5, 11, 28, 0.7);
+  font-size: 0.79rem;
+  color: var(--ph-text-3);
+}
+
+.ph-footer-brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* กลุ่มลิงก์ฝั่งขวา — บนจอแคบให้ตกบรรทัดใหม่ได้เองแทนที่จะบีบตัวอักษร */
+.ph-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 8px 18px;
+  flex-wrap: wrap;
+}
+
+.ph-footer a {
+  color: var(--ph-text-2);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ph-footer a:hover,
+.ph-footer a:focus-visible {
+  color: var(--ph-cyan);
+}
+
+/* ─── ยูทิลิตี้ ──────────────────────────────────────────────────────────── */
+
+.ph-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* โฟกัสที่มองเห็นชัดบนพื้นเข้ม — จำเป็นต่อการใช้คีย์บอร์ด */
+.ph-page a:focus-visible,
+.ph-page button:focus-visible {
+  outline: 2px solid var(--ph-cyan);
+  outline-offset: 2px;
+}
+
+/* ─── จอเล็ก ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 860px) {
+  .ph-steps {
+    grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .ph-topbar {
+    padding: 10px 16px;
+  }
+
+  .ph-brand-text small {
+    display: none;
+  }
+
+  .ph-live {
+    display: none;
+  }
+
+  .ph-track-form {
+    flex-direction: column;
+  }
+
+  .ph-track-form .ph-btn-primary {
+    width: 100%;
+  }
+
+  .ph-steps {
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 10px 4px;
+  }
+
+  .ph-step-dot {
+    width: 28px;
+    height: 28px;
+    font-size: 0.74rem;
+  }
+
+  .ph-step-label {
+    font-size: 0.68rem;
+  }
+
+  .ph-result-actions .ph-btn {
+    flex: 1 1 100%;
+  }
+
+  .ph-bg-grid {
+    background-size: 44px 44px;
+  }
+}
+
+/* ─── เคารพการตั้งค่าลดการเคลื่อนไหวของระบบ ─────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-page *,
+  .ph-page *::before,
+  .ph-page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

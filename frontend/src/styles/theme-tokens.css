@@ -1,0 +1,999 @@
+/* ============================================================================
+   theme-tokens.css — เลเยอร์สุดท้ายของระบบสี (โหลดหลัง design-system.css)
+   ----------------------------------------------------------------------------
+   โครงสร้าง:
+     1. จานสีเน้น (accent) ต่อค่า [data-accent]
+     2. นิวทรัล/สถานะ/ชาร์ต ต่อค่า [data-mode] (light | dark)
+     3. ขัดผิว: การ์ด, sidebar, header, hero, ชาร์ต + สเตตหว่าง hover/focus
+     4. คอนโทรลของหน้าตั้งค่า (segmented, swatch, live preview)
+
+   ทำไมใช้ attribute ไม่ใช่คลาส: [data-mode] ใช้ซ้อนใน element ย่อยได้
+   → การ์ดพรีวิวในหน้าตั้งค่าใส่ data-mode/data-accent ของตัวเองแล้วเห็นธีมใหม่
+     ได้ทันทีโดยไม่ต้องเปลี่ยนธีมทั้งแอปก่อน
+   ========================================================================== */
+
+/* ── 1. จานสีเน้น ───────────────────────────────────────────────────────── */
+
+:root,
+[data-accent='purple'] {
+  --accent-softer: #C7C4F6;
+  --accent-soft: #8B8BF5;
+  --accent: #5B5BD6;
+  --accent-strong: #4744C0;
+  --accent-rgb: 91 91 214;
+  --accent-grad-from: #4C3FD6;
+  --accent-grad-to: #7B3FD6;
+  --accent-grad-deep: #2A2159;
+}
+
+[data-accent='blue'] {
+  --accent-softer: #BFDBFE;
+  --accent-soft: #60A5FA;
+  --accent: #1E63E9;
+  --accent-strong: #164FC0;
+  --accent-rgb: 30 99 233;
+  --accent-grad-from: #1E63E9;
+  --accent-grad-to: #38BDF8;
+  --accent-grad-deep: #10275C;
+}
+
+[data-accent='teal'] {
+  --accent-softer: #99F6E4;
+  --accent-soft: #2DD4BF;
+  --accent: #0D9488;
+  --accent-strong: #0F766E;
+  --accent-rgb: 13 148 136;
+  --accent-grad-from: #0D9488;
+  --accent-grad-to: #22D3EE;
+  --accent-grad-deep: #103F44;
+}
+
+[data-accent='orange'] {
+  --accent-softer: #FED7AA;
+  --accent-soft: #FB923C;
+  --accent: #EA580C;
+  --accent-strong: #C2410C;
+  --accent-rgb: 234 88 12;
+  --accent-grad-from: #EA580C;
+  --accent-grad-to: #F59E0B;
+  --accent-grad-deep: #4A2109;
+}
+
+[data-accent='rose'] {
+  --accent-softer: #FECDD3;
+  --accent-soft: #FB7185;
+  --accent: #E11D48;
+  --accent-strong: #BE123C;
+  --accent-rgb: 225 29 72;
+  --accent-grad-from: #E11D48;
+  --accent-grad-to: #FB7185;
+  --accent-grad-deep: #4C0A1D;
+}
+
+/* ── 2. โหมดสว่าง (ค่าเริ่มต้นของระบบ) ──────────────────────────────────── */
+
+:root,
+[data-mode='light'] {
+  color-scheme: light;
+
+  --color-primary: var(--accent);
+  --color-primary-dark: var(--accent-strong);
+  --color-primary-light: rgb(var(--accent-rgb) / 0.10);
+  --color-primary-tint: rgb(var(--accent-rgb) / 0.06);
+
+  --gradient-brand: linear-gradient(135deg, var(--accent-grad-from) 0%, var(--accent-grad-to) 100%);
+  --gradient-hero: linear-gradient(
+    120deg,
+    var(--accent-grad-from) 0%,
+    var(--accent-grad-to) 58%,
+    var(--accent-grad-deep) 100%
+  );
+
+  /* พื้น/ผิว/เส้นขอบ */
+  --color-bg: #F7F8FB;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #FBFBFD;
+  --color-surface-sunken: #F1F2F7;
+  --color-border: #E7E8F0;
+  --color-border-strong: #D6D8E2;
+
+  /* ตัวอักษร */
+  --color-text: #15151D;
+  --color-text-secondary: #55555F;
+  --color-text-tertiary: #86868F;
+  --color-muted: #8A8A99;
+
+  /* สถานะ (คงโทนเดิมของระบบ) */
+  --color-success: #0F9D6E;
+  --color-success-light: #E3F7EF;
+  --color-warning: #C77700;
+  --color-warning-light: #FDF2DC;
+  --color-danger: #DC2B3F;
+  --color-danger-light: #FDECEE;
+  --color-info: #0B84D6;
+  --color-info-light: #E4F2FD;
+
+  --status-new: #EF4444;
+  --status-assigned: #F59E0B;
+  --status-in-progress: #2563EB;
+  --status-pending: #8B5CF6;
+  --status-waiting-parts: #3182CE;
+  --status-waiting-user: #805AD5;
+  --status-resolved: #10B981;
+  --status-closed: #6B7280;
+  --status-cancelled: #EF4444;
+
+  /* ชาร์ต — สีแรกวิ่งตาม accent ที่เลือก */
+  --chart-1: var(--color-primary);
+  --chart-2: #2563EB;
+  --chart-3: #10B981;
+  --chart-4: #F59E0B;
+  --chart-5: #EF4444;
+  --chart-6: #EC4899;
+  --chart-7: #0EA5E9;
+  --chart-8: #8B5CF6;
+  --chart-9: #6B7280;
+  --chart-10: #F97316;
+  --chart-grid: #EAEBF3;
+  --chart-axis: #86868F;
+
+  /* Sidebar: พื้นขาว ตัวอักษรเข้ม เมนูที่เลือกเป็นแคปซูลสีเน้นอ่อน */
+  --sidebar-bg: #FFFFFF;
+  --sidebar-bg-2: #FDFDFF;
+  --sidebar-border: #ECEDF4;
+  --sidebar-glow: rgb(var(--accent-rgb) / 0.07);
+  --sidebar-text: #55555F;
+  --sidebar-text-strong: #15151D;
+  --sidebar-text-muted: #93939F;
+  --sidebar-active: var(--color-primary);
+  --sidebar-active-text: var(--color-primary-dark);
+  --sidebar-item-active: rgb(var(--accent-rgb) / 0.11);
+  --sidebar-hover: rgba(20, 20, 40, 0.045);
+  --sidebar-card: #F7F8FB;
+  --sidebar-card-border: #ECEDF4;
+
+  --header-bg: #FFFFFF;
+  --header-glass: rgba(255, 255, 255, 0.82);
+  --header-border: #ECEDF4;
+
+  --shadow-xs: 0 1px 2px rgba(20, 20, 40, 0.05);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.05), 0 2px 8px rgba(20, 20, 40, 0.04);
+  --shadow-md: 0 2px 6px rgba(20, 20, 40, 0.06), 0 10px 24px -6px rgba(20, 20, 40, 0.10);
+  --shadow-lg: 0 4px 12px rgba(20, 20, 40, 0.08), 0 24px 48px -12px rgba(20, 20, 40, 0.18);
+  --shadow-pill: 0 6px 16px -4px rgb(var(--accent-rgb) / 0.42);
+  --shadow-hero: 0 12px 32px -10px rgb(var(--accent-rgb) / 0.45);
+  --ring: 0 0 0 3px rgb(var(--accent-rgb) / 0.22);
+}
+
+/* ── 3. โหมดมืด ─────────────────────────────────────────────────────────── */
+
+[data-mode='dark'] {
+  color-scheme: dark;
+
+  --color-primary: var(--accent-soft);
+  --color-primary-dark: var(--accent-softer);
+  --color-primary-light: rgb(var(--accent-rgb) / 0.20);
+  --color-primary-tint: rgb(var(--accent-rgb) / 0.14);
+
+  --gradient-brand: linear-gradient(135deg, var(--accent) 0%, var(--accent-soft) 100%);
+  --gradient-hero: linear-gradient(
+    120deg,
+    var(--accent-strong) 0%,
+    var(--accent) 55%,
+    var(--accent-grad-deep) 100%
+  );
+
+  --color-bg: #0B0B12;
+  --color-surface: #14141E;
+  --color-surface-raised: #1A1A26;
+  --color-surface-sunken: #101019;
+  --color-border: #252534;
+  --color-border-strong: #35354B;
+
+  --color-text: #ECECF4;
+  --color-text-secondary: #B6B6C6;
+  --color-text-tertiary: #85859A;
+  --color-muted: #6E6E85;
+
+  --color-success: #34D399;
+  --color-success-light: #102E26;
+  --color-warning: #FBBF24;
+  --color-warning-light: #33260B;
+  --color-danger: #F87171;
+  --color-danger-light: #38151A;
+  --color-info: #38BDF8;
+  --color-info-light: #0D2A3B;
+
+  --status-new: #F87171;
+  --status-assigned: #FBBF24;
+  --status-in-progress: #60A5FA;
+  --status-pending: #A78BFA;
+  --status-waiting-parts: #7DB1F0;
+  --status-waiting-user: #B49BF0;
+  --status-resolved: #34D399;
+  --status-closed: #9CA3AF;
+  --status-cancelled: #F87171;
+
+  --chart-1: var(--color-primary);
+  --chart-2: #60A5FA;
+  --chart-3: #34D399;
+  --chart-4: #FBBF24;
+  --chart-5: #F87171;
+  --chart-6: #F472B6;
+  --chart-7: #38BDF8;
+  --chart-8: #A78BFA;
+  --chart-9: #9CA3AF;
+  --chart-10: #FB923C;
+  --chart-grid: #23232F;
+  --chart-axis: #85859A;
+
+  --sidebar-bg: #0A0A11;
+  --sidebar-bg-2: #11111C;
+  --sidebar-border: #20202D;
+  --sidebar-glow: rgb(var(--accent-rgb) / 0.16);
+  --sidebar-text: #A8A8BC;
+  --sidebar-text-strong: #FFFFFF;
+  --sidebar-text-muted: #6B6B82;
+  --sidebar-active: var(--color-primary);
+  --sidebar-active-text: #FFFFFF;
+  --sidebar-item-active: rgb(var(--accent-rgb) / 0.24);
+  --sidebar-hover: rgba(255, 255, 255, 0.055);
+  --sidebar-card: rgba(255, 255, 255, 0.045);
+  --sidebar-card-border: rgba(255, 255, 255, 0.07);
+
+  --header-bg: #14141E;
+  --header-glass: rgba(20, 20, 30, 0.82);
+  --header-border: #23232F;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 24px -6px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+  --shadow-pill: 0 6px 16px -4px rgb(var(--accent-rgb) / 0.35);
+  --shadow-hero: 0 12px 32px -10px rgba(0, 0, 0, 0.6);
+  --ring: 0 0 0 3px rgb(var(--accent-rgb) / 0.32);
+}
+
+/* ── 4. Sidebar (พื้นตามโหมด — ไม่ hardcode ขาว/ดำอีก) ──────────────────── */
+
+.sidebar {
+  background: var(--sidebar-bg);
+  background-image:
+    radial-gradient(760px 340px at 10% -10%, var(--sidebar-glow), transparent 62%),
+    linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-2) 100%);
+  border-right: 1px solid var(--sidebar-border);
+}
+
+.sidebar-top,
+.sidebar-footer {
+  border-color: var(--sidebar-border);
+}
+
+.sidebar-group + .sidebar-group {
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.sidebar-brand-text {
+  color: var(--sidebar-text-strong);
+}
+
+.sidebar-brand-sub,
+.sidebar-group > .sidebar-nav-section-label {
+  color: var(--sidebar-text-muted);
+}
+
+.sidebar-link {
+  color: var(--sidebar-text);
+}
+
+.sidebar-link:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
+}
+
+.sidebar-link.active {
+  background: var(--sidebar-item-active);
+  color: var(--sidebar-active-text);
+}
+
+.sidebar-link.active .sidebar-link-icon {
+  color: var(--sidebar-active);
+}
+
+.sidebar-link.active::before {
+  background: var(--sidebar-active);
+  box-shadow: 0 0 10px 0 rgb(var(--accent-rgb) / 0.55);
+}
+
+.sidebar-footer-user {
+  background: var(--sidebar-card);
+  border: 1px solid var(--sidebar-card-border);
+}
+
+.sidebar-footer-user:hover {
+  background: var(--sidebar-hover);
+  border-color: var(--color-border-strong);
+}
+
+.sidebar-footer-name {
+  color: var(--sidebar-text-strong);
+}
+
+.sidebar-footer-role {
+  color: var(--sidebar-text-muted);
+}
+
+.sidebar-logout {
+  color: var(--sidebar-text);
+  border: 1px solid var(--sidebar-card-border);
+  background: transparent;
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.sidebar-logout:hover {
+  background: var(--color-danger-light);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* ── 5. Header ──────────────────────────────────────────────────────────── */
+
+.app-header {
+  background: var(--header-glass);
+  border-bottom: 1px solid var(--header-border);
+}
+
+.header-left {
+  border-right-color: var(--header-border);
+}
+
+.header-page-title {
+  color: var(--color-text);
+}
+
+.header-icon-btn {
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.header-icon-btn:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+/* ── 6. Hero banner (สรุปภาพรวม) ────────────────────────────────────────── */
+
+.dash-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 24px 28px;
+  border-radius: var(--radius-lg);
+  background: var(--gradient-hero);
+  box-shadow: var(--shadow-hero);
+  color: #FFFFFF;
+  transition: background var(--transition-base), box-shadow var(--transition-base);
+}
+
+/* วงแสงจาง ๆ มุมขวา เพิ่มมิติให้แบนเนอร์โดยไม่รบกวนการอ่าน */
+.dash-hero::after {
+  content: '';
+  position: absolute;
+  top: -40%;
+  right: -6%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.dash-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 640px) {
+  .dash-hero {
+    padding: 20px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* ── 7. การ์ด: KPI / ชาร์ต / พาเนล ──────────────────────────────────────── */
+
+.stat-cards-grid {
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.kpi-card,
+.stat-card,
+.chart-card,
+.panel-card,
+.page-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.kpi-card:hover,
+.stat-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.chart-card:hover,
+.panel-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card-header {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.card-title {
+  color: var(--color-text);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.card-badge {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+}
+
+.stat-label,
+.top-bar-subtitle {
+  color: var(--color-text-secondary);
+}
+
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+/* ตารางกับ empty state ต้องเปลี่ยนตามโหมดด้วย */
+.data-table thead th {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table tbody tr:hover {
+  background: var(--color-primary-tint);
+}
+
+.table-id {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.empty-state,
+.loading-state {
+  color: var(--color-text-tertiary);
+}
+
+/* ── 8. ปุ่ม ────────────────────────────────────────────────────────────── */
+
+.btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #FFFFFF;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  box-shadow: var(--shadow-pill);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+  background: var(--color-primary-tint);
+}
+
+.btn-ghost {
+  color: var(--color-text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── 9. ชาร์ต (recharts) ────────────────────────────────────────────────── */
+
+.recharts-cartesian-grid line {
+  stroke: var(--chart-grid);
+}
+
+.recharts-cartesian-axis-tick-value {
+  fill: var(--chart-axis);
+}
+
+.recharts-default-tooltip {
+  background: var(--color-surface) !important; /* recharts เขียน inline style จึงต้องบังคับ */
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.recharts-legend-item-text {
+  color: var(--color-text-secondary) !important; /* เหตุผลเดียวกับด้านบน */
+}
+
+/* ── 10. คอนโทรลหน้าตั้งค่า: ธีม ────────────────────────────────────────── */
+
+.theme-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.theme-section-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-section-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.theme-section-sub {
+  font-size: 0.78rem;
+  color: var(--color-text-tertiary);
+}
+
+.theme-field + .theme-field {
+  margin-top: 20px;
+}
+
+.theme-field-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
+}
+
+/* segmented control สว่าง/มืด */
+.theme-seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+}
+
+.theme-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.theme-seg-btn:hover {
+  color: var(--color-text);
+}
+
+.theme-seg-btn[aria-checked='true'] {
+  background: var(--color-surface);
+  color: var(--color-primary-dark);
+  box-shadow: var(--shadow-xs);
+}
+
+/* แถวสีเน้น */
+.theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.theme-swatch {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.theme-swatch-dot {
+  position: absolute;
+  inset: 4px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.theme-swatch:hover {
+  transform: translateY(-2px);
+}
+
+.theme-swatch[aria-checked='true'] {
+  border-color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-swatch-check {
+  position: absolute;
+  inset: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  /* เครื่องหมายถูกเป็น SVG แล้ว — text-shadow ไม่มีผล ใช้ drop-shadow แทน */
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
+}
+
+.theme-swatch-check > svg {
+  display: block;
+}
+
+/* ── 11. การ์ดพรีวิว (ยังไม่กดใช้ก็เห็นผลลัพธ์) ─────────────────────────── */
+
+.theme-preview {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+
+.theme-preview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 10px;
+  border-radius: var(--radius-md);
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+}
+
+.theme-preview-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.theme-preview-brand-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--gradient-brand);
+}
+
+.theme-preview-brand-text {
+  height: 7px;
+  flex: 1;
+  border-radius: var(--radius-pill);
+  background: var(--sidebar-text-muted);
+  opacity: 0.55;
+}
+
+.theme-preview-nav {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 0.62rem;
+  color: var(--sidebar-text);
+}
+
+.theme-preview-nav > i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.5;
+  flex: 0 0 9px;
+}
+
+.theme-preview-nav.is-active {
+  background: var(--sidebar-item-active);
+  color: var(--sidebar-active-text);
+  font-weight: 700;
+}
+
+.theme-preview-nav.is-active > i {
+  background: var(--sidebar-active);
+  opacity: 1;
+}
+
+.theme-preview-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.theme-preview-hero {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--gradient-hero);
+  color: #FFFFFF;
+  box-shadow: var(--shadow-hero);
+}
+
+.theme-preview-hero-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.theme-preview-hero-sub {
+  font-size: 0.64rem;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+.theme-preview-pills {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.theme-preview-pill {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.theme-preview-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.theme-preview-card {
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xs);
+}
+
+.theme-preview-card-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  margin-bottom: 6px;
+}
+
+.theme-preview-card-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.1;
+}
+
+.theme-preview-card-label {
+  font-size: 0.6rem;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+.theme-preview-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 62px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.theme-preview-bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+  background: var(--chart-1);
+  opacity: 0.9;
+}
+
+@media (max-width: 640px) {
+  .theme-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-preview-side {
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+  }
+
+  .theme-preview-brand {
+    margin-bottom: 0;
+  }
+}
+
+/* ── 12. คีย์บอร์ด/โฟกัส + ลดการเคลื่อนไหว ─────────────────────────────── */
+
+.theme-seg-btn:focus-visible,
+.theme-swatch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card,
+  .stat-card,
+  .theme-swatch,
+  .btn-primary {
+    transition: none;
+  }
+
+  .kpi-card:hover,
+  .stat-card:hover,
+  .theme-swatch:hover {
+    transform: none;
+  }
+}
+
+/* ── 13. Badge / role-badge ──────────────────────────────────────────────
+   global.css กำหนดสีตัวอักษรของ badge เป็นเลขฐานสิบหกเข้ม (#B91C1C, #065F46, …)
+   ซึ่งอ่านไม่ออกเมื่อพื้นหลังกลายเป็นสีเข้มในโหมดมืด
+   ไฟล์นี้โหลดหลัง global.css และใช้ selector ที่ specificity เท่ากัน
+   จึงชนะด้วยลำดับ — ไม่ต้องใช้ !important และไม่ต้องแก้ไฟล์เดิม */
+
+:root,
+[data-mode='light'] {
+  /* พื้นหลังช่องพรีวิวกล้อง — ต้องเข้มทั้งสองโหมดเพื่อให้เห็นภาพจากกล้องชัด
+     จึงไม่ผูกกับโหมดสว่าง/มืด แต่แยกเป็น token เพื่อไม่ให้มีสีลอยในโค้ด */
+  --scanner-bg: #0F0E13;
+
+  --badge-danger-text: #B91C1C;
+  --badge-warning-text: #B45309;
+  --badge-success-text: #065F46;
+  --badge-info-text: #0369A1;
+  --badge-critical-bg: #FEE2E2;
+  --badge-critical-text: #991B1B;
+}
+
+[data-mode='dark'] {
+  /* ตัวอักษรสว่างขึ้นเพื่อคอนทราสต์ ≥ 4.5:1 บนพื้น *-light ของโหมดมืด */
+  --badge-danger-text: #FCA5A5;
+  --badge-warning-text: #FCD34D;
+  --badge-success-text: #6EE7B7;
+  --badge-info-text: #7DD3FC;
+  --badge-critical-bg: rgba(248, 113, 113, 0.18);
+  --badge-critical-text: #FCA5A5;
+}
+
+.badge-new,
+.badge-cancelled {
+  background: var(--color-danger-light);
+  color: var(--badge-danger-text);
+}
+
+.badge-assigned,
+.badge-pending {
+  background: var(--color-warning-light);
+  color: var(--badge-warning-text);
+}
+
+.badge-in_progress {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.badge-resolved {
+  background: var(--color-success-light);
+  color: var(--badge-success-text);
+}
+
+.badge-closed {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
+.badge-priority-low {
+  background: var(--color-success-light);
+  color: var(--badge-success-text);
+}
+
+.badge-priority-normal {
+  background: var(--color-warning-light);
+  color: var(--badge-warning-text);
+}
+
+.badge-priority-high {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.badge-priority-critical {
+  background: var(--badge-critical-bg);
+  color: var(--badge-critical-text);
+}
+
+.role-badge.super_admin {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.role-badge.admin {
+  background: var(--color-info-light);
+  color: var(--badge-info-text);
+}
+
+.role-badge.it_support {
+  background: var(--color-success-light);
+  color: var(--badge-success-text);
+}
+
+.role-badge.teacher {
+  background: var(--color-warning-light);
+  color: var(--badge-warning-text);
+}
+
+.role-badge.student {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+}

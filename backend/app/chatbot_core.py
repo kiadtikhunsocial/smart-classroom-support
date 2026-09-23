@@ -54,6 +54,23 @@ def _take_pending_product() -> dict | None:
     return prod
 
 
+def _set_duplicate_notice(msg: str | None):
+    """เก็บข้อความ "อุปกรณ์นี้แจ้งไปแล้ว" ให้ชั้นบทสนทนาเอาไปตอบผู้ใช้
+
+    ใช้ thread-local เพราะ _create_ticket_from_fields ต้องคงรูปแบบคืนค่า
+    (ticket_no, err) ตามที่เทสต์และผู้เรียกเดิมคาดหวัง — ถ้าส่งข้อความนี้ทาง err
+    ผู้เรียกจะตีความว่าระบบล้มเหลวและตอบผู้ใช้ผิดความจริง
+    """
+    _tls.duplicate_notice = msg or None
+
+
+def _take_duplicate_notice() -> str | None:
+    """คืนข้อความแจ้งซ้ำของรอบนี้ แล้วล้าง (กันค้างไปรอบถัดไปของ thread เดียวกัน)"""
+    msg = getattr(_tls, "duplicate_notice", None)
+    _tls.duplicate_notice = None
+    return msg
+
+
 def get_pending_product_image() -> str | None:
     """คืน URL ภาพสินค้าที่เจอล่าสุดในคำตอบนี้ แล้วล้าง (ให้ main.py ส่งเป็น image message)"""
     url = getattr(_tls, "pending_product_image", None)
@@ -118,13 +135,34 @@ def _has_reply_phrase(text: str, phrases: list[str]) -> bool:
 
 
 def _is_admin_contact_request(text: str) -> bool:
-    value = _normalized_reply(text)
-    return any(_normalized_reply(term) in value for term in _ADMIN_CONTACT_TERMS)
+    """true = ผู้ใช้ขอคุยกับเจ้าหน้าที่/ขอช่องทางติดต่อจริง ๆ
+
+    เดิมเทียบ substring ตรง ๆ ทำให้ประโยคที่เผอิญมีคำว่า "ติดต่อ" ปนอยู่ถูกตอบ
+    เป็นรายการช่องทางติดต่อ แทนที่จะตอบเรื่องที่ผู้ใช้ถามจริง เช่น
+    "รอทีมงานติดต่อกลับอยู่" หรือ "ขอเบอร์ติดต่อช่างที่รับงาน T0001"
+    chatbot_nlu มี guard word และให้ flow ติดตามงานชนะเมื่อมีเลขงานในข้อความ
+    """
+    from app import chatbot_nlu as nlu
+    if nlu.is_admin_contact(text):
+        return True
+    # ถ้าเป็นการถามสถานะงาน อย่าตัดไปตอบช่องทางติดต่อ
+    if nlu.score_intents(text).get("track"):
+        return False
+    # เผื่อคำในลิสต์เดิมที่ NLU ยังไม่ครอบคลุม — แต่ต้องตัดวลีเล่าความออกก่อน
+    # ไม่งั้นคำกว้างในลิสต์ ("ทีมงาน", "ติดต่อ") จะไปโดน "รอทีมงานติดต่อกลับอยู่"
+    value = nlu.strip_context_guards(text)
+    return any(nlu.compact(term) in value for term in _ADMIN_CONTACT_TERMS)
 
 
 def _is_out_of_scope(text: str) -> bool:
-    value = _normalized_reply(text)
-    return any(_normalized_reply(term) in value for term in _OUT_OF_SCOPE_TERMS)
+    """true = คำถามอยู่นอกขอบเขตระบบจริง ๆ
+
+    เดิม "เครื่องปรับอากาศไม่เย็น" ไปโดนคำว่า "อากาศ", "หนังสือเรียน" โดน "หนัง",
+    "เกมการศึกษา" โดน "เกม" → ถูกปฏิเสธทั้งที่เป็นงานของระบบ
+    chatbot_nlu ใช้ guard word + veto ด้วยสัญญาณซ่อม/สินค้า/ติดตามงาน
+    """
+    from app import chatbot_nlu as nlu
+    return nlu.is_out_of_scope(text)
 
 
 # คำที่บอกว่า "ผู้ใช้ต้องการแจ้งซ่อมตรง ๆ" (ไม่ใช่การเล่าอาการให้วินิจฉัย)
@@ -418,6 +456,14 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                 # ไม่เปิดเผยรายละเอียด DB/exception ให้ผู้ใช้เห็น
                 print(f"[chatbot] ticket creation failed: {err}")
                 return "ขออภัยค่ะ ระบบยังสร้าง Ticket ไม่สำเร็จ ข้อมูลยังไม่ถูกส่งซ้ำค่ะ ขอให้ลองอีกครั้งหรือติดต่อเจ้าหน้าที่โดยตรงนะคะ 🙏"
+            # กันแจ้งซ้ำ: ได้เลขใบเดิมกลับมา ไม่ได้เปิดใบใหม่ → ต้องไม่ตอบว่า
+            # "แจ้งซ่อมเรียบร้อยแล้ว" และไม่ยิงแจ้งเตือน ticket ใหม่ให้เจ้าหน้าที่ซ้ำ
+            duplicate_notice = _take_duplicate_notice()
+            if duplicate_notice:
+                session["phase"] = "done"
+                session["ticket_no"] = ticket_no
+                save_session(user_id, session)
+                return duplicate_notice
             session["phase"] = "done"
             session["ticket_no"] = ticket_no
             save_session(user_id, session)
@@ -633,6 +679,8 @@ def _ambiguous_device_error(matches) -> str:
     codes = ", ".join(str(m["device_id"]) for m in matches[:3])
     return (f"พบอุปกรณ์หลายเครื่องที่ตรงกับข้อมูลนี้ ({codes}) "
             "รบกวนระบุรหัสอุปกรณ์บนสติกเกอร์ QR ให้ชัดเจนอีกครั้งนะคะ")
+    # ล้างข้อความแจ้งซ้ำค้างของรอบก่อนใน thread เดียวกัน
+    _set_duplicate_notice(None)
 
 
 def _create_ticket_from_fields(fields: dict):
@@ -682,6 +730,33 @@ def _create_ticket_from_fields(fields: dict):
             return None, f"ไม่พบอุปกรณ์ที่ตรงกับ '{device_id or symptom[:40]}'"
         did = dev["device_id"]
         org_id = dev["organization_id"]
+        # ─── กันแจ้งซ้ำ (TOR 1.5.2): เครื่องนี้มีใบงานค้างอยู่แล้ว → ไม่เปิดใบใหม่ ──
+        # import ในฟังก์ชันเหมือน generate_ticket_id ด้านบน — app.main import ไฟล์นี้
+        # การ import ระดับโมดูลจะเป็น circular import
+        from app.main import find_open_ticket, PUBLIC_STATUS_LABELS
+        existing = find_open_ticket(db, did)
+        if existing is not None:
+            reporter = (fields.get("name") or "").strip() or "ผู้ใช้ LINE"
+            phone = (fields.get("phone") or "").strip()
+            note_text = symptom or "แจ้งอาการเพิ่มผ่าน LINE (ไม่ระบุรายละเอียด)"
+            # ต่ออาการเข้าใบเดิม ไม่ทับ description ของผู้แจ้งคนก่อน
+            db.add(TicketUpdate(
+                ticket=existing,
+                from_status=existing.status,
+                to_status=existing.status,
+                note=f"[แจ้งเพิ่มจากผู้ใช้ LINE] {note_text}",
+                author_name=(f"{reporter} ({phone})" if phone else reporter)[:128],
+                author_role="reporter",
+            ))
+            db.commit()
+            status_label = PUBLIC_STATUS_LABELS.get(existing.status, existing.status)
+            _set_duplicate_notice(
+                f"อุปกรณ์ {did} แจ้งซ่อมไว้แล้วนะคะ 🛠️\n"
+                f"เลขที่ใบงาน **{existing.ticket_id}** (สถานะ: {status_label})\n"
+                "บันทึกอาการที่แจ้งเพิ่มเข้าใบเดิมให้แล้ว ไม่ต้องแจ้งซ้ำค่ะ 🙏\n"
+                "ติดตามสถานะได้โดยส่งเลขใบงานมาได้ทุกเมื่อเลยค่ะ"
+            )
+            return existing.ticket_id, None
         now = datetime.now(timezone.utc)
         # priority ต้องเป็นค่าใน priority_enum เท่านั้น (low/normal/high/critical)
         # "urgent" ไม่มีใน enum → PostgreSQL จะ error และ calc_sla_due จะ fallback เป็น normal
@@ -1049,6 +1124,31 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
         save_session(user_id, {"phase": "new", "fields": {}, **keep})
         return _finish(_answer_out_of_scope(), intent_used="out_of_scope")
 
+    # ── ชั้น NLU: เข้าใจก่อนตอบ (แก้อาการ "ตอบกำกวม/ไม่ตรงประเด็น") ──
+    # 1) ข้อความสั้นที่สะกดเพี้ยน เช่น "เเจ้วซ่อม" → คำสั่งมาตรฐาน "แจ้งซ่อม"
+    # 2) ถ้ากำกวมจริง (สัญญาณสองเรื่องเท่ากัน) หรือสั้นจนไม่มีสัญญาณเลย
+    #    → ถามกลับ "หนึ่งคำถามที่เจาะจง" + ปุ่มให้กด ดีกว่าเดาแล้วตอบผิดเรื่อง
+    from app import chatbot_nlu as nlu
+    flow_text = text  # ข้อความที่ส่งต่อให้ flow (อาจถูกแก้คำสะกดแล้ว)
+    if intent in ("other", "ambiguous"):
+        _cmd = nlu.correct_command(text)
+        if _cmd:
+            _corrected_intent = detect_intent(_cmd)
+            if _corrected_intent not in ("other", "ambiguous"):
+                intent, flow_text = _corrected_intent, _cmd
+    _menu_request = any(k in text.lower() for k in ("เมนู", "menu", "ช่วยอะไร", "ทำอะไรได้"))
+    if (intent in ("other", "ambiguous") and phase in ("new", "done")
+            and not session.get("resolving") and not _menu_request
+            and not _is_product_followup(text)):
+        _clarify = nlu.clarify_prompt(text)
+        if _clarify:
+            keep = {"history": session.get("history")}
+            if session.get("last_product"):
+                keep["last_product"] = session["last_product"]
+            save_session(user_id, {"phase": "new", "fields": {}, **keep})
+            return _finish(_clarify["message"], intent_used="nlu_clarify",
+                           qr=_clarify.get("quick_replies"), faq_cacheable=False)
+
     # Reuse only stable product/service knowledge. Repair, lead, tracking, and
     # confirmation flows must always use the current user's session state.
     if (phase in ("new", "done") and not session.get("resolving")
@@ -1286,7 +1386,7 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                        "อยากทำเรื่องไหน พิมพ์บอกได้เลยนะคะ 😊", intent_used="menu")
 
     # ── ELSE → เรียก logic เดิม (แจ้งซ่อม/สินค้า) ──
-    reply = _dispatch(user_id, text, reply_token, group)
+    reply = _dispatch(user_id, flow_text, reply_token, group)
     # F: จดชื่อ/เบอร์จากระหว่างเก็บข้อมูลแจ้งซ่อม
     if profile is not None:
         try:
@@ -1337,10 +1437,26 @@ _TICKET_STATUS_TH = {
     "cancelled": "❌ ยกเลิก",
 }
 
+#: จับ "สิ่งที่น่าจะเป็นเลข Ticket" ที่ปนอยู่ในประโยคของผู้ใช้ — ครอบทั้งรูปแบบใหม่และเดิม
+#:   ใหม่ : TK.SCHM01.26.0001-Q   (ตัวคั่นเป็น . - _ / หรือไม่มีเลย, ปิดท้ายตัวตรวจสอบ)
+#:   เดิม : TK-202609-0001, SC-2026-000123, SC-TEST1-2026-0001
+#: ตัวตรวจสอบตัวท้ายไม่ตรวจที่นี่ — ปล่อยให้ _ticket_no_candidates ใน app.main ตัดสินที่เดียว
+#: regex นี้แค่คัดคำที่หน้าตาเป็นเลขใบงานออกจากประโยค จึงตั้งใจให้หลวมกว่าของจริง
+_TICKET_NO_IN_TEXT = re.compile(
+    r"(TK[.\-_/]?[A-Z0-9]{2,8}[.\-_/]?\d{2}[.\-_/]?\d{3,6}[.\-_/]?[0-9A-Z]?"
+    r"|TK[.\-_/]?\d{6}[.\-_/]?\d{1,6}"
+    r"|SC[.\-_/][A-Z0-9]{2,8}[.\-_/]\d{4}[.\-_/]\d{1,6}"
+    r"|SC[.\-_/]\d{4,6}[.\-_/]\d{1,6})",
+    re.IGNORECASE,
+)
+
+
 def _answer_track(user_id: str, user_msg: str) -> str:
     """ติดตามสถานะจาก ticket_id หรือ device_id โดยอ่านจาก DB จริง"""
     sess = get_session(user_id)
-    ticket_match = re.search(r"(TK[-_]?\d{4,6}[-_]?\d{1,6}|SC[-_]\d{4,6}[-_]\d{1,6})", user_msg, re.IGNORECASE)
+    # app.main import ไฟล์นี้ จึงต้อง import ย้อนกลับในฟังก์ชัน (เหมือน _create_ticket_from_fields)
+    from app.main import TICKET_NO_EXAMPLE, _ticket_no_candidates
+    ticket_match = _TICKET_NO_IN_TEXT.search(user_msg)
     device_match = re.search(r"\b(?:TEST|DEV|SCH|ROOM)[A-Z0-9_-]*\d+\b", user_msg, re.IGNORECASE)
     db = SessionLocal()
     try:
@@ -1348,9 +1464,27 @@ def _answer_track(user_id: str, user_msg: str) -> str:
         lookup_label = ""
         if ticket_match:
             lookup_label = ticket_match.group(0)
+            # แปลงให้เป็นรูปแบบมาตรฐานก่อนค้น (ผู้ใช้พิมพ์ตัวคั่น/ตัวพิมพ์ต่างจากบนใบแจ้งได้)
+            # และถ้าตัวตรวจสอบตัวท้ายไม่ตรง ต้องไม่เอาไปค้นเลย เพราะเลขที่เพี้ยนไปหนึ่งตัว
+            # อาจตรงกับใบงานจริงของคนอื่นหรือของโรงเรียนอื่นพอดี
+            candidates, problem = _ticket_no_candidates(lookup_label)
+            if problem:
+                save_session(user_id, {**sess, "phase": "new", "track_pending": False})
+                if problem[0] == "missing_check":
+                    return (f"เลข Ticket **{lookup_label}** ยังไม่ครบนะคะ — ต้องมีตัวตรวจสอบ"
+                            f"ตัวท้ายต่อจากขีดด้วย เช่น {TICKET_NO_EXAMPLE} "
+                            "ลองดูจากข้อความยืนยันที่ได้รับตอนแจ้งอีกครั้งค่ะ")
+                return (f"เลข Ticket **{lookup_label}** ดูเหมือนพิมพ์ผิดนะคะ "
+                        "(ตัวตรวจสอบตัวท้ายไม่ตรงกับตัวเลขข้างหน้า) "
+                        f"รูปแบบที่ถูกต้องเป็นแบบนี้ค่ะ {TICKET_NO_EXAMPLE} — "
+                        "หรือพิมพ์รหัสอุปกรณ์บนสติกเกอร์มาก็ได้ค่ะ")
+            # ค้นด้วยการเทียบค่าตรงตัวหลายค่า ไม่ใช้ ILIKE เพราะจุด/ขีดในเลขไม่ใช่ wildcard
+            # แต่ _ ใน ILIKE จะกลายเป็น wildcard ตัวอักษรเดียวโดยไม่ตั้งใจ
+            params = {f"t{i}": c for i, c in enumerate(candidates or [lookup_label])}
+            placeholders = ", ".join(f":{key}" for key in params)
             row = db.execute(text(
                 "SELECT ticket_id, title, status, device_id, reporter_name, created_at, assigned_to "
-                "FROM repair_tickets WHERE ticket_id ILIKE :t"), {"t": lookup_label}).mappings().first()
+                f"FROM repair_tickets WHERE ticket_id IN ({placeholders})"), params).mappings().first()
             if not row:
                 save_session(user_id, {**sess, "phase": "new", "track_pending": False})
                 return f"ไม่พบ Ticket **{lookup_label}** ในระบบนะคะ ลองเช็คเลขให้ถูกต้อง หรือพิมพ์ 'แจ้งซ่อม' เพื่อสร้างใหม่ค่ะ"
@@ -1365,7 +1499,8 @@ def _answer_track(user_id: str, user_msg: str) -> str:
                 return f"ยังไม่พบงานซ่อมของอุปกรณ์ **{lookup_label}** ในระบบนะคะ"
         else:
             if sess.get("track_pending"):
-                return "กรุณาพิมพ์ **เลข Ticket** หรือรหัสอุปกรณ์ เช่น SC-2026-000001 / TEST1-00001 ค่ะ"
+                return ("กรุณาพิมพ์ **เลข Ticket** หรือรหัสอุปกรณ์ เช่น "
+                        f"{TICKET_NO_EXAMPLE} / TEST1-B1-R101-DISP-01 ค่ะ")
             save_session(user_id, {**sess, "phase": "track_pending", "track_pending": True})
             return "📋 อยากเช็คสถานะงานใช่ไหมคะ? กรุณาพิมพ์ **เลข Ticket** หรือ **รหัสอุปกรณ์** แล้วส่งมาได้เลยค่ะ"
 

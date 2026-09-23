@@ -1,0 +1,625 @@
+/* ============================================================================
+   dashboard.css — สไตล์เฉพาะหน้า "ภาพรวม" (DashboardContent ใน App.tsx)
+   ----------------------------------------------------------------------------
+   หลักการ (เหมือน reports.css เพื่อให้ทั้งสองหน้าใช้ระบบเลย์เอาต์ชุดเดียวกัน):
+   1. ทุกคลาสขึ้นต้นด้วย .dsh- จึงไม่ชนกับ global.css / design-system.css /
+      theme-tokens.css → ไม่ทำให้หน้าอื่นเพี้ยน และไม่ต้องใช้ !important
+      (คลาสเดิม .dash-hero / .stat-cards-grid / .kpi-card ยังอยู่ครบ
+       เพราะหน้าอื่น เช่น SchoolsPage.tsx ยังใช้ .stat-cards-grid อยู่)
+   2. สีอ่านจาก CSS variable ของธีมพร้อม fallback → สลับโหมดสว่าง/มืด
+      และเปลี่ยนสีเน้นได้โดยไม่ต้อง re-render
+   3. ใช้ logical property (margin-block / padding-inline / text-align: start)
+      เพื่อให้ layout ไม่พังเมื่อ dir="rtl"
+   4. ย้าย inline style ที่ซ้ำ ๆ ใน App.tsx มาไว้ที่นี่ เหลือ inline เฉพาะค่าที่
+      คำนวณตอน runtime (สีไอคอนต่อ KPI ที่มาจาก themeColor/themeTint)
+   ========================================================================== */
+
+.dsh-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* ── แบนเนอร์ต้อนรับ / สรุปภาพรวม ───────────────────────────────────────── */
+.dsh-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px;
+  border-radius: var(--radius-lg, 16px);
+  background: var(--gradient-hero, linear-gradient(135deg, #5B5BD6 0%, #8B5CF6 100%));
+  box-shadow: var(--shadow-hero, 0 12px 32px rgba(15, 15, 40, 0.18));
+  color: #FFFFFF;
+  transition: background var(--transition-base, 0.2s ease),
+    box-shadow var(--transition-base, 0.2s ease);
+}
+
+.dsh-hero::after {
+  content: '';
+  position: absolute;
+  inset-block-start: -40%;
+  inset-inline-end: -6%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.dsh-hero > * {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.dsh-hero-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-block-end: 4px;
+  overflow-wrap: anywhere;
+}
+
+.dsh-hero-sub {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  opacity: 0.88;
+  max-width: 62ch;
+  overflow-wrap: anywhere;
+}
+
+.dsh-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.dsh-chip {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  white-space: nowrap;
+}
+
+/* ── KPI ────────────────────────────────────────────────────────────────── */
+.dsh-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+  gap: 14px;
+}
+
+/* หน้า dashboard ของผู้แจ้งซ่อมมีแค่ 3 การ์ด — ให้การ์ดแคบลงหน่อยไม่ให้ยืดเกิน */
+.dsh-kpi-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.dsh-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 18px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E7E8F0);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(16, 16, 40, 0.05));
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.dsh-kpi:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-border-strong, #D6D8E2);
+  box-shadow: var(--shadow-md, 0 8px 20px rgba(16, 16, 40, 0.08));
+}
+
+.dsh-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* สีพื้นของกล่องไอคอนมาจาก themeTint() ตอน runtime จึงกำหนดแค่รูปทรงที่นี่ */
+.dsh-kpi-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.dsh-kpi-sub {
+  font-size: 0.68rem;
+  color: var(--color-text-tertiary, #86868F);
+  text-align: end;
+}
+
+.dsh-kpi-value {
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-text, #16161D);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dsh-kpi-label {
+  margin-block-start: 5px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #5B5B66);
+}
+
+/* ── การ์ดชาร์ต ─────────────────────────────────────────────────────────── */
+.dsh-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.dsh-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E7E8F0);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(16, 16, 40, 0.05));
+  overflow: hidden;
+  transition: box-shadow 0.15s ease;
+}
+
+.dsh-card:hover {
+  box-shadow: var(--shadow-md, 0 8px 20px rgba(16, 16, 40, 0.08));
+}
+
+.dsh-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px;
+  border-block-end: 1px solid var(--color-border, #E7E8F0);
+}
+
+.dsh-card-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text, #16161D);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dsh-card-badge {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--color-primary-light, rgba(124, 58, 237, 0.1));
+  color: var(--color-primary-dark, #5B21B6);
+  white-space: nowrap;
+}
+
+.dsh-card-note {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--color-text-tertiary, #86868F);
+}
+
+.dsh-card-body {
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+.dsh-card-body--flush {
+  padding: 0;
+}
+
+/* ResponsiveContainer ของ recharts ต้องมีความสูงที่วัดได้จาก parent */
+.dsh-chart-box {
+  width: 100%;
+  height: 260px;
+  padding: 12px 8px 4px;
+}
+
+.dsh-chart-box--pie {
+  height: 320px;
+}
+
+/* ── ตาราง ──────────────────────────────────────────────────────────────── */
+.dsh-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dsh-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.dsh-table th {
+  text-align: start;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary, #86868F);
+  background: var(--color-surface-sunken, #F1F2F7);
+  padding: 11px 14px;
+  white-space: nowrap;
+}
+
+.dsh-table td {
+  padding: 11px 14px;
+  border-block-start: 1px solid var(--color-border, #E7E8F0);
+  color: var(--color-text, #16161D);
+  vertical-align: middle;
+}
+
+.dsh-table tbody tr:hover td {
+  background: var(--color-primary-tint, rgba(124, 58, 237, 0.05));
+}
+
+.dsh-td-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.dsh-td-muted {
+  color: var(--color-text-tertiary, #86868F);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.dsh-td-wrap {
+  min-width: 180px;
+  overflow-wrap: anywhere;
+}
+
+/* ── สถานะว่าง / กำลังโหลด ──────────────────────────────────────────────── */
+.dsh-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-tertiary, #86868F);
+}
+
+.dsh-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 220px;
+  width: 100%;
+  padding: 40px 16px;
+  font-size: 0.88rem;
+  color: var(--color-text-secondary, #5B5B66);
+}
+
+/* ── แถบตัวกรองแดชบอร์ด ────────────────────────────────────────────────── */
+.dsh-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #EAEBF3);
+  border-radius: var(--radius-md, 12px);
+}
+
+.dsh-toolbar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.dsh-toolbar-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-tertiary, #86868F);
+}
+
+/* ตัวเลือกหมวดหมู่อุปกรณ์ในหัวการ์ด + พื้นที่แสดงการ์ดอุปกรณ์ */
+.dsh-card-head .dsh-select {
+  max-width: 240px;
+  margin-left: auto;
+}
+
+.dsh-device-pane {
+  padding: 14px 16px 18px;
+}
+
+/* ── กลุ่มอุปกรณ์แยกตามโรงเรียน ─────────────────────────────────────────
+   การ์ด "อุปกรณ์ทั้งหมด" แสดงหลายโรงเรียนต่อกัน จึงต้องมีหัวกลุ่มที่เห็นชัด
+   ใช้เส้นคั่นบน (ไม่ใช้ margin ล้วน) เพื่อให้กลุ่มแรกไม่มีช่องว่างเกิน */
+.dsh-school-group + .dsh-school-group {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border, #EAEBF3);
+}
+
+.dsh-school-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 8px;
+}
+
+.dsh-school-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text, #1F1F27);
+  /* ชื่อโรงเรียนยาวต้องตัดบรรทัดได้ ไม่ดันหัวกลุ่มล้น */
+  overflow-wrap: anywhere;
+}
+
+.dsh-school-meta {
+  font-size: 0.76rem;
+  color: var(--color-text-tertiary, #86868F);
+  white-space: nowrap;
+}
+
+.dsh-school-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.dsh-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.76rem;
+  color: var(--color-text-secondary, #5B5B66);
+  background: var(--color-bg, #F7F8FC);
+  border: 1px solid var(--color-border, #EAEBF3);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.dsh-type-chip:hover {
+  border-color: var(--color-primary-light, #C7B9F5);
+  color: var(--color-text, #1F1F27);
+}
+
+.dsh-type-chip:focus-visible {
+  outline: none;
+  border-color: var(--color-primary, #7C3AED);
+  box-shadow: 0 0 0 3px var(--color-primary-light, rgba(124, 58, 237, 0.25));
+}
+
+/* หมวดที่กำลังกรองอยู่ — ย้ำด้วยทั้งสีและน้ำหนักตัวอักษร ไม่พึ่งสีอย่างเดียว */
+.dsh-type-chip.is-active {
+  font-weight: 600;
+  color: var(--color-primary, #7C3AED);
+  border-color: var(--color-primary, #7C3AED);
+  background: color-mix(in srgb, var(--color-primary, #7C3AED) 10%, transparent);
+}
+
+.dsh-type-chip-name {
+  overflow-wrap: anywhere;
+}
+
+.dsh-type-chip-n {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary, #86868F);
+}
+
+.dsh-type-chip.is-active .dsh-type-chip-n {
+  color: inherit;
+}
+
+@media (max-width: 640px) {
+  .dsh-card-head .dsh-select {
+    max-width: none;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .dsh-device-pane {
+    padding: 12px 12px 16px;
+  }
+
+  .dsh-school-meta {
+    white-space: normal;
+  }
+}
+
+.dsh-select {
+  width: 100%;
+  max-width: 100%;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-text, #1F1F27);
+  background: var(--color-bg, #F7F8FC);
+  border: 1px solid var(--color-border, #EAEBF3);
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dsh-select:hover:not(:disabled) {
+  border-color: var(--color-primary-light, #C7B9F5);
+}
+
+.dsh-select:focus-visible {
+  outline: none;
+  border-color: var(--color-primary, #7C3AED);
+  box-shadow: 0 0 0 3px var(--color-primary-light, rgba(124, 58, 237, 0.25));
+}
+
+.dsh-toolbar-reset {
+  flex: 0 0 auto;
+  align-self: flex-end;
+}
+
+.dsh-toolbar-count {
+  flex: 1 1 100%;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #5B5B66);
+}
+
+/* ── กลุ่มอุปกรณ์ตามโรงเรียน / หมวดหมู่ ────────────────────────────────── */
+.dsh-group {
+  border-top: 1px solid var(--color-border, #EAEBF3);
+}
+
+.dsh-group:first-child {
+  border-top: none;
+}
+
+.dsh-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  font: inherit;
+  text-align: left;
+  color: var(--color-text, #1F1F27);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.dsh-group-head:hover {
+  background: var(--color-bg, #F7F8FC);
+}
+
+.dsh-group-head:focus-visible {
+  outline: 2px solid var(--color-primary, #7C3AED);
+  outline-offset: -2px;
+}
+
+.dsh-group-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dsh-group-count {
+  padding: 2px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #5B5B66);
+  background: var(--color-bg, #F7F8FC);
+  border: 1px solid var(--color-border, #EAEBF3);
+  border-radius: 999px;
+}
+
+.dsh-group-caret {
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.dsh-group-caret--open {
+  transform: rotate(180deg);
+}
+
+.dsh-subgroup {
+  padding: 0 16px 16px;
+}
+
+.dsh-subgroup-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+
+.dsh-subgroup-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #5B5B66);
+}
+
+.dsh-subgroup-count {
+  font-size: 0.72rem;
+  color: var(--color-text-tertiary, #86868F);
+}
+
+/* ── จอเล็ก ─────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .dsh-toolbar-field {
+    flex: 1 1 100%;
+  }
+
+  .dsh-toolbar-reset {
+    width: 100%;
+  }
+
+  .dsh-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+  }
+
+  .dsh-kpi-grid,
+  .dsh-kpi-grid--compact {
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  }
+
+  .dsh-kpi-value {
+    font-size: 1.45rem;
+  }
+
+  .dsh-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .dsh-card-body {
+    padding: 14px;
+  }
+
+  .dsh-chart-box {
+    height: 230px;
+  }
+
+  .dsh-chart-box--pie {
+    height: 300px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-kpi,
+  .dsh-card,
+  .dsh-hero {
+    transition: none;
+  }
+
+  .dsh-kpi:hover {
+    transform: none;
+  }
+}

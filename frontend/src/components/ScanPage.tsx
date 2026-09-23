@@ -3,8 +3,12 @@ import { api } from '../api/client';
 
 /**
  * หน้าสแกน QR — ใช้กล้องจริง (html5-qrcode) + ช่องกรอกรหัสสำรอง
- * QR ที่ถูกต้องคือรหัสอุปกรณ์ เช่น DEV-2024-00123 หรือ URL ที่มี device_id
+ * QR ที่ถูกต้องคือรหัสอุปกรณ์รูปแบบ <โรงเรียน>-<อาคาร>-<ห้อง>-<ประเภท>-<ลำดับ>
+ * (เช่น SCHDEMO-B3-301-DISP-01) รหัสเก่ารูปแบบ DEV-2024-00123 ยังรับได้
+ * หรือเป็น URL ที่มี ?device= / ?t= (QR token)
  */
+const DEVICE_CODE_RE = /^[A-Z0-9]+(?:-[A-Z0-9_]+){3,}$/;   // รหัสรูปแบบใหม่ 5 ท่อน
+const LEGACY_DEVICE_RE = /^DEV-[A-Z0-9_-]+$/;              // รหัสชุดเดิมก่อนย้ายรูปแบบ
 export default function ScanPage({ onScanDevice, onBack }: {
   onScanDevice: (deviceId: string) => void;
   onBack: () => void;
@@ -15,6 +19,14 @@ export default function ScanPage({ onScanDevice, onBack }: {
   const [manualCode, setManualCode] = useState('');
   const [status, setStatus] = useState<string>('พร้อมสแกน — เปิดกล้องเพื่อสแกน QR หรือกรอกรหัสอุปกรณ์');
   const [error, setError] = useState<string | null>(null);
+  // อุปกรณ์นี้มีงานค้างอยู่แล้ว — เตือนก่อนพาไปกรอกฟอร์ม เพื่อไม่ให้กรอกทั้งใบแล้วโดน 409
+  const [openTicketWarn, setOpenTicketWarn] = useState<{
+    device_id: string;
+    ticket_no?: string;
+    status_label?: string;
+    title?: string;
+    device_label?: string;
+  } | null>(null);
 
   const extractDeviceId = (raw: string): string | null => {
     const s = raw.trim();
@@ -24,13 +36,44 @@ export default function ScanPage({ onScanDevice, onBack }: {
     // กรณีเป็น URL เช่น http://localhost:5173/scan?device=DEV-2024-00123
     const urlMatch = s.match(/[?&](?:device|device_id|code)=([^&\s]+)/i);
     if (urlMatch) return urlMatch[1];
-    // กรณีเป็นรหัสตรงๆ รูปแบบ DEV-xxxx
-    const devMatch = s.match(/DEV-[\w-]+/i);
-    if (devMatch) return devMatch[0].toUpperCase();
+    // ไม่ใช่ URL — ถือว่าทั้งสตริงคือรหัสอุปกรณ์ ไม่จับเฉพาะ /DEV-.../ อีกแล้ว
+    // เพราะรหัสรูปแบบใหม่ไม่มีคำนำหน้า DEV (เช่น SCHDEMO-B3-301-DISP-01)
+    // charset ตรงกับฝั่ง API (_normalize_manual_device_id): A-Z 0-9 - _
+    if (/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(s)) return s.toUpperCase();
     return null;
   };
 
-  const isToken = (code: string) => /^[A-Za-z0-9_-]{20,}$/.test(code);
+  /** รหัสอุปกรณ์หรือไม่ — ต้องเช็คก่อน isToken เพราะรหัสใหม่ยาวเกิน 20 ตัวได้ */
+  const isDeviceCode = (code: string) => {
+    const c = code.toUpperCase();
+    return DEVICE_CODE_RE.test(c) || LEGACY_DEVICE_RE.test(c);
+  };
+
+  // QR token = สตริงสุ่มยาว ๆ ที่ไม่เข้ารูปรหัสอุปกรณ์
+  // (เดิมเช็คแค่ความยาว ≥20 ทำให้ "SCHDEMO-B2-201-AP-01" ซึ่งยาว 20 พอดี
+  //  ถูกส่งไป /qr/resolve แล้วขึ้น "ไม่พบอุปกรณ์ที่ตรงกับ QR token นี้")
+  const isToken = (code: string) => !isDeviceCode(code) && /^[A-Za-z0-9_-]{20,}$/.test(code);
+
+  /** เช็คงานค้างของอุปกรณ์ก่อนเปิดฟอร์มแจ้งซ่อม — เช็คไม่ได้ก็ไม่ขวางการแจ้ง */
+  const proceedToReport = async (deviceId: string) => {
+    try {
+      const info = await api.publicDeviceOpenTicket(deviceId);
+      if (info?.has_open_ticket && info?.open_ticket) {
+        setOpenTicketWarn({
+          device_id: deviceId,
+          ticket_no: info.open_ticket.ticket_no,
+          status_label: info.open_ticket.status_label,
+          title: info.open_ticket.title,
+          device_label: info.open_ticket.device_label,
+        });
+        setStatus('อุปกรณ์นี้มีงานค้างอยู่ — ตรวจสอบใบเดิมก่อนแจ้งซ่อมใหม่');
+        return;
+      }
+    } catch {
+      /* เช็คงานค้างไม่สำเร็จ — ปล่อยให้แจ้งซ่อมต่อได้ตามปกติ */
+    }
+    onScanDevice(deviceId);
+  };
 
   const handleRaw = async (raw: string) => {
     const code = extractDeviceId(raw);
@@ -39,15 +82,16 @@ export default function ScanPage({ onScanDevice, onBack }: {
       return;
     }
     setError(null);
-    // ถ้าเป็น token (ยาว ≥20 ตัว ไม่ใช่ pattern DEV-) → resolve ผ่าน /qr/resolve
-    if (isToken(code) && !code.startsWith('DEV-')) {
+    setOpenTicketWarn(null);
+    // ถ้าเป็น QR token (ไม่เข้ารูปรหัสอุปกรณ์) → resolve ผ่าน /qr/resolve
+    if (isToken(code)) {
       setStatus('พบ QR token — กำลังตรวจสอบอุปกรณ์...');
       try {
         const resp = await api.qrResolve(code);
         const device = resp?.device;
         if (!device) { setError('QR นี้ไม่ตรงกับอุปกรณ์ในระบบ'); setStatus('พร้อมสแกนอีกครั้ง'); return; }
-        setStatus(`✅ ${device.device_id} (${device.device_type}) — ${resp?.room?.name || 'ไม่ระบุห้อง'}`);
-        onScanDevice(device.device_id);
+        setStatus(`${device.device_id} (${device.device_type}) — ${resp?.room?.name || 'ไม่ระบุห้อง'}`);
+        await proceedToReport(device.device_id);
       } catch (e: any) {
         setError(`ไม่พบอุปกรณ์ที่ตรงกับ QR token นี้`);
         setStatus('พร้อมสแกนอีกครั้ง');
@@ -58,8 +102,8 @@ export default function ScanPage({ onScanDevice, onBack }: {
     setStatus(`พบอุปกรณ์ ${code} — กำลังโหลดข้อมูล...`);
     try {
       const device = await api.getDevice(code);
-      setStatus(`✅ ${device.device_id} (${device.device_type}) — ${device.room_name || 'ไม่ระบุห้อง'}`);
-      onScanDevice(device.device_id);
+      setStatus(`${device.device_id} (${device.device_type}) — ${device.room_name || 'ไม่ระบุห้อง'}`);
+      await proceedToReport(device.device_id);
     } catch (e: any) {
       setError(`ไม่พบอุปกรณ์ ${code} ในระบบ`);
       setStatus('พร้อมสแกนอีกครั้ง');
@@ -85,10 +129,10 @@ export default function ScanPage({ onScanDevice, onBack }: {
         },
         () => { /* frame ไม่มี QR — ข้าม */ }
       );
-      setStatus('📷 กำลังสแกน — เล็ง QR ไปที่กล้อง');
+      setStatus('กำลังสแกน — เล็ง QR ไปที่กล้อง');
     } catch (e: any) {
       setScanning(false);
-      setError('เปิดกล้องไม่สำเร็จ — ใช้ช่องกรอกรหัสอุปกรณ์แทนได้ (เช่น DEV-2024-00123)');
+      setError('เปิดกล้องไม่สำเร็จ — ใช้ช่องกรอกรหัสอุปกรณ์แทนได้ (เช่น SCHDEMO-B3-301-DISP-01)');
     }
   };
 
@@ -149,7 +193,7 @@ export default function ScanPage({ onScanDevice, onBack }: {
               width: '100%', maxWidth: 360, minHeight: 260,
               borderRadius: 'var(--radius-lg)', overflow: 'hidden',
               border: '2px dashed var(--color-border-strong)',
-              background: '#0F0E13', display: scanning ? 'block' : 'none',
+              background: 'var(--scanner-bg, #0F0E13)', display: scanning ? 'block' : 'none',
             }}
           />
 
@@ -177,7 +221,7 @@ export default function ScanPage({ onScanDevice, onBack }: {
                 className="form-input"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                placeholder="DEV-2024-00123"
+                placeholder="SCHDEMO-B3-301-DISP-01"
                 style={{ flex: 1 }}
               />
               <button type="submit" className="btn btn-secondary">ค้นหา</button>

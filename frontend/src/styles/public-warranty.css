@@ -1,0 +1,228 @@
+/* public-warranty.css — การ์ด "ตรวจสอบประกันสินค้า" บนหน้าแรกสาธารณะ
+ *
+ * ใช้ตัวแปร --ph-* ที่ public-home.css ประกาศและ public-theme.css ทับตามโหมด
+ * จึงเปลี่ยนสีตามโหมดสว่าง/มืดเองโดยไม่ต้องประกาศชุดสีซ้ำ
+ * สีข้อความใช้ inherit + opacity แทนการอ้าง token ของธีมใดธีมหนึ่ง เพื่อไม่ให้
+ * การ์ดนี้หลุดธีมเวลามีการเปลี่ยนชื่อ token ในอนาคต
+ */
+
+.phw-card {
+  /* กดลิงก์ #ph-warranty แล้วหัวการ์ดไม่ถูกแถบบนทับ */
+  scroll-margin-top: 96px;
+}
+
+.phw-lead {
+  margin: 0 0 18px;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  opacity: 0.78;
+}
+
+/* ── ฟอร์มค้นหา ───────────────────────────────────────────────────── */
+
+.phw-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.phw-form .ph-input-wrap {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.phw-form .ph-input {
+  /* serial เป็นตัวอักษร+ตัวเลขผสม — ระยะห่างตัวอักษรช่วยแยก O/0 และ I/1 */
+  letter-spacing: 0.04em;
+}
+
+.phw-form .ph-btn {
+  flex: 0 0 auto;
+}
+
+/* ── ผลลัพธ์ ──────────────────────────────────────────────────────── */
+
+.phw-result {
+  position: relative;
+  margin-top: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--ph-line);
+  border-radius: 18px;
+  background: var(--ph-glass);
+  overflow: hidden;
+  animation: phw-rise 0.28s ease both;
+}
+
+/* แถบสีซ้ายบอกสถานะประกันแบบอ่านเร็ว — ไม่ต้องอ่านตัวหนังสือก็รู้ผล */
+.phw-result::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.phw-result.phw-ok::before { background: #22e3a0; }
+.phw-result.phw-warn::before { background: #ffb83d; }
+.phw-result.phw-danger::before { background: #ff5f7a; }
+.phw-result.phw-muted::before { background: var(--ph-line-strong); }
+
+@keyframes phw-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.phw-result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.phw-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.phw-status-ok { color: #22e3a0; background: rgba(34, 227, 160, 0.12); }
+.phw-status-warn { color: #ffb83d; background: rgba(255, 184, 61, 0.12); }
+.phw-status-danger { color: #ff5f7a; background: rgba(255, 95, 122, 0.12); }
+.phw-status-muted { color: inherit; opacity: 0.72; background: rgba(124, 164, 255, 0.1); }
+
+.phw-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.phw-days {
+  font-size: 0.88rem;
+  opacity: 0.8;
+}
+
+.phw-device {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 16px;
+}
+
+.phw-device-name {
+  font-size: 1.05rem;
+  line-height: 1.4;
+  /* ชื่อรุ่นยาว ๆ ต้องตัดบรรทัดได้ ไม่ดันการ์ดจนล้น */
+  overflow-wrap: anywhere;
+}
+
+.phw-device-sub {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.phw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px 20px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ph-line);
+}
+
+/* serial / รหัสอุปกรณ์ เป็นสตริงไม่มีช่องว่าง — บังคับให้ตัดได้ในจอแคบ */
+.phw-grid .ph-meta-value {
+  overflow-wrap: anywhere;
+}
+
+.phw-note {
+  margin: 18px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  opacity: 0.82;
+}
+
+.phw-note code {
+  padding: 2px 7px;
+  border: 1px solid var(--ph-line-strong);
+  border-radius: 7px;
+  background: rgba(36, 155, 255, 0.12);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.phw-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 10px 18px;
+  border: 1px solid var(--ph-line-strong);
+  border-radius: 12px;
+  color: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.phw-cta:hover,
+.phw-cta:focus-visible {
+  border-color: var(--ph-cyan);
+  background: rgba(0, 217, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.phw-cta:focus-visible {
+  outline: 2px solid var(--ph-blue);
+  outline-offset: 2px;
+}
+
+/* ── จอแคบ ────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .phw-form .ph-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .phw-result {
+    padding: 18px 16px;
+  }
+
+  .phw-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .phw-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phw-result {
+    animation: none;
+  }
+
+  .phw-cta {
+    transition: none;
+  }
+
+  .phw-cta:hover,
+  .phw-cta:focus-visible {
+    transform: none;
+  }
+}

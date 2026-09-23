@@ -1,5 +1,6 @@
 """ทดสอบเส้นทางที่เรียก _notify_n8n ให้ครบ (ใช้ ticket จริง แล้วคืนสภาพเดิม)"""
 import warnings
+import os
 warnings.filterwarnings("ignore")
 from fastapi.testclient import TestClient
 import app.main as m
@@ -7,8 +8,10 @@ from app.models import SessionLocal
 from sqlalchemy import text
 
 c = TestClient(m.app)
-TOK = c.post("/api/auth/login", json={"username": "iwasuperadmin", "password": "IwaScr@2026!admin"}
-             if False else {"username": "iwasuperadmin", "password": "IwaScr2026!admin"}).json()["token"]
+password = os.environ.get("TEST_ADMIN_PASSWORD", "")
+if not password:
+    raise SystemExit("Set TEST_ADMIN_PASSWORD before running this manual smoke test")
+TOK = c.post("/api/auth/login", json={"username": "iwasuperadmin", "password": password}).json()["token"]
 H = {"Authorization": "Bearer " + TOK}
 
 db = SessionLocal()

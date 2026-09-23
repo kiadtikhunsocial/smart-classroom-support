@@ -100,7 +100,12 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
             </svg>
             เพิ่มโรงเรียน
           </button>
-          <button className="btn btn-ghost" onClick={load}>⟳</button>
+          <button className="btn btn-ghost btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -116,7 +121,11 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
           <div className="repair-panel" style={{ width: 440, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">เพิ่มโรงเรียนใหม่</h3>
-              <button className="repair-panel-close" onClick={() => setShowForm(false)}>✕</button>
+              <button className="repair-panel-close" onClick={() => setShowForm(false)} aria-label="ปิด" title="ปิด">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
             <div className="repair-panel-body">
               <form onSubmit={handleCreate}>
@@ -166,7 +175,7 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
             <div className="device-card-id">{org.name}</div>
             <div className="device-card-type">{org.short_name || '—'}</div>
             <div className="device-card-room">
-              🖥️ {org.device_count} อุปกรณ์ • 🎫 {org.ticket_count} tickets
+              {org.device_count} อุปกรณ์ • {org.ticket_count} tickets
             </div>
             <div className="device-card-bottom">
               <div className="device-card-actions">
@@ -202,14 +211,15 @@ export function SchoolAdminView({ orgId, onBack }: {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
   const [view, setView] = useState<'tickets' | 'devices'>('tickets');
 
   const load = () => {
     setLoading(true);
     Promise.all([
       api.getOrgStats(orgId),
-      api.listTickets({ organization_id: orgId }),
-      api.listDevices(100, orgId),
+      api.listAllTickets({ organization_id: orgId }),
+      api.listAllDevices(orgId),
     ])
       .then(([o, t, d]) => { setOrg(o); setTickets(t); setDevices(d); })
       .catch(() => {})
@@ -226,8 +236,8 @@ export function SchoolAdminView({ orgId, onBack }: {
       // รีเฟรชข้อมูลทันที
       const [o, t, d] = await Promise.all([
         api.getOrgStats(orgId),
-        api.listTickets({ organization_id: orgId }),
-        api.listDevices(100, orgId),
+        api.listAllTickets({ organization_id: orgId }),
+        api.listAllDevices(orgId),
       ]);
       setOrg(o); setTickets(t); setDevices(d);
     } catch (e: any) {
@@ -238,6 +248,22 @@ export function SchoolAdminView({ orgId, onBack }: {
   };
 
   const filteredTickets = statusFilter ? tickets.filter((t) => t.status === statusFilter) : tickets;
+
+  // ─── หมวดหมู่อุปกรณ์ของโรงเรียนนี้ + จำนวนแต่ละหมวด (มาก → น้อย) ───
+  const UNKNOWN_DEVICE_TYPE = 'ไม่ระบุประเภท';
+  const deviceTypeCounts = devices.reduce<Record<string, number>>((acc, d) => {
+    const t = d.device_type || UNKNOWN_DEVICE_TYPE;
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+  const deviceTypeOptions = Object.keys(deviceTypeCounts).sort(
+    (a, b) => deviceTypeCounts[b] - deviceTypeCounts[a] || a.localeCompare(b, 'th'),
+  );
+  // ถ้าหมวดที่เลือกไม่มีในโรงเรียนนี้ (เปลี่ยนโรงเรียน/โหลดใหม่) ให้ถือว่าแสดงทุกหมวด
+  const activeDeviceType = deviceTypeOptions.includes(deviceTypeFilter) ? deviceTypeFilter : '';
+  const visibleDevices = activeDeviceType
+    ? devices.filter((d) => (d.device_type || UNKNOWN_DEVICE_TYPE) === activeDeviceType)
+    : devices;
 
   return (
     <div className="page-content">
@@ -263,7 +289,7 @@ export function SchoolAdminView({ orgId, onBack }: {
                 background: view === 'tickets' ? 'var(--color-primary)' : 'transparent',
                 color: view === 'tickets' ? '#fff' : 'var(--color-text-secondary)', fontSize: '0.82rem',
               }}
-            >🎫 Tickets</button>
+            >Tickets</button>
             <button
               onClick={() => setView('devices')}
               style={{
@@ -271,8 +297,23 @@ export function SchoolAdminView({ orgId, onBack }: {
                 background: view === 'devices' ? 'var(--color-primary)' : 'transparent',
                 color: view === 'devices' ? '#fff' : 'var(--color-text-secondary)', fontSize: '0.82rem',
               }}
-            >🖥️ อุปกรณ์ ({devices.length})</button>
+            >อุปกรณ์ ({devices.length})</button>
           </div>
+          {view === 'devices' && (
+            <select
+              className="form-select"
+              style={{ width: 210 }}
+              value={activeDeviceType}
+              onChange={(e) => setDeviceTypeFilter(e.target.value)}
+              aria-label="กรองตามหมวดหมู่อุปกรณ์"
+              disabled={deviceTypeOptions.length === 0}
+            >
+              <option value="">ทุกหมวดหมู่ ({devices.length})</option>
+              {deviceTypeOptions.map((t) => (
+                <option key={t} value={t}>{t} ({deviceTypeCounts[t]})</option>
+              ))}
+            </select>
+          )}
           {view === 'tickets' && (
             <select
               className="form-select"
@@ -292,22 +333,22 @@ export function SchoolAdminView({ orgId, onBack }: {
       {/* สถิติสรุป */}
       <div className="stat-cards-grid">
         <div className="stat-card">
-          <div className="stat-card-icon blue">🎫</div>
+          <div className="stat-card-icon blue">TKT</div>
           <div className="stat-card-value">{org?.total_tickets ?? 0}</div>
           <div className="stat-card-label">Tickets ทั้งหมด</div>
         </div>
         <div className="stat-card">
-          <div className="stat-card-icon red">🟠</div>
+          <div className="stat-card-icon red">OPEN</div>
           <div className="stat-card-value">{org?.open_tickets ?? 0}</div>
           <div className="stat-card-label">รอดำเนินการ</div>
         </div>
         <div className="stat-card">
-          <div className="stat-card-icon green">🖥️</div>
+          <div className="stat-card-icon green">DEV</div>
           <div className="stat-card-value">{org?.total_devices ?? 0}</div>
           <div className="stat-card-label">อุปกรณ์</div>
         </div>
         <div className="stat-card">
-          <div className="stat-card-icon gray">📋</div>
+          <div className="stat-card-icon gray">LOG</div>
           <div className="stat-card-value">{devices.length}</div>
           <div className="stat-card-label">อุปกรณ์ในระบบ</div>
         </div>
@@ -318,7 +359,13 @@ export function SchoolAdminView({ orgId, onBack }: {
       <div className="page-section">
         <div className="section-header">
           <span className="section-title">Tickets ของโรงเรียน ({filteredTickets.length})</span>
-          <span className="section-action" onClick={load}>⟳ รีเฟรช</span>
+          <button type="button" className="section-action" onClick={load}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginRight: 5, verticalAlign: '-2px' }}>
+              <path d="M21 12a9 9 0 11-3.5-7.1" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            รีเฟรช
+          </button>
         </div>
         <div className="section-body">
           {loading ? (
@@ -348,7 +395,20 @@ export function SchoolAdminView({ orgId, onBack }: {
                   {filteredTickets.map((ticket) => (
                     <tr key={ticket.ticket_id}>
                       <td className="table-id">{ticket.ticket_id}</td>
-                      <td>{ticket.device_id}</td>
+                      <td>
+                        {/* ชื่อ/ประเภทอุปกรณ์มาก่อน รหัสไว้อ้างอิงกับสติกเกอร์ */}
+                        <div>{ticket.device_label || ticket.device_type || ticket.device_id || '—'}</div>
+                        {ticket.device_category && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>
+                            {ticket.device_category}
+                          </div>
+                        )}
+                        {ticket.device_id && (ticket.device_label || ticket.device_type) && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>
+                            {ticket.device_id}
+                          </div>
+                        )}
+                      </td>
                       <td>{ticket.title}</td>
                       <td>{ticket.reporter_name || '—'}</td>
                       <td>
@@ -391,10 +451,45 @@ export function SchoolAdminView({ orgId, onBack }: {
       {view === 'devices' && (
         <div className="page-section">
           <div className="section-header">
-            <span className="section-title">อุปกรณ์ในโรงเรียน ({devices.length})</span>
-            <span className="section-action" onClick={load}>⟳ รีเฟรช</span>
+            <span className="section-title">
+              อุปกรณ์ในโรงเรียน ({activeDeviceType ? `${visibleDevices.length}/${devices.length}` : devices.length})
+              {deviceTypeOptions.length > 0 && ` · ${deviceTypeOptions.length} หมวดหมู่`}
+            </span>
+            <button type="button" className="section-action" onClick={load}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginRight: 5, verticalAlign: '-2px' }}>
+                <path d="M21 12a9 9 0 11-3.5-7.1" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              รีเฟรช
+            </button>
           </div>
           <div className="section-body">
+            {/* ชิปหมวดหมู่ — กดสลับกรองได้ ทำงานคู่กับ dropdown ด้านบน */}
+            {!loading && deviceTypeOptions.length > 0 && (
+              <div className="dev-type-chips" role="group" aria-label="หมวดหมู่อุปกรณ์">
+                <button
+                  type="button"
+                  className={`dev-type-chip${activeDeviceType ? '' : ' is-active'}`}
+                  aria-pressed={!activeDeviceType}
+                  onClick={() => setDeviceTypeFilter('')}
+                >
+                  ทุกหมวดหมู่
+                  <span className="dev-type-chip-count">{devices.length}</span>
+                </button>
+                {deviceTypeOptions.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={`dev-type-chip${activeDeviceType === t ? ' is-active' : ''}`}
+                    aria-pressed={activeDeviceType === t}
+                    onClick={() => setDeviceTypeFilter(activeDeviceType === t ? '' : t)}
+                  >
+                    {t}
+                    <span className="dev-type-chip-count">{deviceTypeCounts[t]}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {loading ? (
               <div className="loading-state" style={{ padding: '40px' }}>
                 <div className="spinner" />
@@ -403,6 +498,10 @@ export function SchoolAdminView({ orgId, onBack }: {
             ) : devices.length === 0 ? (
               <div className="empty-state" style={{ padding: '32px 16px' }}>
                 <span className="empty-text">ยังไม่มีอุปกรณ์ในโรงเรียนนี้</span>
+              </div>
+            ) : visibleDevices.length === 0 ? (
+              <div className="empty-state" style={{ padding: '32px 16px' }}>
+                <span className="empty-text">ไม่มีอุปกรณ์ในหมวด "{activeDeviceType}"</span>
               </div>
             ) : (
               <div className="table-wrap">
@@ -417,7 +516,7 @@ export function SchoolAdminView({ orgId, onBack }: {
                     </tr>
                   </thead>
                   <tbody>
-                    {devices.map((d) => (
+                    {visibleDevices.map((d) => (
                       <tr key={d.device_id}>
                         <td className="table-id">{d.device_id}</td>
                         <td>{d.device_type}</td>

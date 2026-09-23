@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.kb_loader import invalidate_kb_cache
 # Audit Log (§40) + Preventive Maintenance (§38) — โมเดลที่เพิ่มใหม่
-from app import pm_rules
+from app import google_sheets, pm_rules
 from app.models import AuditLog, DeviceHealthFlag, PMPlan, PMTask
 from app.models import (
     Base,
@@ -40,6 +40,10 @@ from app.models import (
     Device,
     KBArticle,
     KBSuggestion,
+    MEMBERSHIP_APPROVED,
+    MEMBERSHIP_PENDING,
+    MEMBERSHIP_REJECTED,
+    MembershipApplication,
     NotificationLog,
     Organization,
     Priority,
@@ -121,12 +125,15 @@ JWT_TTL_SECONDS = 60 * 60 * 12  # 12 ชั่วโมง
 # Never let a deployment accidentally use the repository's development key.
 # Local development remains convenient, while hosted environments must supply
 # an unpredictable value through their secret manager.
-if os.environ.get("ENVIRONMENT", "").lower() in {"production", "prod"} and JWT_SECRET == "smart-classroom-dev-secret-change-me":
-    raise RuntimeError("JWT_SECRET must be configured in production")
-
 # Shared credential for automation-to-backend calls.  Unlike a user JWT this
 # is only for the n8n service, never for browsers or public webhooks.
 N8N_SHARED_SECRET = os.environ.get("N8N_SHARED_SECRET", "")
+
+if os.environ.get("ENVIRONMENT", "").lower() in {"production", "prod"}:
+    if not JWT_SECRET.strip() or JWT_SECRET == "smart-classroom-dev-secret-change-me":
+        raise RuntimeError("JWT_SECRET must be configured in production")
+    if not N8N_SHARED_SECRET.strip() or N8N_SHARED_SECRET == "<N8N_SHARED_SECRET>":
+        raise RuntimeError("N8N_SHARED_SECRET must be configured in production")
 
 
 def require_n8n_secret(x_n8n_secret: Optional[str] = Header(None)) -> None:
@@ -191,6 +198,12 @@ def get_current_user(
     user = db.get(User, data.get("sub"))
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="บัญชีไม่ถูกต้องหรือถูกปิดใช้งาน")
+    if user.role in RETIRED_ROLES:
+        # บทบาท ครู/นักเรียน ถูกยกเลิกแล้ว — บล็อก token ที่ออกไปก่อนหน้านี้ด้วย
+        raise HTTPException(
+            status_code=403,
+            detail="บทบาทนี้ถูกยกเลิกแล้ว — ผู้แจ้งซ่อมใช้หน้าแจ้งซ่อม/สแกน QR ได้โดยไม่ต้องมีบัญชี",
+        )
     return user
 
 
@@ -205,8 +218,36 @@ def require_roles(*roles: str):
 
 # ─── Scope ตามบทบาท (RBAC แยกตามโรงเรียน) ──────────────────────────────────
 # ผลลัพธ์: None = เห็นทุกโรงเรียน (global)  |  set[int] = เห็นเฉพาะ org ใน set
-# admin_school / it_support(มีสังกัด) / teacher / student → เห็นเฉพาะรรตัวเอง
+# admin_school / it_support(มีสังกัด) → เห็นเฉพาะรรตัวเอง
+# (บัญชีเก่าที่ยังติดบทบาท teacher/student ก็ถูกจำกัดเป็นรรตัวเองเช่นกัน)
 # super_admin / admin / it_support(ไม่มีสังกัด, สร้างโดย superadmin) → เห็นทุกรร
+# ─── บทบาทที่กำหนดให้ผู้ใช้ได้ ─────────────────────────────────────────────
+# teacher / student ถูกยกเลิก: ผู้แจ้งซ่อมใช้หน้าสาธารณะ/สแกน QR โดยไม่ต้องมีบัญชี
+# ค่าเดิมยังอยู่ในฐานข้อมูล จึงต้องอ่านได้ แต่ห้ามกำหนดให้ผู้ใช้ใหม่
+ASSIGNABLE_ROLES: tuple[str, ...] = ("owner", "super_admin", "admin", "admin_school", "it_support")
+RETIRED_ROLES: tuple[str, ...] = ("teacher", "student")
+
+#: บทบาทที่ admin_school กำหนดให้ผู้ใช้ในโรงเรียนตัวเองได้ (เดิมมี ครู/นักเรียน)
+SCHOOL_ADMIN_ASSIGNABLE_ROLES: tuple[str, ...] = ("it_support",)
+
+#: บทบาทที่แก้งาน PM ที่ปิดแล้ว (done/skipped) ย้อนหลังได้
+#: super_admin ต้องจัดการ/แก้ไขได้ทั้งหมด — it_support ทำได้แค่งานที่ยังเปิดอยู่
+PM_TASK_OVERRIDE_ROLES: tuple[str, ...] = ("owner", "super_admin", "admin")
+
+
+def validate_assignable_role(role: Optional[str]) -> None:
+    """โยน 400 ถ้าบทบาทถูกยกเลิกไปแล้วหรือไม่มีอยู่จริง"""
+    if role is None:
+        return
+    if role in RETIRED_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail="บทบาท ครู/นักเรียน ถูกยกเลิกแล้ว — ผู้แจ้งซ่อมใช้หน้าแจ้งซ่อมได้โดยไม่ต้องมีบัญชี",
+        )
+    if role not in ASSIGNABLE_ROLES:
+        raise HTTPException(status_code=400, detail=f"บทบาทไม่ถูกต้อง: {role}")
+
+
 def visible_org_ids(user: User) -> Optional[set[int]]:
     """คืนชุด organization_id ที่ user นี้เห็นได้; None = เห็นทุกโรงเรียน"""
     if user.role in ("owner", "super_admin", "admin"):
@@ -215,7 +256,7 @@ def visible_org_ids(user: User) -> Optional[set[int]]:
         # it_support ที่ไม่มีสังกัด = สร้างโดย owner/admin → เห็นทุกรร
         # it_support ที่มีสังกัด = สร้างโดย admin_school → เห็นเฉพาะรรนั้น
         return None if not user.organization_id else {user.organization_id}
-    # admin_school / teacher / student → เห็นเฉพาะรรตัวเอง
+    # admin_school + บัญชีเก่าบทบาท teacher/student → เห็นเฉพาะรรตัวเอง
     return {user.organization_id} if user.organization_id else set()
 
 
@@ -264,6 +305,9 @@ def get_current_user_optional(
     user = db.get(User, data.get("sub"))
     if not user or not user.is_active:
         return None
+    if user.role in RETIRED_ROLES:
+        # บัญชีบทบาทเก่า = ถือว่าไม่ได้ล็อกอิน (endpoint สาธารณะยังใช้งานได้ปกติ)
+        return None
     return user
 
 # ---------------------------------------------------------------------------
@@ -292,8 +336,15 @@ class DeviceInfo(BaseModel):
     organization_code: str
     organization_name: str
     organization_id: Optional[int] = None
+    # วันที่จัดซื้อ — ใช้คู่กับ warranty_until ในทะเบียนทรัพย์สิน/PM Rule 3 (§38)
+    purchase_date: Optional[datetime] = None
     warranty_until: Optional[datetime] = None
     notes: Optional[str] = None
+    # กันแจ้งซ้ำ: หน้าที่เปิดจากการสแกน QR ใช้ response นี้เป็นข้อมูลเครื่อง จึงต้อง
+    # รู้ตั้งแต่ตอนเปิดหน้าว่ามีใบงานค้างอยู่แล้ว ไม่ใช่ไปรู้ตอนกดส่งฟอร์มแล้วโดน 409
+    # ค่าเริ่มต้น False/None เพื่อให้ endpoint อื่นที่คืน DeviceInfo เดิมไม่พัง
+    has_open_ticket: bool = False
+    open_ticket: Optional[dict] = None
 
 
 class TicketCreate(BaseModel):
@@ -322,6 +373,17 @@ class TicketOut(BaseModel):
     ticket_id: str
     device_id: str
     title: str
+    # หมวดหมู่อุปกรณ์ (map จาก device_type) — ใช้จัดกลุ่ม/กรองงานซ่อมเป็นหมวด
+    device_category: Optional[str] = None
+    # ชื่ออุปกรณ์แบบอ่านรู้เรื่อง (ประเภท · ยี่ห้อรุ่น · ห้อง) ไม่ใช่รหัสเปล่า ๆ
+    device_label: Optional[str] = None
+    # ประเภทอุปกรณ์ (join จากตาราง devices) — หน้าเว็บใช้แสดงและใช้เป็นตัวกรอง
+    device_type: Optional[str] = None
+    # โรงเรียนเจ้าของอุปกรณ์ - ใช้จัดกลุ่ม/กรองงานเป็นหมวดโรงเรียน
+    # และทำให้เลข Ticket ที่ขึ้นต้นด้วยรหัสโรงเรียนอ่านคู่กันได้
+    organization_id: Optional[int] = None
+    organization_code: Optional[str] = None
+    organization_name: Optional[str] = None
     description: Optional[str] = None
     reporter_name: Optional[str] = None
     reporter_email: Optional[str] = None
@@ -378,6 +440,7 @@ class DeviceCreate(BaseModel):
     firmware_version: Optional[str] = None
     status: str = "active"
     notes: Optional[str] = None
+    purchase_date: Optional[datetime] = None
     warranty_until: Optional[datetime] = None
 
 
@@ -391,6 +454,7 @@ class DeviceUpdate(BaseModel):
     room_id: Optional[int] = None
     room_code: Optional[str] = None
     notes: Optional[str] = None
+    purchase_date: Optional[datetime] = None
     warranty_until: Optional[datetime] = None
 
 
@@ -410,9 +474,70 @@ class PublicReportIn(BaseModel):
     attachments: Optional[list[str]] = None
 
 
-class PublicOptionsOut(BaseModel):
+class PublicTicketNoteIn(BaseModel):
+    """ผู้แจ้ง (ไม่มีบัญชี) เพิ่มอาการ/ข้อมูลเข้า Ticket ที่ยังไม่ปิด — ไม่สร้างใบใหม่"""
+
+    note: str = Field(..., min_length=3, max_length=2000)
+    reporter_name: str = Field(..., min_length=1, max_length=128)
+    reporter_phone: Optional[str] = Field(None, max_length=32)
+    attachments: Optional[list[str]] = None
+
+
+class PublicDeviceInfo(BaseModel):
+    """ข้อมูลอุปกรณ์เท่าที่ปลอดภัยจะส่งออก endpoint สาธารณะ (ไม่ต้อง auth)
+
+    แยกจาก DeviceInfo โดยเจตนา: DeviceInfo มี qr_token/qr_url (ใช้สร้างลิงก์สแกนของ
+    ทุกห้องได้), serial_number, firmware_version, warranty_until, notes และ gps_lat/lng
+    ซึ่งเป็นข้อมูลทรัพย์สินภายใน โค้ดเดิมไม่ได้ใส่ค่าให้ฟิลด์เหล่านั้น แต่ key ยังติดไปกับ
+    response ทุกครั้ง และถ้าวันหน้ามีใครเผลอใส่ค่าก็รั่วทันที — โมเดลนี้จึงไม่มีฟิลด์
+    เหล่านั้นเลย ทำให้ปลอดภัยด้วยโครงสร้าง ไม่ใช่ด้วยวินัยของผู้แก้โค้ด
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    device_id: str
+    device_type: str
+    # หมวดหมู่ + ชื่อที่คนอ่านรู้เรื่อง — ผู้แจ้งเลือกจาก "จอแสดงภาพ · ห้อง ป.1/2"
+    # ได้โดยไม่ต้องจำรหัสอย่าง TEST1-B1-R101-DISP-01
+    device_category: Optional[str] = None
+    device_label: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    status: str
+    room_code: Optional[str] = None
+    room_name: Optional[str] = None
+    building: Optional[str] = None
+    floor: Optional[str] = None
+    organization_code: str
+    organization_name: str
+    organization_id: Optional[int] = None
+
+
+class DeviceCategoryOut(BaseModel):
+    """หมวดหมู่อุปกรณ์ 1 หมวด สำหรับจัดกลุ่ม dropdown/ตัวกรองของหน้าเว็บ
+
+    device_count = จำนวนอุปกรณ์ของหน่วยงานนั้นที่อยู่ในหมวดนี้ (0 = หน้าเว็บซ่อนได้)
+    """
+
+    category: str
     device_types: list[str]
-    devices: list[DeviceInfo]
+    device_count: int = 0
+
+
+class PublicOptionsOut(BaseModel):
+    """ตัวเลือกของหน้าแจ้งซ่อมสาธารณะ
+
+    requires_organization=True หมายถึงยังไม่ได้ระบุรหัสหน่วยงาน จึงไม่ส่งรายการ
+    อุปกรณ์ออกไป (เดิม endpoint นี้คืนอุปกรณ์ของทุกโรงเรียนถึง 500 รายการโดยไม่ต้อง
+    ล็อกอิน) — ผู้แจ้งต้องระบุ organization_code หรือสแกน QR ที่ตัวอุปกรณ์
+    """
+
+    organization_code: Optional[str] = None
+    organization_name: Optional[str] = None
+    requires_organization: bool = False
+    device_types: list[str]
+    device_categories: list[DeviceCategoryOut] = []
+    devices: list[PublicDeviceInfo]
 
 
 class OrgCreate(BaseModel):
@@ -442,12 +567,14 @@ class UserCreate(BaseModel):
     line_picture_url: Optional[str] = None
     line_email: Optional[str] = None
     organization_id: Optional[int] = None
-    role: str = "teacher"
+    role: str = "it_support"
     is_active: bool = True
     password: Optional[str] = Field(None, min_length=4, max_length=128)
 
 
 class UserUpdate(BaseModel):
+    # ชื่อผู้ใช้สำหรับเข้าสู่ระบบ (เก็บในคอลัมน์ line_user_id) — แยกจากอีเมล
+    username: Optional[str] = Field(None, min_length=2, max_length=64, pattern=r"^[a-zA-Z0-9._-]+$")
     line_display_name: Optional[str] = None
     line_picture_url: Optional[str] = None
     line_email: Optional[str] = None
@@ -455,6 +582,44 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=4, max_length=128)
+
+
+class MembershipApplyIn(BaseModel):
+    """ฟอร์มสมัครสมาชิกจากหน้าสาธารณะ (ไม่ต้อง login)"""
+    username: str = Field(..., min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9._-]+$")
+    password: str = Field(..., min_length=8, max_length=128)
+    full_name: str = Field(..., min_length=2, max_length=255)
+    email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=32)
+    organization_code: Optional[str] = Field(None, max_length=64)
+    note: Optional[str] = Field(None, max_length=1000)
+
+
+class MembershipDecisionIn(BaseModel):
+    """ผู้ดูแลอนุมัติ/ปฏิเสธคำขอ — ระบุบทบาท/หน่วยงานทับค่าที่ผู้สมัครกรอกได้"""
+    role: Optional[str] = None
+    organization_id: Optional[int] = None
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class MembershipApplicationOut(BaseModel):
+    """ข้อมูลคำขอที่ส่งออก — ตั้งใจไม่มี password_hash"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    organization_id: Optional[int] = None
+    organization_code: Optional[str] = None
+    requested_role: str
+    status: str
+    note: Optional[str] = None
+    reject_reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    sheet_synced_at: Optional[datetime] = None
 
 
 class LoginRequest(BaseModel):
@@ -528,26 +693,284 @@ def write_audit(
     ))
 
 
+def _org_code_token(code: Optional[str], org_id: Optional[int]) -> str:
+    """รหัสโรงเรียนแบบปลอดภัยสำหรับใส่ใน device_id / ticket_id (A–Z0–9 ยาวไม่เกิน 8)
+
+    เดิม generate_device_id ใช้ fallback "SCH" เมื่อโรงเรียนยังไม่กรอก code ทำให้
+    หลายโรงเรียนใช้ prefix เดียวกัน ลำดับอุปกรณ์ปนกันข้ามโรงเรียน ที่นี่ fallback
+    เป็น ORG<id> ซึ่งไม่ซ้ำข้ามโรงเรียนแน่นอน
+    """
+    import re as _re
+    token = _re.sub(r"[^A-Za-z0-9]", "", (code or "")).upper()[:8]
+    if token:
+        return token
+    return f"ORG{org_id}" if org_id is not None else "SCH"
+
+
+#: ชุดอักขระของ ISO 7064 MOD 37,36 — 0-9 แล้วต่อด้วย A-Z
+_CHECK_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+#: คำนำหน้าเลข Ticket ทุกใบ — ตัวชี้ว่าสตริงที่กรอกมา "ตั้งใจจะเป็นเลข Ticket"
+#: รหัสอุปกรณ์ : TEST1-B1-R101-DISP-01  (ขีดล้วน ยาว มีรหัสห้อง/ประเภท)
+#: เลข Ticket  : TK.TEST1.26.0001-Q     (ขึ้นต้น TK. คั่นจุด สั้น ปิดท้ายตัวตรวจสอบ)
+TICKET_NO_PREFIX = "TK"
+
+
+def _mod37_36_check_char(payload: str) -> str:
+    """ตัวตรวจสอบท้ายเลข Ticket (ISO 7064 MOD 37,36)
+
+    จับได้ทั้งพิมพ์ผิดหนึ่งตัวและสลับอักขระที่อยู่ติดกัน ทำให้เลขที่กรอกเพี้ยน
+    ไม่ไปตรงกับ Ticket ใบอื่น (หรือของโรงเรียนอื่น) โดยบังเอิญ
+    อักขระคั่น (. - _ /) ถูกข้ามในการคำนวณ ค่าจึงไม่ขึ้นกับรูปแบบตัวคั่น
+    """
+    p = 36
+    for ch in (payload or "").upper():
+        value = _CHECK_ALPHABET.find(ch)
+        if value < 0:          # ตัวคั่น — ไม่นับเข้าสูตร
+            continue
+        p = ((p + value) % 36 or 36) * 2 % 37
+    return _CHECK_ALPHABET[(37 - p) % 36]
+
+
+def ticket_no_of(school_token: str, year: int, seq: int, width: int = 4) -> str:
+    """ประกอบเลข Ticket: TK.<รหัสโรงเรียน>.<ปี 2 หลัก>.<ลำดับ>-<ตัวตรวจสอบ>
+
+    ยาวไม่เกิน 32 ตัวอักษรตามคอลัมน์ repair_tickets.ticket_id
+    (TK. + รหัสโรงเรียน ≤8 + ปี 2 + ลำดับ ≤6 + ตัวตรวจสอบ = 22 ตัวอย่างมากสุด)
+    """
+    body = f"{TICKET_NO_PREFIX}.{school_token}.{year % 100:02d}.{seq:0{width}d}"
+    return f"{body}-{_mod37_36_check_char(body)}"
+
+
+#: ตัวอย่างเลข Ticket ที่ตัวตรวจสอบตรงจริง — ใช้ในข้อความแจ้งเตือน/placeholder
+TICKET_NO_EXAMPLE = ticket_no_of("SCHM01", 2026, 1)
+
+
+def _lock_generated_id_prefix(db: Session, prefix: str) -> None:
+    """Serialize MAX()+1 allocation per prefix when using PostgreSQL.
+
+    The transaction-scoped advisory lock is released automatically on commit or
+    rollback. SQLite-backed unit tests keep their existing behavior.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
+            {"lock_key": f"smart-classroom:id:{prefix}"},
+        )
+
+
 def generate_ticket_id(db: Session, organization_id: Optional[int] = None) -> str:
-    """Generate SC-YYYY-NNNNNN style ticket ID (Blueprint §11). ใช้ MAX(ลำดับ)+1 (กันเลขซ้ำหลังลบ)
+    """สร้างเลข Ticket — แยกลำดับตามโรงเรียนต่อปี + มีตัวตรวจสอบกันกรอกผิด
 
-    หมายเหตุ: เลขรันต่อปีเป็นลำดับ "ทั้งระบบ" ไม่แยกตามโรงเรียน เพราะ ticket_id
-    ต้อง unique ทั้งตาราง repair_tickets (ถ้าแยกต่อ org จะเกิด SC-YYYY-000001 ซ้ำกัน)
+    รูปแบบ: TK.<รหัสโรงเรียน>.<ปี 2 หลัก>.<ลำดับ 4 หลัก>-<ตัวตรวจสอบ>
+            เช่น TK.SCHM01.26.0001-Q
 
-    Ticket เดิมรูปแบบ TK-YYYYMM-XXXX ยังค้นหา/เปิดดูได้ตามปกติ เพราะ lookup
-    ใช้ค่า ticket_id ตรงตัว ไม่ผูกกับ prefix
-    พารามิเตอร์ organization_id คงไว้เพื่อความเข้ากันได้ของ call site เดิมเท่านั้น
+    ตั้งใจให้หน้าตาไม่เหมือนรหัสอุปกรณ์ (TEST1-B1-R101-DISP-01) เพราะเดิมทั้งสอง
+    อย่างเป็นสตริงขีดคั่นคล้ายกัน ผู้แจ้งจึงเอารหัสอุปกรณ์ไปกรอกช่องติดตาม Ticket
+    แล้วได้แต่ "ไม่พบข้อมูล" โดยไม่รู้ว่าผิดช่อง
+
+    ยัง unique ทั้งตาราง repair_tickets เพราะ prefix มีรหัสโรงเรียนอยู่ในตัว
+    แต่ละโรงเรียนจึงเริ่มนับ 0001 ใหม่ของตัวเองได้โดยไม่ชนกัน
+
+    ถ้าไม่ทราบโรงเรียน (organization_id เป็น None) ใช้ token "ALL" กับลำดับ 6 หลัก
+
+    Ticket เดิม (TK-YYYYMM-XXXX, SC-YYYY-NNNNNN, SC-<รร>-YYYY-NNNN) ยังค้นหา/
+    เปิดดูได้ตามปกติ เพราะ lookup เทียบค่า ticket_id ตรงตัว ไม่ผูกกับ prefix
     """
     now = datetime.now(timezone.utc)
-    prefix = f"SC-{now.year}-"
+    if organization_id is not None:
+        org = db.get(Organization, organization_id)
+        token = _org_code_token(org.code if org else None, organization_id)
+        width = 4
+    else:
+        token = "ALL"
+        width = 6
+    prefix = f"{TICKET_NO_PREFIX}.{token}.{now.year % 100:02d}."
+    # เทียบ prefix ด้วย LEFT(...) ไม่ใช่ LIKE เพื่อไม่ให้จุด/อักขระพิเศษในรหัสโรงเรียน
+    # กลายเป็น wildcard และใช้ MAX(ลำดับ)+1 เพื่อกันเลขซ้ำหลังลบ Ticket กลางลำดับ
+    # ส่วนท้ายเป็น <ลำดับ>-<ตัวตรวจสอบ> จึงตัดเอาเฉพาะหน้าขีดมาคิดลำดับ
+    _lock_generated_id_prefix(db, prefix)
     row = db.execute(
-        text("SELECT MAX(CAST(SUBSTRING(ticket_id FROM 'SC-\\d{4}-(\\d{6})') AS INTEGER)) "
-             "FROM repair_tickets WHERE ticket_id LIKE :p"),
-        {"p": f"{prefix}%"},
+        text(
+            "SELECT MAX(CAST(SPLIT_PART("
+            "  SUBSTRING(ticket_id FROM CHAR_LENGTH(:prefix) + 1), '-', 1) AS INTEGER)) "
+            "FROM repair_tickets "
+            "WHERE LEFT(ticket_id, CHAR_LENGTH(:prefix)) = :prefix "
+            "AND SUBSTRING(ticket_id FROM CHAR_LENGTH(:prefix) + 1) ~ '^[0-9]+-[0-9A-Z]$'"
+        ),
+        {"prefix": prefix},
     ).scalar_one()
     nxt = (row or 0) + 1
-    return f"{prefix}{nxt:06d}"
+    return ticket_no_of(token, now.year, nxt, width)
 
+
+def _ticket_no_candidates(raw: str) -> tuple[list[str], Optional[tuple[str, str]]]:
+    """เลขที่ผู้ใช้พิมพ์/สแกนมา -> รายการค่าที่ควรลองค้นในฐานข้อมูล
+
+    ยืดหยุ่นเรื่องตัวคั่นและตัวพิมพ์ (tk-schm01-26-0001-q หรือ TKSCHM01260001Q
+    ก็หาเจอ) แต่ไม่ยืดหยุ่นเรื่องความถูกต้องเลย: ถ้าตัวตรวจสอบตัวท้ายที่กรอกมา
+    ไม่ตรงกับตัวเลขข้างหน้า จะไม่ส่งค่าใดออกไปค้นฐานข้อมูลเลย เพราะเลขที่พิมพ์
+    เพี้ยนไปหนึ่งตัวอาจเป็นเลขจริงของใบอื่น (หรือของโรงเรียนอื่น) พอดี แล้วผู้แจ้ง
+    จะเห็นใบงานที่ไม่ใช่ของตัวเอง
+
+    ด้วยเหตุผลเดียวกัน ระบบจะไม่ "เติม" ตัวตรวจสอบให้เมื่อผู้ใช้ไม่ได้กรอกมา
+    (การเติมจะเปลี่ยนเลขที่พิมพ์เพี้ยนให้กลายเป็นเลขที่ถูกต้องของใบอื่น) แต่ยัง
+    ค้นแบบตรงตัวให้ เผื่อเป็นเลขรูปแบบเก่าที่ไม่มีตัวตรวจสอบ
+
+    เวลาไม่มีตัวคั่น การแบ่ง <รหัสโรงเรียน>/<ปี>/<ลำดับ> กำกวม เพราะรหัสโรงเรียน
+    มีตัวเลขได้ (TEST1) — TKTEST1260001V แบ่งเป็น TEST1/26/0001 หรือ TEST12/60/001
+    ก็เข้ารูปแบบทั้งคู่ จึงไล่ทุกการแบ่งแล้วเชื่อเฉพาะการแบ่งที่ตัวตรวจสอบตรง
+    ถ้ามีตัวคั่นครบก็เชื่อตัวคั่นอย่างเดียว ไม่ต้องเดาการแบ่งอื่น
+
+    คืน (candidates, problem) โดย problem เป็น None หรือ (kind, ค่าที่กรอกมา):
+      "check_mismatch" = มีตัวตรวจสอบมาแต่ไม่ตรง (candidates ว่างเสมอ)
+      "missing_check"  = ไม่ได้กรอกตัวตรวจสอบ (ค้นตรงตัวได้ แต่ไม่เติมให้)
+      "unverified"     = ไม่มีตัวคั่น และไม่มีการแบ่งใดที่ตัวตรวจสอบตรง
+    """
+    import re as _re
+
+    typed = (raw or "").strip()
+    if not typed:
+        return [], None
+    compact = _re.sub(r"\s+", "", typed).upper()
+    candidates = [typed]
+    if compact not in candidates:
+        candidates.append(compact)
+    if not compact.startswith(TICKET_NO_PREFIX):
+        return candidates, None
+
+    # เลขรูปแบบเก่า TK-YYYYMM-NNNN ไม่มีตัวตรวจสอบ ห้ามเอาไปเดาเป็นรูปแบบใหม่
+    # ไม่อย่างนั้นจะถูกตีว่า "กรอกผิด" ทั้งที่เป็น Ticket เดิมที่ยังเปิดดูได้
+    if _re.fullmatch(r"TK[.\-_/]?\d{6}[.\-_/]?\d{4}", compact):
+        return candidates, None
+
+    parts = [p for p in _re.split(r"[.\-_/]+", compact[len(TICKET_NO_PREFIX):]) if p]
+    if not parts:
+        return candidates, None
+
+    def _valid(token: str, yy: str, seq: str, check: Optional[str]) -> bool:
+        return bool(
+            _re.fullmatch(r"[A-Z0-9]{1,12}", token)
+            and _re.fullmatch(r"\d{2}", yy)
+            and _re.fullmatch(r"\d{3,6}", seq)
+            and (check is None or _re.fullmatch(r"[0-9A-Z]", check))
+        )
+
+    def _verify(layout: tuple) -> tuple[str, Optional[str]]:
+        """คืน (เลขรูปแบบมาตรฐานของการแบ่งนี้, ปัญหาที่พบ) — None = ตัวตรวจสอบตรง"""
+        token, yy, seq, check = layout
+        body = f"{TICKET_NO_PREFIX}.{token}.{yy}.{seq}"
+        expected = _mod37_36_check_char(body)
+        canonical = f"{body}-{expected}"
+        if check is None:
+            return canonical, "missing_check"
+        return canonical, None if check == expected else "check_mismatch"
+
+    # มีตัวคั่นครบ = รู้แน่ว่าผู้ใช้แบ่งช่วงไว้อย่างไร จึงตัดสินจากการแบ่งนั้นอย่างเดียว
+    # ไม่ต้องเดาการแบ่งอื่น (ยิ่งเดามาก เลขที่เพี้ยนยิ่งมีโอกาสไปตรงกับใบของคนอื่น)
+    if len(parts) in (3, 4):
+        layout = (parts[0], parts[1], parts[2], parts[3] if len(parts) == 4 else None)
+        if _valid(*layout):
+            canonical, kind = _verify(layout)
+            if kind == "check_mismatch":
+                # พิสูจน์แล้วว่าเลขเพี้ยน — ไม่ส่ง candidate ใดออกไปค้น DB เลย
+                return [], (kind, compact)
+            if kind == "missing_check":
+                # ตรวจไม่ได้ว่าเพี้ยนหรือไม่ → ค้นตรงตัวเท่านั้น ไม่เติมตัวตรวจสอบให้
+                return candidates, (kind, compact)
+            if canonical not in candidates:
+                candidates.insert(0, canonical)
+            return candidates, None
+
+    # ตัวคั่นไม่ครบ/ไม่มีเลย — ไล่ทุกการแบ่ง โดยเรียงจากที่น่าจะเป็นที่สุด:
+    # มีตัวตรวจสอบท้ายก่อน และลำดับกว้าง 4 หลัก (ค่ามาตรฐานของเลขรายโรงเรียน) ก่อน
+    layouts: list[tuple] = []
+    flat = "".join(parts)
+    for tail_is_check in (True, False):
+        if tail_is_check:
+            if len(flat) < 2 or not _re.fullmatch(r"[0-9A-Z]", flat[-1]):
+                continue
+            core, check = flat[:-1], flat[-1]
+        else:
+            core, check = flat, None
+        for seq_len in (4, 6, 5, 3):
+            if len(core) < seq_len + 3:      # ต้องเหลือปี 2 หลัก + รหัสโรงเรียน >= 1
+                continue
+            layout = (
+                core[: -seq_len - 2],
+                core[-seq_len - 2 : -seq_len],
+                core[-seq_len:],
+                check,
+            )
+            if _valid(*layout) and layout not in layouts:
+                layouts.append(layout)
+
+    if not layouts:
+        # ไม่เข้ารูปแบบใหม่เลย (เช่นเลขรูปแบบเก่าแบบอื่น) — ค้นตรงตัวตามปกติ
+        return candidates, None
+
+    verified: list[str] = []
+    for layout in layouts:
+        canonical, kind = _verify(layout)
+        if kind is None and canonical not in verified:
+            verified.append(canonical)
+    if verified:
+        # ตัวตรวจสอบตรงแล้ว ค่าที่กรอกมาจึงปลอดภัยพอจะใช้ค้นเผื่อ ticket_id รูปแบบเดิม
+        return verified + [c for c in candidates if c not in verified], None
+    # ไม่มีการแบ่งใดที่ตัวตรวจสอบตรง — ค้นตรงตัวได้ (เผื่อเลขเก่า) แต่ไม่เดาเติมตัวท้าย
+    return candidates, ("unverified", compact)
+
+
+def find_ticket_by_no(db: Session, raw: str) -> "RepairTicket":
+    """ค้น Ticket จากเลขที่ผู้ใช้กรอก — 404 พร้อมข้อความที่บอกได้ว่าผิดอย่างไร
+
+    เดิมทุกเส้นทางเทียบ ticket_id ตรงตัวแล้วตอบ "ไม่พบหมายเลข Ticket นี้" เหมือนกันหมด
+    ผู้แจ้งที่เอารหัสอุปกรณ์มากรอกผิดช่องจึงไม่รู้ว่าต้องแก้อะไร
+    """
+    candidates, problem = _ticket_no_candidates(raw)
+    for candidate in candidates:
+        found = db.execute(
+            select(RepairTicket).where(RepairTicket.ticket_id == candidate)
+        ).scalar_one_or_none()
+        if found:
+            return found
+
+    if problem:
+        kind, value = problem
+        if kind == "missing_check":
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"เลข Ticket '{value}' ยังไม่ครบ — ต้องมีตัวตรวจสอบตัวท้ายต่อจากขีดด้วย "
+                    f"เช่น {TICKET_NO_EXAMPLE} กรุณากรอกให้ครบตามใบแจ้ง/ข้อความยืนยัน"
+                ),
+            )
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"เลข Ticket '{value}' ไม่ผ่านการตรวจสอบ — ตัวตรวจสอบตัวท้ายไม่ตรงกับ"
+                "ตัวเลขข้างหน้า (พิมพ์ผิดหรือสลับตำแหน่งไปหนึ่งตัว) "
+                "กรุณาตรวจทานจากใบแจ้ง/ข้อความยืนยันอีกครั้ง"
+            ),
+        )
+
+    # ดูเหมือนรหัสอุปกรณ์ (มีขีดหลายช่วง ไม่ขึ้นต้น TK) -> บอกตรง ๆ ว่าคนละช่อง
+    looks_like_device = (
+        not (raw or "").strip().upper().startswith(TICKET_NO_PREFIX)
+        and (raw or "").count("-") >= 2
+    )
+    if looks_like_device:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "ค่าที่กรอกดูเหมือน 'รหัสอุปกรณ์' บนสติกเกอร์ ไม่ใช่เลข Ticket — "
+                f"เลข Ticket ขึ้นต้นด้วย {TICKET_NO_PREFIX}. เช่น {TICKET_NO_EXAMPLE}"
+            ),
+        )
+    raise HTTPException(
+        status_code=404,
+        detail=f"ไม่พบหมายเลข Ticket นี้ (รูปแบบที่ถูกต้อง เช่น {TICKET_NO_EXAMPLE})",
+    )
 
 # ---------------------------------------------------------------------------
 # SLA — นับเวลาทำการ 08:00–16:30 จันทร์–ศุกร์ (TOR 4.5)
@@ -676,7 +1099,7 @@ def _building_code(raw: Optional[str], floor: Optional[str]) -> str:
 
 def generate_device_id(db: Session, org: Organization, room: Optional[Room], device_type: Optional[str]) -> str:
     """SCH01-B1-R101-DISP-01 — รร-อาคาร-ห้อง-ประเภท-ลำดับ (01–99)"""
-    org_code = (org.code or "SCH").upper()
+    org_code = _org_code_token(org.code, org.id)
     # building code ย่อ (sanitize ให้ปลอด URL) + room code
     building = _building_code(room.building if room else None, room.floor if room else None) if room else "B0"
     room_code = (room.code or "R000") if room else "R000"
@@ -686,6 +1109,7 @@ def generate_device_id(db: Session, org: Organization, room: Optional[Room], dev
     # มีอยู่แล้วและชน unique constraint ของ device_id
     # เทียบ prefix ด้วย LEFT(...) แทน LIKE/regex เพื่อไม่ให้อักขระพิเศษในรหัสห้อง
     # (_ % . ( ) ) ถูกตีความเป็น wildcard หรือ regex
+    _lock_generated_id_prefix(db, prefix)
     row = db.execute(
         text("""
             SELECT MAX(CAST(SUBSTRING(device_id FROM CHAR_LENGTH(:prefix) + 1) AS INTEGER))
@@ -696,6 +1120,58 @@ def generate_device_id(db: Session, org: Organization, room: Optional[Room], dev
         {"prefix": prefix},
     ).scalar_one()
     return f"{prefix}{(row or 0) + 1:02d}"
+
+
+def _normalize_manual_device_id(db: Session, org: Organization, raw: str) -> str:
+    """จัดรูป/ตรวจ device_id ที่ผู้ใช้กรอกเอง ให้ผูกกับรหัสโรงเรียนเสมอ
+
+    เดิมช่อง "รหัสอุปกรณ์" ใน POST /api/devices รับค่าอะไรก็ได้ สองโรงเรียนจึง
+    ตั้งรหัสคล้ายกันได้ (เช่น R101-DISP-01 ทั้งคู่) แล้วคนแจ้งซ่อมที่พิมพ์รหัสเอง
+    หรือค้นรหัสในระบบ อาจไปเปิด Ticket ให้เครื่องของโรงเรียนอื่น
+
+    กติกาใหม่ — รหัสต้องขึ้นต้นด้วย <รหัสโรงเรียน>- เสมอ (token ตัวเดียวกับที่
+    generate_device_id / generate_ticket_id ใช้):
+      · กรอกมาโดยไม่มี prefix       → เติม prefix ของโรงเรียนที่เลือกให้อัตโนมัติ
+      · กรอก prefix ของโรงเรียนอื่น → ปฏิเสธ 400 พร้อมบอกรหัสที่ถูกต้อง
+      · อักขระนอก A-Z 0-9 - _       → ปฏิเสธ (กัน path/QR เพี้ยน)
+    """
+    import re as _re
+
+    token = _org_code_token(org.code, org.id)
+    cleaned = _re.sub(r"\s+", "", raw or "").upper().strip("-")
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="รหัสอุปกรณ์ว่าง")
+    if not _re.fullmatch(r"[A-Z0-9][A-Z0-9_-]*", cleaned):
+        raise HTTPException(
+            status_code=400,
+            detail="รหัสอุปกรณ์ใช้ได้เฉพาะตัวอักษร A-Z ตัวเลข 0-9 และ - _ เท่านั้น",
+        )
+
+    if cleaned != token and not cleaned.startswith(f"{token}-"):
+        # ส่วนหน้าเป็นรหัสของโรงเรียนอื่นหรือไม่ — ถ้าใช่ ห้ามเติม prefix ทับเงียบ ๆ
+        head = cleaned.split("-", 1)[0]
+        for other_id, other_code in db.execute(
+            select(Organization.id, Organization.code).where(Organization.id != org.id)
+        ).all():
+            if _org_code_token(other_code, other_id) == head:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"รหัส '{cleaned}' ขึ้นต้นด้วยรหัสของอีกโรงเรียนหนึ่ง ({head}) "
+                        f"อุปกรณ์ของ {org.name} ต้องขึ้นต้นด้วย {token}-"
+                    ),
+                )
+        cleaned = f"{token}-{cleaned}"
+    elif cleaned == token:
+        raise HTTPException(
+            status_code=400,
+            detail=f"รหัสอุปกรณ์ต้องมีส่วนต่อจากรหัสโรงเรียน เช่น {token}-B1-R101-DISP-01",
+        )
+
+    # คอลัมน์ devices.device_id เป็น String(64) — ตัดก่อนลง DB จะ error ไม่สื่อความ
+    if len(cleaned) > 64:
+        raise HTTPException(status_code=400, detail="รหัสอุปกรณ์ยาวเกิน 64 ตัวอักษร")
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -942,6 +1418,8 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
 
     device, room, org = row
     return DeviceInfo(
+        # กันแจ้งซ้ำ: ปลายทางของการสแกน QR/กรอกรหัสเอง ต้องรู้สถานะงานค้างทันที
+        **open_ticket_fields(db, device.device_id),
         device_id=device.device_id,
         device_type=device.device_type,
         brand=device.brand,
@@ -960,6 +1438,7 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
         organization_code=org.code,
         organization_name=org.name,
         organization_id=device.organization_id,
+        purchase_date=device.purchase_date,
         warranty_until=device.warranty_until,
         notes=device.notes,
     )
@@ -968,6 +1447,160 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # Ticket CRUD
 # ---------------------------------------------------------------------------
+
+
+# สถานะที่ถือว่า "งานยังไม่ปิด" — ใช้ร่วมกันทุกเส้นทางที่กันแจ้งซ้ำ เดิมตกหล่น
+# waiting_parts/waiting_user ทำให้อุปกรณ์ที่รออะไหล่ยังถูกแจ้งซ้ำได้
+OPEN_TICKET_STATUSES = (
+    "new", "assigned", "in_progress", "pending", "waiting_parts", "waiting_user",
+)
+
+
+def find_open_ticket(db: Session, device_id: str) -> Optional[RepairTicket]:
+    """ticket ที่ยังไม่ปิดของอุปกรณ์นี้ (ล่าสุดก่อน) — None ถ้าไม่มี"""
+    return db.execute(
+        select(RepairTicket)
+        .where(
+            RepairTicket.device_id == device_id,
+            RepairTicket.status.in_(OPEN_TICKET_STATUSES),
+        )
+        .order_by(RepairTicket.created_at.desc(), RepairTicket.ticket_id.desc())
+    ).scalars().first()
+
+
+# ป้ายสถานะภาษาไทยสำหรับทุกหน้าที่เปิดสาธารณะ — เดิมแต่ละที่มีตารางของตัวเองและ
+# ตกหล่น waiting_parts/waiting_user ทำให้ผู้แจ้งเห็นรหัสภาษาอังกฤษดิบ
+PUBLIC_STATUS_LABELS = {
+    "new": "รอรับเรื่อง",
+    "assigned": "มอบหมายแล้ว",
+    "in_progress": "กำลังดำเนินการ",
+    "pending": "รออะไหล่/รอภายนอก",
+    "waiting_parts": "รออะไหล่",
+    "waiting_user": "รอผู้ใช้ยืนยัน",
+    "resolved": "ซ่อมเสร็จ รอผู้แจ้งยืนยัน",
+    "closed": "ปิดงาน",
+    "cancelled": "ยกเลิก",
+}
+
+
+def _ticket_device(t: RepairTicket):
+    """Device ของ ticket ถ้า ORM โหลดมาให้ (getattr กันกรณีไม่มี relationship)"""
+    return getattr(t, "device", None)
+
+
+def compose_device_label(
+    device_type: Optional[str],
+    brand: Optional[str],
+    model: Optional[str],
+    room_label: Optional[str] = None,
+) -> str:
+    """ประกอบชื่ออุปกรณ์จากค่าดิบ: ประเภท · ยี่ห้อรุ่น · ห้อง
+
+    แยกจาก device_display_label เพื่อให้ endpoint ที่ join Room มาแล้ว (เช่น
+    /api/public/options) ใช้รูปแบบชื่อเดียวกันได้ โดยไม่ต้องให้ ORM lazy-load
+    room ทีละแถว (N+1)
+    """
+    parts = [device_type or "อุปกรณ์"]
+    brand_model = " ".join(p for p in (brand, model) if p)
+    if brand_model:
+        parts.append(brand_model)
+    if room_label:
+        parts.append(f"ห้อง {room_label}")
+    return " · ".join(parts)
+
+
+def device_display_label(device) -> str:
+    """ชื่ออุปกรณ์ที่คนอ่านรู้เรื่อง: ประเภท · ยี่ห้อรุ่น · ห้อง
+
+    ผู้แจ้งและเจ้าหน้าที่จำรหัสอย่าง TEST1-B1-R101-DISP-01 ไม่ได้ ทุกที่ที่เคยโชว์
+    รหัสเปล่า ๆ จึงใช้ค่านี้คู่กับรหัสแทน
+    """
+    if device is None:
+        return "-"
+    room = getattr(device, "room", None)
+    room_label = (room.name or room.code) if room is not None else None
+    return compose_device_label(
+        device.device_type, device.brand, device.model, room_label
+    )
+
+
+def open_ticket_summary(t: RepairTicket) -> dict:
+    """สรุป ticket ที่ยังไม่ปิด สำหรับแสดงให้ผู้แจ้ง (ไม่มีข้อมูลส่วนบุคคลของผู้แจ้งเดิม)"""
+    device = _ticket_device(t)
+    device_type = device.device_type if device else None
+    return {
+        "ticket_no": t.ticket_id,
+        "status": t.status,
+        "status_label": PUBLIC_STATUS_LABELS.get(t.status, t.status),
+        "title": t.title,
+        "priority": t.priority,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "sla_due_at": t.sla_due_at.isoformat() if t.sla_due_at else None,
+        "device_id": t.device_id,
+        "device_type": device_type,
+        "device_category": device_category_of(device_type),
+        "device_label": device_display_label(device),
+        # ผู้แจ้งเพิ่มอาการ/ข้อมูลเข้าใบเดิมได้ ไม่ต้องเปิดใบใหม่
+        "can_add_note": True,
+    }
+
+
+def open_ticket_fields(db: Session, device_id: str) -> dict:
+    """คู่คีย์ has_open_ticket/open_ticket สำหรับ response ที่ต้องบอกว่าอุปกรณ์มีงานค้าง
+
+    รวมไว้ที่เดียวเพื่อไม่ให้แต่ละ endpoint ยิง query ซ้ำหรือใส่ชื่อคีย์ไม่ตรงกัน
+    """
+    open_ticket = find_open_ticket(db, device_id)
+    return {
+        "has_open_ticket": open_ticket is not None,
+        "open_ticket": open_ticket_summary(open_ticket) if open_ticket else None,
+    }
+
+
+def open_tickets_by_device(db: Session, device_ids: list[str]) -> dict[str, dict]:
+    """สรุปใบงานที่ยังไม่ปิดของหลายอุปกรณ์ในคราวเดียว -> {device_id: summary}
+
+    รายการผลค้นหา/รายการอุปกรณ์ต้องบอกได้ว่าเครื่องไหนมีงานค้าง ถ้าเรียก
+    find_open_ticket ทีละแถวจะยิง query เท่าจำนวนแถว จึงดึงรอบเดียว แล้วเรียง
+    เก่า→ใหม่ ให้ใบล่าสุดของแต่ละอุปกรณ์ทับใบก่อนหน้า (ตรงกับ find_open_ticket
+    ที่คืนใบล่าสุด)
+    """
+    ids = [d for d in dict.fromkeys(device_ids) if d]
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(RepairTicket)
+        .where(
+            RepairTicket.device_id.in_(ids),
+            RepairTicket.status.in_(OPEN_TICKET_STATUSES),
+        )
+        .order_by(RepairTicket.created_at.asc())
+    ).scalars().all()
+    return {t.device_id: open_ticket_summary(t) for t in rows}
+
+
+def raise_duplicate_open_ticket(t: RepairTicket) -> None:
+    """409 DUPLICATE_OPEN_TICKET พร้อมข้อมูลงานเดิมให้หน้าเว็บแสดงได้ครบ"""
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "DUPLICATE_OPEN_TICKET",
+            "message": (
+                f"อุปกรณ์นี้แจ้งซ่อมไว้แล้ว เลขที่ {t.ticket_id} "
+                f"(สถานะ: {PUBLIC_STATUS_LABELS.get(t.status, t.status)}) — "
+                "เพิ่มอาการหรือข้อมูลเข้าใบเดิมได้ ไม่ต้องแจ้งซ้ำ"
+            ),
+            "existing_status_label": PUBLIC_STATUS_LABELS.get(t.status, t.status),
+            "existing_device_id": t.device_id,
+            "existing_device_label": device_display_label(_ticket_device(t)),
+            "can_add_note": True,
+            "open_ticket": open_ticket_summary(t),
+            "existing_ticket_no": t.ticket_id,
+            "existing_status": t.status,
+            "existing_title": t.title,
+            "existing_created_at": t.created_at.isoformat() if t.created_at else None,
+        },
+    )
 
 
 @app.post("/api/tickets", response_model=TicketOut, status_code=201)
@@ -990,24 +1623,9 @@ def create_ticket(
     )
 
     # ─── กันแจ้งซ้ำ (TOR 1.5.2 / 5.7): อุปกรณ์มี ticket ค้าง → 409 DUPLICATE_OPEN_TICKET
-    open_ticket = db.execute(
-        select(RepairTicket)
-        .where(
-            RepairTicket.device_id == payload.device_id,
-            RepairTicket.status.in_(["new", "assigned", "in_progress", "pending"]),
-        )
-        .order_by(RepairTicket.created_at.desc())
-    ).scalars().first()
+    open_ticket = find_open_ticket(db, payload.device_id)
     if open_ticket:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "DUPLICATE_OPEN_TICKET",
-                "message": "อุปกรณ์นี้มีการแจ้งซ่อมที่ยังไม่ปิดอยู่แล้ว",
-                "existing_ticket_no": open_ticket.ticket_id,
-                "existing_status": open_ticket.status,
-            },
-        )
+        raise_duplicate_open_ticket(open_ticket)
 
     now = datetime.now(timezone.utc)
     sla_due = calc_sla_due(now, priority)
@@ -1100,6 +1718,88 @@ def create_ticket(
 # Public report (คนไม่มีบัญชี) — แจ้งซ่อมสาธารณะ
 # ---------------------------------------------------------------------------
 
+# ─── หมวดหมู่อุปกรณ์ ───────────────────────────────────────────────────────
+# ใช้จัดกลุ่มงานซ่อมเป็นหมวด (จอ / คอมพิวเตอร์ / เครือข่าย …) แทนการไล่ดูรหัสอุปกรณ์
+# ทีละตัว — เป็นตารางเดียวที่ทั้ง Ticket, ตัวกรอง และหน้าสาธารณะใช้ร่วมกัน
+DEVICE_CATEGORY_TYPES: dict[str, tuple[str, ...]] = {
+    "จอแสดงภาพ": ("Interactive Display", "Projector", "Visualizer"),
+    "คอมพิวเตอร์": (
+        "Computer AIO", "Computer Notebook", "Computer Tablet", "Computer Desktop",
+    ),
+    "ระบบเครือข่าย": ("Router", "Access Point", "Switch"),
+    "ภาพและเสียง": ("Speaker", "Microphone", "Camera"),
+    "อุปกรณ์ต่อพ่วง": ("Printer",),
+    "ไฟฟ้า/สำรองไฟ": ("UPS",),
+    "ซอฟต์แวร์": ("Software (Picaro)", "Software (Phonics Hero)"),
+    "อื่น ๆ": ("Other",),
+}
+
+DEVICE_TYPE_TO_CATEGORY: dict[str, str] = {
+    device_type: category
+    for category, types in DEVICE_CATEGORY_TYPES.items()
+    for device_type in types
+}
+
+
+def device_category_of(device_type: Optional[str]) -> Optional[str]:
+    """ประเภทอุปกรณ์ → หมวดหมู่ (ประเภทที่ไม่อยู่ในตารางถือเป็น "อื่น ๆ")"""
+    if not device_type:
+        return None
+    return DEVICE_TYPE_TO_CATEGORY.get(device_type, "อื่น ๆ")
+
+
+def device_categories_out(devices: Optional[list] = None) -> list[DeviceCategoryOut]:
+    """รายการหมวดหมู่อุปกรณ์ทั้งหมด + จำนวนอุปกรณ์ที่พบในแต่ละหมวด
+
+    ส่งทุกหมวดเสมอ (ลำดับตาม DEVICE_CATEGORY_TYPES) เพื่อให้หน้าเว็บมีตัวเลือกคงที่
+    ส่วน device_count บอกว่าหมวดนั้นมีอุปกรณ์ของหน่วยงานนี้กี่ตัว — หน้าเว็บเลือก
+    ซ่อนหมวดที่เป็น 0 ได้เอง
+    """
+    counts: dict[str, int] = {}
+    for item in devices or []:
+        category = getattr(item, "device_category", None) or device_category_of(
+            getattr(item, "device_type", None)
+        )
+        if category:
+            counts[category] = counts.get(category, 0) + 1
+    return [
+        DeviceCategoryOut(
+            category=category,
+            device_types=list(types),
+            device_count=counts.get(category, 0),
+        )
+        for category, types in DEVICE_CATEGORY_TYPES.items()
+    ]
+
+
+def _resolve_device_by_code(db: Session, raw: str) -> Optional[Device]:
+    """qr_token หรือรหัสอุปกรณ์ → Device (ใช้ร่วมกันทั้ง /qr/resolve และหน้าสาธารณะ)"""
+    code = (raw or "").strip()
+    if not code:
+        return None
+    device = db.execute(
+        select(Device).where(Device.qr_token == code)
+    ).scalar_one_or_none()
+    if device:
+        return device
+    return db.execute(
+        select(Device).where(Device.device_id == code)
+    ).scalar_one_or_none() or db.execute(
+        select(Device).where(Device.device_id == code.upper())
+    ).scalar_one_or_none()
+
+
+@app.get("/api/device-categories")
+def list_device_categories():
+    """หมวดหมู่อุปกรณ์ + ประเภทในแต่ละหมวด — หน้าเว็บใช้ทำตัวกรองหมวดหมู่"""
+    return {
+        "categories": [
+            {"category": category, "device_types": list(types)}
+            for category, types in DEVICE_CATEGORY_TYPES.items()
+        ]
+    }
+
+
 DEVICE_TYPE_LABELS = [
     "Interactive Display", "Computer AIO", "Computer Notebook", "Computer Tablet",
     "Computer Desktop", "Router", "Access Point", "Switch", "Speaker", "Camera",
@@ -1110,26 +1810,58 @@ DEVICE_TYPE_LABELS = [
 
 @app.get("/api/public/options", response_model=PublicOptionsOut)
 @limiter.limit("60/minute")
-def public_options(request: Request, db: Session = Depends(get_db)):
+def public_options(
+    request: Request,
+    organization_code: Optional[str] = Query(None, min_length=2, max_length=64),
+    db: Session = Depends(get_db),
+):
     """ข้อมูลสำหรับ dropdown หน้าแจ้งซ่อมสาธารณะ (ไม่ต้อง auth):
     - device_types: ประเภทอุปกรณ์ที่เลือกได้
-    - devices: รายการอุปกรณ์ที่ลงทะเบียนไว้แล้ว (device_id, room, org...)
+    - devices: รายการอุปกรณ์ของหน่วยงานนั้น — ส่งเฉพาะเมื่อระบุ organization_code ถูกต้อง
+      (เดิมคืนอุปกรณ์ทั้งระบบทุกโรงเรียน 500 รายการแบบไม่ต้องล็อกอิน)
     """
+    code = (organization_code or "").strip()
+    if not code:
+        # ไม่ระบุรหัสหน่วยงาน = ไม่เปิดรายการอุปกรณ์ให้ไล่ดู ให้ผู้แจ้งกรอกห้อง/อุปกรณ์เอง
+        return PublicOptionsOut(
+            device_types=DEVICE_TYPE_LABELS,
+            device_categories=device_categories_out(),
+            devices=[],
+            requires_organization=True,
+        )
+
+    org = db.execute(
+        select(Organization).where(Organization.code == code)
+    ).scalar_one_or_none()
+    if not org:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "ORGANIZATION_NOT_FOUND",
+                "message": "ไม่พบรหัสหน่วยงานนี้ — ตรวจสอบรหัสบนสติกเกอร์ QR หรือสอบถามเจ้าหน้าที่",
+            },
+        )
+
     rows = db.execute(
-        select(Device, Room, Organization)
+        select(Device, Room)
         .outerjoin(Room, Room.id == Device.room_id)
-        .join(Organization, Organization.id == Device.organization_id)
+        .where(Device.organization_id == org.id)
         .order_by(Device.device_id)
-        .limit(500)
+        .limit(200)
     ).all()
-    devices: list[DeviceInfo] = []
-    for device, room, org in rows:
+    devices: list[PublicDeviceInfo] = []
+    for device, room in rows:
         # endpoint นี้เปิดสาธารณะ (ไม่ต้อง auth) — ต้องไม่ส่งข้อมูลอ่อนไหวออกไป
         # ห้ามส่ง: qr_token / qr_url (ใช้สร้างลิงก์สแกนของทุกห้องได้),
         #          serial_number, firmware_version, warranty_until, notes (ข้อมูลทรัพย์สินภายใน)
-        devices.append(DeviceInfo(
+        room_label = (room.name or room.code) if room else None
+        devices.append(PublicDeviceInfo(
             device_id=device.device_id,
             device_type=device.device_type,
+            device_category=device_category_of(device.device_type),
+            device_label=compose_device_label(
+                device.device_type, device.brand, device.model, room_label
+            ),
             brand=device.brand,
             model=device.model,
             status=device.status,
@@ -1141,7 +1873,14 @@ def public_options(request: Request, db: Session = Depends(get_db)):
             organization_name=org.name,
             organization_id=device.organization_id,
         ))
-    return PublicOptionsOut(device_types=DEVICE_TYPE_LABELS, devices=devices)
+    return PublicOptionsOut(
+        device_types=DEVICE_TYPE_LABELS,
+        device_categories=device_categories_out(devices),
+        devices=devices,
+        organization_code=org.code,
+        organization_name=org.name,
+        requires_organization=False,
+    )
 
 
 @app.post("/api/public/report", status_code=201)
@@ -1196,10 +1935,20 @@ def public_report(
         # กรณีรู้ device code แล้ว (เลือกจาก dropdown)
         if payload.device_id:
             device = db.execute(
-                select(Device).where(Device.device_id == payload.device_id.strip())
+                select(Device).where(
+                    Device.device_id == payload.device_id.strip(),
+                    Device.organization_id == org.id,
+                )
             ).scalar_one_or_none()
             if not device:
-                raise HTTPException(status_code=404, detail="Device not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"ไม่พบรหัสอุปกรณ์นี้ใน {org.name} — "
+                        "รหัสอุปกรณ์ของแต่ละโรงเรียนไม่เหมือนกัน "
+                        "กรุณาตรวจรหัสบนสติกเกอร์/QR หรือเลือกโรงเรียนให้ตรงกับเครื่อง"
+                    ),
+                )
         else:
             # ── Resolve/สร้าง Room จาก room_text ──
             room = None
@@ -1264,24 +2013,9 @@ def public_report(
                 db.flush()
 
         # ── กันแจ้งซ้ำ: อุปกรณ์มี ticket ค้าง → 409 DUPLICATE_OPEN_TICKET ──
-        open_ticket = db.execute(
-            select(RepairTicket)
-            .where(
-                RepairTicket.device_id == device.device_id,
-                RepairTicket.status.in_(["new", "assigned", "in_progress", "pending"]),
-            )
-            .order_by(RepairTicket.created_at.desc())
-        ).scalars().first()
+        open_ticket = find_open_ticket(db, device.device_id)
         if open_ticket:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "DUPLICATE_OPEN_TICKET",
-                    "message": "อุปกรณ์นี้มีการแจ้งซ่อมที่ยังไม่ปิดอยู่แล้ว",
-                    "existing_ticket_no": open_ticket.ticket_id,
-                    "existing_status": open_ticket.status,
-                },
-            )
+            raise_duplicate_open_ticket(open_ticket)
 
         # ── สร้าง RepairTicket ──
         now = datetime.now(timezone.utc)
@@ -1335,6 +2069,194 @@ def public_report(
     except Exception:
         db.rollback()
         raise
+
+
+@app.get("/api/public/devices/{code}/open-ticket")
+@limiter.limit("60/minute")
+def public_device_open_ticket(request: Request, code: str, db: Session = Depends(get_db)):
+    """อุปกรณ์นี้มีงานค้างอยู่ไหม — ใช้เตือนก่อนที่ผู้แจ้งจะกรอกฟอร์มทั้งใบ
+
+    รับได้ทั้ง qr_token และรหัสอุปกรณ์ (เหมือน /api/qr/resolve) เพื่อให้การสแกน QR
+    และการพิมพ์รหัสใต้สติกเกอร์ได้ผลเหมือนกัน
+    """
+    device = _resolve_device_by_code(db, code)
+    if not device:
+        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์ที่ตรงกับรหัส/QR นี้")
+    open_ticket = find_open_ticket(db, device.device_id)
+    return {
+        "device_id": device.device_id,
+        "device_type": device.device_type,
+        "device_category": device_category_of(device.device_type),
+        "device_label": device_display_label(device),
+        "has_open_ticket": open_ticket is not None,
+        "open_ticket": open_ticket_summary(open_ticket) if open_ticket else None,
+    }
+
+
+def _resolve_device_for_warranty(db: Session, raw: str) -> Optional[Device]:
+    """หมายเลขสินค้า (serial) -> Device, สำรองด้วยรหัสอุปกรณ์/QR token
+
+    หน้าตรวจสอบประกันให้ผู้ใช้กรอก "หมายเลขสินค้า" บนสติกเกอร์ของผู้ผลิตเป็นหลัก
+    จึงค้น serial_number ก่อน (ไม่สนตัวพิมพ์เล็ก-ใหญ่) แล้ว fallback ไป
+    _resolve_device_by_code เพื่อให้คนที่ถือสติกเกอร์ของโรงเรียนใช้ช่องเดียวกันได้
+    """
+    code = (raw or "").strip()
+    if not code:
+        return None
+    device = (
+        db.execute(select(Device).where(func.upper(Device.serial_number) == code.upper()))
+        .scalars()
+        .first()
+    )
+    if device:
+        return device
+    return _resolve_device_by_code(db, code)
+
+
+#: ป้ายสถานะประกันสำหรับหน้าสาธารณะ — คำเดียวกับที่ frontend ใช้
+WARRANTY_STATUS_LABELS = {
+    "active": "อยู่ในระยะประกัน",
+    "expiring": "ใกล้หมดประกัน",
+    "expired": "หมดประกันแล้ว",
+    "unknown": "ไม่มีข้อมูลวันสิ้นสุดประกัน",
+}
+
+
+@app.get("/api/public/warranty/{code}")
+@limiter.limit("30/minute")
+def public_warranty_lookup(request: Request, code: str, db: Session = Depends(get_db)):
+    """ตรวจสอบประกันด้วยหมายเลขสินค้า — เปิดสาธารณะ ไม่ต้องล็อกอิน
+
+    คืนเฉพาะข้อมูลที่จำเป็นต่อคำถาม "ยังอยู่ในประกันไหม" ไม่คืนข้อมูลผู้แจ้ง
+    ไม่คืน notes ภายใน และไม่คืน qr_token เพื่อไม่ให้ใช้กวาดข้อมูลอุปกรณ์
+    เกณฑ์ "ใกล้หมด" ใช้ pm_rules.WARRANTY_WARN_DAYS ตัวเดียวกับ PM Rule 2
+    """
+    device = _resolve_device_for_warranty(db, code)
+    if not device:
+        raise HTTPException(
+            status_code=404,
+            detail="ไม่พบหมายเลขสินค้านี้ในระบบ — ตรวจสอบหมายเลขบนสติกเกอร์อีกครั้ง",
+        )
+
+    room = db.get(Room, device.room_id) if device.room_id else None
+    org = db.get(Organization, device.organization_id) if device.organization_id else None
+
+    warn_days = pm_rules.WARRANTY_WARN_DAYS
+    until = device.warranty_until
+    # ฐานข้อมูลบางชุดเก็บ datetime แบบไม่มี timezone -> เทียบกับ now(utc) ตรง ๆ จะ error
+    if until is not None and until.tzinfo is None:
+        until = until.replace(tzinfo=timezone.utc)
+
+    if until is None:
+        status = "unknown"
+        days_left = None
+    else:
+        days_left = (until - datetime.now(timezone.utc)).days
+        if days_left < 0:
+            status = "expired"
+        elif days_left <= warn_days:
+            status = "expiring"
+        else:
+            status = "active"
+
+    open_ticket = find_open_ticket(db, device.device_id)
+    return {
+        "device_id": device.device_id,
+        "device_type": device.device_type,
+        "device_category": device_category_of(device.device_type),
+        "device_label": device_display_label(device),
+        "brand": device.brand,
+        "model": device.model,
+        "serial_number": device.serial_number,
+        "device_status": device.status,
+        "purchase_date": device.purchase_date,
+        "warranty_until": device.warranty_until,
+        "warranty_status": status,
+        "warranty_status_label": WARRANTY_STATUS_LABELS[status],
+        "days_left": days_left,
+        "warn_days": warn_days,
+        "room_name": room.name if room else None,
+        "room_code": room.code if room else None,
+        "organization_name": org.name if org else None,
+        "has_open_ticket": open_ticket is not None,
+        "open_ticket": open_ticket_summary(open_ticket) if open_ticket else None,
+    }
+
+
+@app.post("/api/public/tickets/{ticket_no}/notes", status_code=201)
+@limiter.limit("10/minute")
+def public_add_ticket_note(
+    ticket_no: str,
+    payload: PublicTicketNoteIn,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """เพิ่มอาการ/ข้อมูลเข้า Ticket ที่ยังไม่ปิด (ไม่ต้องล็อกอิน) — ใช้แทนการแจ้งซ้ำ
+
+    ไม่เปลี่ยนสถานะงานและไม่ทับ description เดิม เก็บเป็น ticket_updates เพื่อให้ช่าง
+    เห็นลำดับเวลา และผู้แจ้งคนหลังไม่ลบข้อมูลของคนก่อน
+    """
+    ticket = find_ticket_by_no(db, ticket_no)
+    if ticket.status not in OPEN_TICKET_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "TICKET_NOT_OPEN",
+                "message": (
+                    f"Ticket {ticket.ticket_id} ปิดงานแล้ว (สถานะ: "
+                    f"{PUBLIC_STATUS_LABELS.get(ticket.status, ticket.status)}) — "
+                    "ถ้าอุปกรณ์ยังมีปัญหา กรุณาแจ้งซ่อมใหม่"
+                ),
+                "status": ticket.status,
+                "status_label": PUBLIC_STATUS_LABELS.get(ticket.status, ticket.status),
+            },
+        )
+
+    note = payload.note.strip()
+    name = payload.reporter_name.strip()
+    if not note or not name:
+        raise HTTPException(
+            status_code=422,
+            detail="กรุณาระบุชื่อผู้แจ้งและรายละเอียดที่ต้องการแจ้งเพิ่ม",
+        )
+    phone = (payload.reporter_phone or "").strip()
+    suffix = f" (แนบรูป {len(payload.attachments)} รูป)" if payload.attachments else ""
+
+    db.add(TicketUpdate(
+        ticket=ticket,
+        from_status=ticket.status,
+        to_status=ticket.status,
+        note=f"[แจ้งเพิ่มจากผู้ใช้] {note}{suffix}",
+        author_name=f"{name} ({phone})" if phone else name,
+        author_role="reporter",
+    ))
+
+    # รูปที่แนบเพิ่ม ต่อท้ายรายการเดิม ไม่เขียนทับของที่ผู้แจ้งคนแรกส่งมา
+    if payload.attachments:
+        try:
+            current = json.loads(ticket.attachments) if ticket.attachments else []
+        except (ValueError, TypeError):
+            current = []
+        if not isinstance(current, list):
+            current = []
+        ticket.attachments = json.dumps(
+            current + list(payload.attachments), ensure_ascii=False
+        )
+
+    db.commit()
+    db.refresh(ticket)
+
+    event = _ticket_event_payload(ticket)
+    event["note"] = note
+    event["author_name"] = name
+    _notify_n8n("ticket.note_added", event)
+
+    return {
+        "ticket_no": ticket.ticket_id,
+        "status": ticket.status,
+        "status_label": PUBLIC_STATUS_LABELS.get(ticket.status, ticket.status),
+        "message": f"บันทึกข้อมูลเพิ่มเข้า Ticket {ticket.ticket_id} เรียบร้อยแล้ว",
+    }
 
 
 @app.get("/api/devices", response_model=list[DeviceInfo])
@@ -1391,6 +2313,7 @@ def list_devices(
             organization_code=org.code,
             organization_name=org.name,
             organization_id=device.organization_id,
+            purchase_date=device.purchase_date,
             warranty_until=device.warranty_until,
             notes=device.notes,
         ))
@@ -1422,6 +2345,8 @@ def create_device(payload: DeviceCreate, request: Request, db: Session = Depends
     device_id = payload.device_id
     if not device_id:
         device_id = generate_device_id(db, org, room, payload.device_type)
+    else:
+        device_id = _normalize_manual_device_id(db, org, device_id)
     exists = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=400, detail="device_id ซ้ำ")
@@ -1441,6 +2366,7 @@ def create_device(payload: DeviceCreate, request: Request, db: Session = Depends
         status=payload.status,
         qr_token=qr_token,
         notes=payload.notes,
+        purchase_date=payload.purchase_date,
         warranty_until=payload.warranty_until,
     )
     db.add(device)
@@ -1482,6 +2408,7 @@ def create_device(payload: DeviceCreate, request: Request, db: Session = Depends
         organization_code=org.code,
         organization_name=org.name,
         organization_id=device.organization_id,
+        purchase_date=device.purchase_date,
         warranty_until=device.warranty_until,
         notes=device.notes,
     )
@@ -1538,6 +2465,7 @@ def update_device(device_id: str, payload: DeviceUpdate, request: Request, db: S
         gps_lng=float(room.gps_lng) if room and room.gps_lng is not None else None,
         organization_code=org.code if org else "",
         organization_name=org.name if org else "",
+        purchase_date=device.purchase_date,
         warranty_until=device.warranty_until,
         notes=device.notes,
     )
@@ -1602,6 +2530,7 @@ def list_users(db: Session = Depends(get_db), user: User = Depends(require_roles
 
 @app.post("/api/users", response_model=UserOut, status_code=201)
 def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+    validate_assignable_role(payload.role)
     exists = db.execute(select(User).where(User.line_user_id == payload.line_user_id)).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=400, detail="line_user_id ซ้ำ")
@@ -1610,8 +2539,8 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
     if payload.role == "owner" and user.role != "owner":
         raise HTTPException(status_code=403, detail="มีเพียง Owner เท่านั้นที่กำหนดบทบาท Owner ได้")
     if user.role == "admin_school":
-        # admin_school: สร้างได้เฉพาะ teacher / student / it_support และในรรตัวเองเท่านั้น
-        if payload.role not in ("teacher", "student", "it_support"):
+        # admin_school: สร้างได้เฉพาะเจ้าหน้าที่ IT และในรรตัวเองเท่านั้น
+        if payload.role not in SCHOOL_ADMIN_ASSIGNABLE_ROLES:
             raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนไม่สามารถสร้างบทบาทนี้ได้ (ได้แค่ ครู/นักเรียน/เจ้าหน้าที่ IT)")
         if payload.organization_id != user.organization_id:
             raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนสร้างผู้ใช้ได้เฉพาะในโรงเรียนของตนเองเท่านั้น")
@@ -1701,12 +2630,27 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     # admin_school ไม่สามารถเปลี่ยนบทบาทตัวเอง/ผู้อื่นเป็นบทบาทระดับบริษัท และไม่สามารถย้ายคนข้ามรร
     if user.role == "admin_school":
         new_role = data.get("role", target.role)
-        if new_role not in ("teacher", "student", "it_support"):
+        if new_role not in SCHOOL_ADMIN_ASSIGNABLE_ROLES:
             raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนไม่สามารถกำหนดบทบาทนี้ได้ (ได้แค่ ครู/นักเรียน/เจ้าหน้าที่ IT)")
         if "organization_id" in data and data["organization_id"] not in (user.organization_id, None):
             raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนไม่สามารถย้ายผู้ใช้ข้ามโรงเรียนได้")
 
+    if "role" in data:
+        validate_assignable_role(data["role"])
+
     password = data.pop("password", None)
+    # username → line_user_id (ต้องไม่ซ้ำกับบัญชีอื่น)
+    new_username = data.pop("username", None)
+    if new_username:
+        new_username = new_username.strip()
+        if new_username != target.line_user_id:
+            dup = db.execute(
+                select(User).where(User.line_user_id == new_username, User.id != target.id)
+            ).scalar_one_or_none()
+            if dup:
+                raise HTTPException(status_code=409, detail="ชื่อผู้ใช้นี้ถูกใช้แล้ว")
+            target.line_user_id = new_username
+
     # §40: เปลี่ยนบทบาท/สถานะ/สังกัด ต้องบันทึก — รหัสผ่านบันทึกเพียงว่ามีการเปลี่ยน
     audited_fields = {k: v for k, v in data.items()
                       if k in ("role", "is_active", "organization_id")}
@@ -1740,6 +2684,203 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
 
 
 # ─── Auth (Login จริง) ──────────────────────────────────────────────
+# ─── สมัครสมาชิก (Membership) ───────────────────────────────────────────────
+# ผู้สมัครกรอกฟอร์มสาธารณะ → บันทึกเป็นคำขอสถานะ pending (ยังเข้าระบบไม่ได้)
+# ผู้ดูแลอนุมัติจึงสร้างแถวใน users — ทุกคำขอถูกส่งไปต่อท้าย Google Sheet ด้วย
+MEMBERSHIP_REVIEW_ROLES: tuple[str, ...] = ("owner", "super_admin", "admin", "admin_school")
+
+#: บทบาทที่ผู้สมัครทางหน้าสาธารณะได้รับได้ — ห้ามสมัครเป็นผู้ดูแลด้วยตัวเอง
+PUBLIC_SIGNUP_ROLE = "it_support"
+
+
+@app.post("/api/public/register", status_code=201)
+@limiter.limit("5/hour")
+def public_register(request: Request, payload: MembershipApplyIn, db: Session = Depends(get_db)):
+    """รับคำขอสมัครสมาชิก (ไม่ต้อง login) — ยังไม่สร้างบัญชีจนกว่าจะได้รับอนุมัติ"""
+    username = payload.username.strip()
+    # ใช้ข้อความเดียวกันทั้งกรณีชื่อถูกใช้แล้วและกรณีมีคำขอค้าง เพื่อไม่บอกใบ้ว่ามีบัญชีนี้อยู่
+    taken = db.execute(
+        select(User.id).where(User.line_user_id == username)
+    ).scalar_one_or_none()
+    if taken is None:
+        taken = db.execute(
+            select(MembershipApplication.id).where(
+                MembershipApplication.username == username,
+                MembershipApplication.status == MEMBERSHIP_PENDING,
+            )
+        ).scalar_one_or_none()
+    if taken is not None:
+        raise HTTPException(status_code=409, detail="ชื่อผู้ใช้นี้ใช้ไม่ได้ กรุณาเลือกชื่ออื่น")
+
+    org_code = (payload.organization_code or "").strip() or None
+    org = None
+    if org_code:
+        org = db.execute(
+            select(Organization).where(Organization.code == org_code)
+        ).scalar_one_or_none()
+        if not org:
+            raise HTTPException(status_code=404, detail="ไม่พบรหัสหน่วยงาน: %s" % org_code)
+
+    row = MembershipApplication(
+        username=username,
+        full_name=payload.full_name.strip(),
+        email=(payload.email or "").strip() or None,
+        phone=(payload.phone or "").strip() or None,
+        organization_id=org.id if org else None,
+        organization_code=org.code if org else org_code,
+        requested_role=PUBLIC_SIGNUP_ROLE,
+        password_hash=hash_password(payload.password),
+        note=payload.note,
+        status=MEMBERSHIP_PENDING,
+    )
+    db.add(row)
+    db.flush()  # ต้องได้ id ก่อน เพื่อใช้ใน audit log และแถวของ Google Sheet
+    write_audit(
+        db, action="membership_apply", user=None,
+        entity_type="membership_application", entity_id=str(row.id),
+        new_value={"username": username, "organization_code": row.organization_code,
+                   "requested_role": row.requested_role},
+        request=request,
+    )
+    db.commit()
+    db.refresh(row)
+
+    # Sheet เป็นช่องทางรายงานสำรอง — ส่งไม่ผ่านต้องไม่ทำให้การสมัครล้มเหลว
+    if google_sheets.append_membership_row(row):
+        row.sheet_synced_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(row)
+
+    return {
+        "id": row.id,
+        "status": row.status,
+        "sheet_synced": row.sheet_synced_at is not None,
+        "message": "ส่งคำขอสมัครสมาชิกแล้ว รอผู้ดูแลระบบอนุมัติ",
+    }
+
+
+@app.get("/api/registrations", response_model=list[MembershipApplicationOut])
+def list_registrations(
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*MEMBERSHIP_REVIEW_ROLES)),
+):
+    """รายการคำขอสมัครสมาชิก — admin_school เห็นเฉพาะคำขอของโรงเรียนตัวเอง"""
+    stmt = select(MembershipApplication).order_by(MembershipApplication.created_at.desc())
+    if status:
+        stmt = stmt.where(MembershipApplication.status == status)
+    scope = visible_org_ids(user)
+    if scope is not None:
+        stmt = stmt.where(MembershipApplication.organization_id.in_(sorted(scope)))
+    rows = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
+    return [MembershipApplicationOut.model_validate(r) for r in rows]
+
+
+@app.post("/api/registrations/{application_id}/approve", status_code=201)
+def approve_registration(
+    application_id: int,
+    payload: MembershipDecisionIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*MEMBERSHIP_REVIEW_ROLES)),
+):
+    """อนุมัติคำขอ → สร้างบัญชีผู้ใช้จริงด้วยรหัสผ่านที่ผู้สมัครตั้งไว้"""
+    row = db.get(MembershipApplication, application_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="ไม่พบคำขอสมัครสมาชิก")
+    if row.status != MEMBERSHIP_PENDING:
+        raise HTTPException(status_code=409, detail="คำขอนี้ถูกดำเนินการแล้ว (สถานะ %s)" % row.status)
+    check_org_access(user, row.organization_id)
+
+    org_id = payload.organization_id or row.organization_id
+    if org_id is None and user.role == "admin_school":
+        org_id = user.organization_id
+    if org_id is not None and not db.get(Organization, org_id):
+        raise HTTPException(status_code=404, detail="ไม่พบหน่วยงานที่ระบุ")
+    check_org_access(user, org_id)
+
+    role = payload.role or row.requested_role or PUBLIC_SIGNUP_ROLE
+    validate_assignable_role(role)
+    if user.role == "admin_school" and role not in SCHOOL_ADMIN_ASSIGNABLE_ROLES:
+        raise HTTPException(status_code=403, detail="ผู้ดูแลโรงเรียนกำหนดบทบาทนี้ให้ผู้ใช้ไม่ได้")
+
+    if db.execute(select(User.id).where(User.line_user_id == row.username)).scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="มีผู้ใช้ชื่อนี้ในระบบแล้ว")
+
+    new_user = User(
+        line_user_id=row.username,
+        line_display_name=row.full_name,
+        line_email=row.email,
+        organization_id=org_id,
+        role=role,
+        is_active=True,
+        password_hash=row.password_hash,  # ย้าย hash เดิม ไม่เคยมีรหัสผ่านดิบให้ย้าย
+    )
+    db.add(new_user)
+    db.flush()
+
+    row.status = MEMBERSHIP_APPROVED
+    row.reviewed_by = user.id
+    row.reviewed_at = datetime.now(timezone.utc)
+    row.created_user_id = new_user.id
+    write_audit(
+        db, action="membership_approve", user=user,
+        entity_type="membership_application", entity_id=str(row.id),
+        old_value={"status": MEMBERSHIP_PENDING},
+        new_value={"status": row.status, "user_id": new_user.id, "username": row.username,
+                   "role": role, "organization_id": org_id},
+        request=request,
+    )
+    db.commit()
+    return {
+        "application_id": row.id,
+        "status": row.status,
+        "user": {
+            "id": new_user.id,
+            "username": new_user.line_user_id,
+            "line_display_name": new_user.line_display_name,
+            "role": new_user.role,
+            "organization_id": new_user.organization_id,
+            "is_active": new_user.is_active,
+        },
+    }
+
+
+@app.post("/api/registrations/{application_id}/reject", response_model=MembershipApplicationOut)
+def reject_registration(
+    application_id: int,
+    payload: MembershipDecisionIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*MEMBERSHIP_REVIEW_ROLES)),
+):
+    """ปฏิเสธคำขอ — เก็บเหตุผลไว้ตรวจย้อนหลัง ไม่ลบแถวคำขอ"""
+    row = db.get(MembershipApplication, application_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="ไม่พบคำขอสมัครสมาชิก")
+    if row.status != MEMBERSHIP_PENDING:
+        raise HTTPException(status_code=409, detail="คำขอนี้ถูกดำเนินการแล้ว (สถานะ %s)" % row.status)
+    check_org_access(user, row.organization_id)
+
+    row.status = MEMBERSHIP_REJECTED
+    row.reject_reason = (payload.reason or "").strip() or None
+    row.reviewed_by = user.id
+    row.reviewed_at = datetime.now(timezone.utc)
+    write_audit(
+        db, action="membership_reject", user=user,
+        entity_type="membership_application", entity_id=str(row.id),
+        old_value={"status": MEMBERSHIP_PENDING},
+        new_value={"status": row.status, "username": row.username,
+                   "reason": row.reject_reason},
+        request=request,
+    )
+    db.commit()
+    db.refresh(row)
+    return MembershipApplicationOut.model_validate(row)
+
+
 @app.post("/api/auth/login")
 @limiter.limit("10/minute")
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
@@ -1767,6 +2908,23 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         )
         db.commit()
         raise HTTPException(status_code=403, detail="บัญชีถูกปิดใช้งาน")
+
+    if user.role in RETIRED_ROLES:
+        # §40: บัญชีบทบาทที่ยกเลิกแล้วพยายามเข้าระบบ — บันทึกไว้ตรวจสอบ
+        write_audit(
+            db, action="login_failed", user=user, entity_type="user", entity_id=user.id,
+            new_value={"username": payload.username[:128],
+                       "reason": "retired_role", "role": user.role},
+            request=request,
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "บทบาท ครู/นักเรียน ถูกยกเลิกแล้ว — บัญชีนี้เข้าระบบไม่ได้ "
+                "กรุณาแจ้งซ่อมผ่านหน้าแจ้งซ่อม หรือสแกน QR ที่ตัวเครื่อง"
+            ),
+        )
 
     user.last_login_at = datetime.now(timezone.utc)
     write_audit(
@@ -1840,6 +2998,18 @@ def update_my_profile(
     data.pop("role", None)
     data.pop("is_active", None)
     data.pop("organization_id", None)
+
+    # เปลี่ยนชื่อผู้ใช้ที่ใช้ login ได้ แต่ต้องไม่ซ้ำกับบัญชีอื่น
+    new_username = data.pop("username", None)
+    if new_username:
+        new_username = new_username.strip()
+        if new_username != user.line_user_id:
+            dup = db.execute(
+                select(User).where(User.line_user_id == new_username, User.id != user.id)
+            ).scalar_one_or_none()
+            if dup:
+                raise HTTPException(status_code=409, detail="ชื่อผู้ใช้นี้ถูกใช้แล้ว")
+            user.line_user_id = new_username
     password = data.pop("password", None)
     if password:
         user.password_hash = hash_password(password)
@@ -2095,6 +3265,8 @@ def get_org_stats(org_id: int, db: Session = Depends(get_db), user: Optional[Use
 
 @app.get("/api/tickets", response_model=list[TicketOut])
 def list_tickets(
+    device_type: Optional[str] = Query(None),
+    device_category: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     priority: Optional[str] = Query(None),
     device_id: Optional[str] = Query(None),
@@ -2104,10 +3276,14 @@ def list_tickets(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # ดึง device_type มาด้วย — หน้าเว็บใช้แสดงและใช้เป็นตัวกรองประเภทอุปกรณ์
     stmt = (
-        select(RepairTicket)
+        select(RepairTicket, Device, Organization)
         .join(Device, Device.device_id == RepairTicket.device_id)
-        .order_by(RepairTicket.created_at.desc())
+        .join(Organization, Organization.id == Device.organization_id)
+        # room ถูกใช้ประกอบชื่ออุปกรณ์ (device_display_label) - preload กัน N+1
+        .options(selectinload(Device.room))
+        .order_by(RepairTicket.created_at.desc(), RepairTicket.ticket_id.desc())
     )
     if status:
         stmt = stmt.where(RepairTicket.status == status)
@@ -2115,6 +3291,13 @@ def list_tickets(
         stmt = stmt.where(RepairTicket.priority == priority)
     if device_id:
         stmt = stmt.where(RepairTicket.device_id == device_id)
+    if device_type:
+        stmt = stmt.where(Device.device_type == device_type)
+    if device_category:
+        types = DEVICE_CATEGORY_TYPES.get(device_category)
+        if not types:
+            return []  # หมวดที่ไม่รู้จัก → ไม่เดา คืนว่าง
+        stmt = stmt.where(Device.device_type.in_(types))
     if organization_id:
         stmt = stmt.where(Device.organization_id == organization_id)
     # ─── Role-based visibility: admin_school/it_support(มีสังกัด)/teacher/student เห็นเฉพาะรรตัวเอง ──
@@ -2126,14 +3309,24 @@ def list_tickets(
             stmt = stmt.where(Device.organization_id.in_(scope))
     stmt = stmt.offset(offset).limit(limit)
 
-    rows = db.execute(stmt).scalars().all()
+    rows = db.execute(stmt).all()
     result: list[TicketOut] = []
-    for t in rows:
+    for t, device, org in rows:
         result.append(TicketOut(
             id=t.id,
             ticket_id=t.ticket_id,
             device_id=t.device_id,
             title=t.title,
+            # เดิมใส่ device_type จากพารามิเตอร์ตัวกรอง - ถ้าไม่ได้กรอง ทุกใบจะเป็น None
+            # หน้าเว็บจึงสร้างตัวกรองประเภท/หมวดหมู่จากข้อมูลจริงไม่ได้
+            device_type=device.device_type if device else None,
+            device_category=device_category_of(
+                device.device_type if device else None
+            ),
+            device_label=device_display_label(device),
+            organization_id=org.id if org else None,
+            organization_code=org.code if org else None,
+            organization_name=(org.short_name or org.name) if org else None,
             description=t.description,
             reporter_name=t.reporter_name,
             reporter_email=t.reporter_email,
@@ -2181,6 +3374,24 @@ def get_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depen
     check_ticket_access(db, user, ticket)
 
     out = TicketOut(
+        # เดิม get_ticket ไม่ส่ง device_type ทั้งที่ list_tickets ส่ง — หน้ารายละเอียด
+        # จึงแสดงหมวดหมู่/ชื่ออุปกรณ์ไม่ได้
+        device_type=ticket.device.device_type if ticket.device else None,
+        device_category=device_category_of(
+            ticket.device.device_type if ticket.device else None
+        ),
+        device_label=device_display_label(ticket.device),
+        organization_id=ticket.device.organization_id if ticket.device else None,
+        organization_code=(
+            ticket.device.organization.code
+            if ticket.device and ticket.device.organization
+            else None
+        ),
+        organization_name=(
+            (ticket.device.organization.short_name or ticket.device.organization.name)
+            if ticket.device and ticket.device.organization
+            else None
+        ),
         id=ticket.id,
         ticket_id=ticket.ticket_id,
         device_id=ticket.device_id,
@@ -2215,6 +3426,10 @@ def get_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depen
     )
     out_dict = out.model_dump()
     out_dict["device_info"] = {
+        "device_category": device_category_of(
+            ticket.device.device_type if ticket.device else None
+        ),
+        "device_label": device_display_label(ticket.device),
         "device_id": ticket.device.device_id if ticket.device else None,
         "device_type": ticket.device.device_type if ticket.device else None,
         "brand": ticket.device.brand if ticket.device else None,
@@ -2484,6 +3699,7 @@ from fastapi import File, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from app.storage import (
+    MAX_UPLOAD_BYTES,
     UPLOAD_DIR,  # noqa: F401 — คงชื่อไว้ให้โค้ด/สคริปต์เดิมที่อ้าง main.UPLOAD_DIR
     is_inline_viewable,
     is_servable_upload_name,
@@ -2491,8 +3707,22 @@ from app.storage import (
     mime_for_name,
     read_cloud_upload,
     save_upload,
+    sniff_ext,
     verify_upload_signature,
 )
+
+
+async def _store_upload(file: UploadFile, *, public: bool = False) -> dict:
+    """Read and validate an upload with a bounded request body."""
+    public_limit = 5 * 1024 * 1024
+    max_bytes = public_limit if public else MAX_UPLOAD_BYTES
+    content = await file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        limit_mb = 5 if public else max(1, MAX_UPLOAD_BYTES // (1024 * 1024))
+        raise HTTPException(status_code=413, detail=f"ไฟล์เกิน {limit_mb} MB")
+    if public and sniff_ext(content) not in {".jpg", ".png", ".webp", ".gif", ".heic"}:
+        raise HTTPException(status_code=415, detail="แบบฟอร์มสาธารณะรับเฉพาะไฟล์รูปภาพ")
+    return save_upload(content, file.filename or "image.jpg", file.content_type)
 
 
 @app.post("/api/uploads", status_code=201)
@@ -2508,8 +3738,14 @@ async def upload_file(
     โหมด local: เขียน disk แล้วเสิร์ฟผ่าน GET /uploads/{name}
     ต้องล็อกอินก่อนอัปโหลด เพื่อกันการใช้พื้นที่เก็บไฟล์เป็นช่องทาง public upload
     """
-    content = await file.read()
-    return save_upload(content, file.filename or "image.jpg", file.content_type)
+    return await _store_upload(file)
+
+
+@app.post("/api/public/uploads", status_code=201)
+@limiter.limit("5/hour")
+async def upload_public_image(request: Request, file: UploadFile = File(...)):
+    """รับรูปประกอบคำร้องสาธารณะโดยไม่ต้องมีบัญชี จำกัดขนาดและจำนวนตาม IP."""
+    return await _store_upload(file, public=True)
 
 
 @app.get("/uploads/{name}")
@@ -3216,6 +4452,16 @@ class PMPlanCreate(BaseModel):
     is_active: bool = True
 
 
+class PMPlanUpdate(BaseModel):
+    """แก้ไขแผน PM — ส่งมาเฉพาะฟิลด์ที่ต้องการเปลี่ยน (exclude_unset)"""
+
+    name: Optional[str] = Field(None, min_length=3, max_length=255)
+    device_type: Optional[str] = None
+    interval_days: Optional[int] = Field(None, ge=1, le=3650)
+    checklist: Optional[list] = None
+    is_active: Optional[bool] = None
+
+
 def _pm_plan_out(p: PMPlan) -> dict:
     return {
         "id": p.id,
@@ -3263,10 +4509,96 @@ def create_pm_plan(
     return _pm_plan_out(plan)
 
 
+@app.put("/api/pm/plans/{plan_id}")
+def update_pm_plan(
+    plan_id: int,
+    payload: PMPlanUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin")),
+):
+    """แก้ไขแผน PM — admin ขึ้นไป (เดิมมีแค่ GET/POST จึงแก้ไม่ได้เลย)"""
+    plan = db.get(PMPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="ไม่พบแผน PM นี้")
+
+    before = _pm_plan_out(plan)
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        return before
+
+    if data.get("name") is not None:
+        plan.name = data["name"].strip()
+    if "device_type" in data:
+        # ส่ง "" หรือ null = แผนนี้ใช้กับอุปกรณ์ทุกชนิด
+        plan.device_type = (data["device_type"] or None)
+    if data.get("interval_days") is not None:
+        plan.interval_days = data["interval_days"]
+    if "checklist" in data:
+        plan.checklist = json.dumps(data["checklist"] or [], ensure_ascii=False)
+    if data.get("is_active") is not None:
+        plan.is_active = data["is_active"]
+
+    db.flush()
+    write_audit(
+        db, action="pm_plan_update", user=user, entity_type="pm_plan",
+        entity_id=plan.id, old_value=before, new_value=_pm_plan_out(plan), request=request,
+    )
+    db.commit()
+    db.refresh(plan)
+    return _pm_plan_out(plan)
+
+
+@app.delete("/api/pm/plans/{plan_id}")
+def delete_pm_plan(
+    plan_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin")),
+):
+    """ลบแผน PM — admin ขึ้นไป
+
+    ถ้ายังมีงาน PM ค้าง (pending/overdue) ตอบ 409 พร้อมจำนวน เพื่อไม่ให้งานที่
+    เจ้าหน้าที่กำลังถืออยู่หลุดหายไปเงียบ ๆ — ให้ปิดใช้งานแผน (is_active=false) แทน
+    ประวัติงานที่ทำเสร็จ/ข้ามแล้วยังเก็บไว้ (pm_tasks.plan_id เป็น SET NULL)
+    """
+    plan = db.get(PMPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="ไม่พบแผน PM นี้")
+
+    open_tasks = (
+        db.query(PMTask)
+        .filter(PMTask.plan_id == plan_id, PMTask.status.in_(("pending", "overdue")))
+        .count()
+    )
+    if open_tasks:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PM_PLAN_HAS_OPEN_TASKS",
+                "message": (
+                    f"ลบไม่ได้ — แผนนี้ยังมีงานค้างอยู่ {open_tasks} งาน "
+                    "กรุณาปิดงานให้เสร็จ หรือปิดใช้งานแผนแทนการลบ"
+                ),
+                "open_tasks": open_tasks,
+            },
+        )
+
+    kept_history = db.query(PMTask).filter(PMTask.plan_id == plan_id).count()
+    write_audit(
+        db, action="pm_plan_delete", user=user, entity_type="pm_plan",
+        entity_id=plan.id, old_value=_pm_plan_out(plan), request=request,
+    )
+    db.delete(plan)
+    db.commit()
+    return {"deleted": True, "id": plan_id, "history_tasks_kept": kept_history}
+
+
 def _gen_pm_task_no(db: Session) -> str:
     """PM-YYYYMM-NNNN — ใช้ MAX(ลำดับ)+1 กันเลขซ้ำหลังลบงาน"""
     now = datetime.now(timezone.utc)
     prefix = f"PM-{now.year}{now.month:02d}-"
+    _lock_generated_id_prefix(db, prefix)
     row = db.execute(
         text("SELECT MAX(CAST(SUBSTRING(task_no FROM 'PM-\\d{6}-(\\d{4})') AS INTEGER)) "
              "FROM pm_tasks WHERE task_no LIKE :p"),
@@ -3432,7 +4764,10 @@ def pm_submit(
     task = db.get(PMTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"ไม่พบงาน PM รหัส {task_id}")
-    if task.status in ("done", "skipped"):
+    # งานที่ปิดแล้ว (done/skipped) แก้ย้อนหลังได้เฉพาะผู้ดูแลระดับสูง
+    # — บันทึก audit เป็น action "pm_task_edit" แยกจากการบันทึกครั้งแรก
+    is_reopen = task.status in ("done", "skipped")
+    if is_reopen and user.role not in PM_TASK_OVERRIDE_ROLES:
         raise HTTPException(status_code=409, detail=f"งาน PM นี้ปิดแล้ว (สถานะ {task.status})")
 
     now = datetime.now(timezone.utc)
@@ -3452,7 +4787,8 @@ def pm_submit(
         if isinstance(r, dict) and r.get("value") in (False, "false", "fail", "ไม่ผ่าน")
     ]
     auto_ticket = None
-    if failed and task.device_id:
+    auto_ticket_existing = False
+    if failed and task.device_id and not task.ticket_id:
         dev = db.execute(
             select(Device).where(Device.device_id == task.device_id)
         ).scalar_one_or_none()
@@ -3460,26 +4796,44 @@ def pm_submit(
             notes = " | ".join(
                 str(r.get("item") or r.get("note") or "") for r in failed
             ).strip(" |")
-            ticket = RepairTicket(
-                ticket_id=generate_ticket_id(db, dev.organization_id),
-                organization_id=dev.organization_id,
-                device_id=dev.device_id,
-                title=f"PM พบปัญหา: {notes or task.task_no}"[:255],
-                description=f"งาน PM {task.task_no} ตรวจพบรายการไม่ผ่าน: {notes or '-'}",
-                priority=Priority.NORMAL,
-                status=TicketStatus.NEW,
-                channel="pm",
-                reporter_name=task.done_by,
-                reporter_type="technician",
-                sla_due_at=calc_sla_due(now, Priority.NORMAL),
-            )
-            db.add(ticket)
-            db.flush()
-            task.ticket_id = ticket.ticket_id
-            auto_ticket = ticket.ticket_id
+            # ─── กันแจ้งซ้ำ: อุปกรณ์มีใบงานค้างอยู่แล้ว → ไม่เปิดใบที่สองของเรื่องเดิม ──
+            # บันทึกรายการที่ตรวจไม่ผ่านเข้าใบเดิมเป็น ticket_updates แล้วผูกงาน PM
+            # กับใบนั้น ช่างจะเห็นทั้งเรื่องที่ผู้ใช้แจ้งและผลตรวจ PM ในใบเดียว
+            existing_open = find_open_ticket(db, dev.device_id)
+            if existing_open is not None:
+                db.add(TicketUpdate(
+                    ticket=existing_open,
+                    from_status=existing_open.status,
+                    to_status=existing_open.status,
+                    note=f"[ผลตรวจ PM {task.task_no}] รายการไม่ผ่าน: {notes or '-'}",
+                    author_name=(task.done_by or "ช่าง PM")[:128],
+                    author_role="technician",
+                ))
+                task.ticket_id = existing_open.ticket_id
+                auto_ticket = existing_open.ticket_id
+                auto_ticket_existing = True
+            else:
+                ticket = RepairTicket(
+                    ticket_id=generate_ticket_id(db, dev.organization_id),
+                    organization_id=dev.organization_id,
+                    device_id=dev.device_id,
+                    title=f"PM พบปัญหา: {notes or task.task_no}"[:255],
+                    description=f"งาน PM {task.task_no} ตรวจพบรายการไม่ผ่าน: {notes or '-'}",
+                    priority=Priority.NORMAL,
+                    status=TicketStatus.NEW,
+                    channel="pm",
+                    reporter_name=task.done_by,
+                    reporter_type="technician",
+                    sla_due_at=calc_sla_due(now, Priority.NORMAL),
+                )
+                db.add(ticket)
+                db.flush()
+                task.ticket_id = ticket.ticket_id
+                auto_ticket = ticket.ticket_id
 
     write_audit(
-        db, action="pm_task_submit", user=user, entity_type="pm_task",
+        db, action="pm_task_edit" if is_reopen else "pm_task_submit", user=user,
+        entity_type="pm_task",
         entity_id=task.task_no,
         old_value={"status": old_status},
         new_value={"status": "done", "failed_items": len(failed), "auto_ticket": auto_ticket},
@@ -3494,6 +4848,8 @@ def pm_submit(
         "next_due": task.next_due,
         "failed_items": len(failed),
         "auto_ticket_id": auto_ticket,
+        # True = ผูกกับใบงานที่ค้างอยู่เดิม ไม่ได้เปิดใบใหม่ (กันแจ้งซ้ำ)
+        "auto_ticket_is_existing": auto_ticket_existing,
     }
 
 
@@ -3509,7 +4865,10 @@ def pm_skip(
     task = db.get(PMTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"ไม่พบงาน PM รหัส {task_id}")
-    if task.status in ("done", "skipped"):
+    # งานที่ปิดแล้ว (done/skipped) แก้ย้อนหลังได้เฉพาะผู้ดูแลระดับสูง
+    # — บันทึก audit เป็น action "pm_task_edit" แยกจากการบันทึกครั้งแรก
+    is_reopen = task.status in ("done", "skipped")
+    if is_reopen and user.role not in PM_TASK_OVERRIDE_ROLES:
         raise HTTPException(status_code=409, detail=f"งาน PM นี้ปิดแล้ว (สถานะ {task.status})")
 
     old_status = task.status
@@ -3518,7 +4877,8 @@ def pm_skip(
     task.done_by = getattr(user, "full_name", None) or getattr(user, "username", None)
     task.done_at = datetime.now(timezone.utc)
     write_audit(
-        db, action="pm_task_skip", user=user, entity_type="pm_task",
+        db, action="pm_task_edit" if is_reopen else "pm_task_skip", user=user,
+        entity_type="pm_task",
         entity_id=task.task_no,
         old_value={"status": old_status},
         new_value={"status": "skipped", "reason": payload.reason},
@@ -3658,12 +5018,33 @@ def update_health_flag(
 
 # ─── Audit Log (Blueprint §40) ────────────────────────────────────────
 
+def _parse_audit_date(raw: Optional[str], field: str) -> Optional[datetime]:
+    """แปลง "YYYY-MM-DD" (หรือ ISO เต็ม) เป็น datetime UTC; ค่าว่างได้ None
+
+    รับ ISO ที่ลงท้าย "Z" ด้วย เพราะ <input type="date"> ส่งมาแค่วันที่ แต่การเรียก
+    จากสคริปต์/Postman มักส่งเวลามาเต็ม — ถ้าไม่มี tzinfo ให้ถือเป็น UTC
+    """
+    value = (raw or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field} ต้องเป็นวันที่รูปแบบ YYYY-MM-DD",
+        )
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 @app.get("/api/audit-logs")
 def list_audit_logs(
     action: Optional[str] = Query(None),
     entity_type: Optional[str] = Query(None),
     entity_id: Optional[str] = Query(None),
     user_id: Optional[int] = Query(None),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD (รวมวันนั้น)"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD (รวมวันนั้นทั้งวัน)"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -3679,6 +5060,17 @@ def list_audit_logs(
         stmt = stmt.where(AuditLog.entity_id == str(entity_id))
     if user_id:
         stmt = stmt.where(AuditLog.user_id == user_id)
+    dt_from = _parse_audit_date(date_from, "date_from")
+    dt_to = _parse_audit_date(date_to, "date_to")
+    if dt_from and dt_to and dt_to < dt_from:
+        raise HTTPException(status_code=422, detail="date_to ต้องไม่น้อยกว่า date_from")
+    if dt_from:
+        stmt = stmt.where(AuditLog.created_at >= dt_from)
+    if dt_to:
+        # ถ้าส่งมาแค่วันที่ (เวลา 00:00) ให้ครอบทั้งวันโดยบวก 1 วันแล้วใช้ <
+        # ไม่อย่างนั้น 'ถึงวันนี้' จะได้ 0 แถว เพราะทุก log มีเวลามากกว่า 00:00
+        end = dt_to + timedelta(days=1) if dt_to.time() == datetime.min.time() else dt_to
+        stmt = stmt.where(AuditLog.created_at < end)
     rows = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
     return [
         {
@@ -3702,9 +5094,21 @@ def list_audit_logs(
 # ─── QR Service (TOR 1.5.4 / 5.3) ─────────────────────────────────────
 
 @app.get("/api/qr/resolve/{token}")
-def qr_resolve(token: str, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def qr_resolve(request: Request, token: str, db: Session = Depends(get_db)):
     """แปลง QR token → ข้อมูลอุปกรณ์ (ไม่ต้อง login, มี rate limit ตาม spec)"""
-    device = db.execute(select(Device).where(Device.qr_token == token)).scalar_one_or_none()
+    code = (token or "").strip()
+    device = (
+        db.execute(select(Device).where(Device.qr_token == code)).scalar_one_or_none()
+        if code
+        else None
+    )
+    if not device and code:
+        device = db.execute(
+            select(Device).where(Device.device_id == code)
+        ).scalar_one_or_none() or db.execute(
+            select(Device).where(Device.device_id == code.upper())
+        ).scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์ที่ตรงกับ QR Code นี้")
     room = db.get(Room, device.room_id) if device.room_id else None
@@ -3723,7 +5127,16 @@ def qr_resolve(token: str, db: Session = Depends(get_db)):
         "room": {"name": room.name if room else None, "code": room.code if room else None,
                  "building": room.building if room else None},
         "organization": {"code": org.code if org else None, "name": org.name if org else None},
-        "qr_url": f"/scan?t={token}",
+        # สแกนแล้วรู้ทันทีว่าอุปกรณ์นี้ถูกแจ้งไว้แล้วหรือยัง — ผู้แจ้งไม่ต้องกรอกฟอร์มทิ้ง
+        # ชื่อ/หมวดอุปกรณ์แบบอ่านรู้เรื่อง — หน้าแจ้งซ่อมและหน้าสแกนแสดงคู่กับรหัส
+        "device_category": device_category_of(device.device_type),
+        "device_label": device_display_label(device),
+        **open_ticket_fields(db, device.device_id),
+        "qr_url": (
+            f"/scan?t={device.qr_token}"
+            if device.qr_token
+            else f"/scan?device={device.device_id}"
+        ),
     }
 
 
@@ -3743,22 +5156,41 @@ def qr_rotate(device_id: str, db: Session = Depends(get_db), user: User = Depend
 
 
 @app.get("/api/qr/lookup")
-def qr_lookup(q: str = Query(..., min_length=2), limit: int = Query(10, ge=1, le=50), db: Session = Depends(get_db)):
-    """ช่องทางสำรอง QR ชำรุด — ค้นหาด้วยรหัสอุปกรณ์ (รองรับบางส่วน)"""
+@limiter.limit("30/minute")
+def qr_lookup(
+    request: Request,
+    q: str = Query(..., min_length=2),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*ASSIGNABLE_ROLES, *RETIRED_ROLES)),
+):
+    """ช่องทางสำรอง QR ชำรุด — ค้นหาด้วยรหัสอุปกรณ์ (รองรับบางส่วน)
+
+    ห้ามคืน qr_token: เดิม endpoint นี้ค้นแบบ partial (%q%) และส่ง token จริงกลับไป
+    ทำให้ค้นด้วยคำสั้น ๆ เช่น "DEV" แล้วเก็บ token ไปสร้างลิงก์สแกนได้ทั้งระบบ
+    """
     rows = db.execute(
         select(Device)
         .where(Device.device_id.ilike(f"%{q}%"))
         .order_by(Device.device_id)
         .limit(limit)
     ).scalars().all()
+    # กันแจ้งซ้ำ: ช่องนี้คือทางเข้าแจ้งซ่อมเวลา QR ชำรุด ผลค้นจึงต้องบอกว่าเครื่องไหน
+    # มีใบงานค้าง และแสดงชื่ออุปกรณ์ที่คนอ่านรู้เรื่อง ไม่ใช่รหัสเปล่า ๆ
+    open_map = open_tickets_by_device(db, [d.device_id for d in rows])
     return [
         {
             "device_id": d.device_id,
             "device_type": d.device_type,
+            "device_category": device_category_of(d.device_type),
+            "device_label": device_display_label(d),
             "brand": d.brand,
             "model": d.model,
             "organization_id": d.organization_id,
-            "qr_url": f"/scan?t={d.qr_token}" if d.qr_token else f"/scan?device={d.device_id}",
+            # อ้างด้วย device_id เท่านั้น — ผู้ที่ถือ qr_token สร้างลิงก์สแกนของห้องใดก็ได้
+            "qr_url": f"/scan?device={d.device_id}",
+            "has_open_ticket": d.device_id in open_map,
+            "open_ticket": open_map.get(d.device_id),
         }
         for d in rows
     ]
@@ -3879,9 +5311,7 @@ def device_recent_ticket(device_id: str, db: Session = Depends(get_db)):
 @app.get("/api/tickets/track/{ticket_no}")
 def ticket_track(ticket_no: str, db: Session = Depends(get_db)):
     """ติดตามสถานะด้วยหมายเลข Ticket — เปิดสาธารณะ คืนข้อมูลจำกัด (ไม่เปิดเผยข้อมูลส่วนบุคคล)"""
-    t = db.execute(select(RepairTicket).where(RepairTicket.ticket_id == ticket_no)).scalar_one_or_none()
-    if not t:
-        raise HTTPException(status_code=404, detail="ไม่พบหมายเลข Ticket นี้")
+    t = find_ticket_by_no(db, ticket_no)
     device = db.execute(select(Device).where(Device.device_id == t.device_id)).scalar_one_or_none()
     room = db.get(Room, device.room_id) if device and device.room_id else None
     status_label = {
@@ -3890,19 +5320,28 @@ def ticket_track(ticket_no: str, db: Session = Depends(get_db)):
         "closed": "ปิดงาน", "cancelled": "ยกเลิก",
     }.get(t.status, t.status)
     order = ["new", "assigned", "in_progress", "pending", "resolved", "closed"]
-    idx = order.index(t.status) if t.status in order else -1
+    # ป้ายสถานะจากตารางกลาง — ตารางเดิมด้านบนตกหล่น waiting_parts/waiting_user
+    status_label = PUBLIC_STATUS_LABELS.get(t.status, status_label)
+    # waiting_parts/waiting_user คือการ "รอ" หลังเริ่มงานแล้ว นับความคืบหน้าเท่า pending
+    # ไม่ใช่ idx = -1 ที่ทำให้แถบความคืบหน้าย้อนกลับไปขั้นแรก
+    step_status = "pending" if t.status in ("waiting_parts", "waiting_user") else t.status
+    idx = order.index(step_status) if step_status in order else -1
     return {
         "ticket_no": t.ticket_id,
         "status": t.status,
         "status_label": status_label,
         "device_code": device.device_id if device else None,
         "device_type": device.device_type if device else None,
+        "device_category": device_category_of(device.device_type) if device else None,
+        "device_label": device_display_label(device),
         "room_name": room.name if room else None,
         "title": t.title,
         "priority": t.priority,
         "created_at": t.created_at,
         "estimated_completion": t.sla_due_at,
         "closed_at": t.closed_at,
+        # งานยังไม่ปิด → หน้าติดตามเปิดช่อง "แจ้งข้อมูลเพิ่ม" เข้าใบเดิมได้
+        "can_add_note": t.status in OPEN_TICKET_STATUSES,
         "progress": [
             {"step": "รับเรื่อง", "done": True},
             {"step": "มอบหมายงาน", "done": idx >= 1},
@@ -4669,6 +6108,66 @@ def line_create_ticket(payload: N8nTicketIn, db: Session = Depends(get_db), _: N
     priority = prio_map.get(payload.urgency, "normal")
     now = datetime.now(_tz.utc)
     title = (payload.problemDetail or "แจ้งซ่อมผ่าน LINE")[:120]
+
+    # ─── กันแจ้งซ้ำ (TOR 1.5.2 / 5.7): อุปกรณ์มีใบงานค้าง → ไม่เปิดใบใหม่ ─────────
+    # ทางเข้า LINE/n8n ไม่มีหน้าจอให้ผู้แจ้งเลือกเหมือนหน้าเว็บ จึงเลือกทางที่ข้อมูล
+    # ไม่หาย: ต่อท้ายอาการที่ส่งมาเข้าใบเดิมเป็น ticket_updates (รูปแบบเดียวกับ
+    # public_add_ticket_note) แล้วคืน duplicate=True พร้อมเลขใบเดิมและสถานะภาษาไทย
+    # ให้ n8n ตอบผู้แจ้งว่าอุปกรณ์นี้แจ้งไปแล้ว
+    existing = find_open_ticket(db, dev.device_id)
+    if existing:
+        reporter = (payload.reporterName or "").strip() or "ผู้ใช้ LINE"
+        contact = (payload.contact or payload.userId or "").strip()
+        note_text = (payload.problemDetail or "").strip() or "แจ้งอาการเพิ่มผ่าน LINE (ไม่ระบุรายละเอียด)"
+        suffix = " (แนบรูป 1 รูป)" if payload.imageUrl else ""
+        author = f"{reporter} ({contact})" if contact else reporter
+        db.add(TicketUpdate(
+            ticket=existing,
+            from_status=existing.status,
+            to_status=existing.status,
+            note=f"[แจ้งเพิ่มจากผู้ใช้ LINE] {note_text}{suffix}",
+            author_name=author[:128],
+            author_role="reporter",
+        ))
+        # รูปที่แนบมาใหม่ ต่อท้ายรายการเดิม ไม่เขียนทับของผู้แจ้งคนก่อน
+        if payload.imageUrl:
+            try:
+                current = json.loads(existing.attachments) if existing.attachments else []
+            except (ValueError, TypeError):
+                current = []
+            if not isinstance(current, list):
+                current = []
+            existing.attachments = json.dumps(current + [payload.imageUrl], ensure_ascii=False)
+        db.commit()
+        db.refresh(existing)
+        try:
+            event = _ticket_event_payload(existing)
+            event["note"] = note_text
+            event["author_name"] = reporter
+            _notify_n8n("ticket.note_added", event)
+        except Exception:
+            pass
+        status_label = PUBLIC_STATUS_LABELS.get(existing.status, existing.status)
+        device_label = device_display_label(dev)
+        return {
+            "success": True,
+            "duplicate": True,
+            "code": "DUPLICATE_OPEN_TICKET",
+            "ticket_no": existing.ticket_id,
+            "ticket_id": existing.ticket_id,
+            "device_id": existing.device_id,
+            "device_type": dev.device_type,
+            "device_category": device_category_of(dev.device_type),
+            "device_label": device_label,
+            "status": existing.status,
+            "status_label": status_label,
+            "note_added": True,
+            "message": (
+                f"อุปกรณ์ {device_label} ({existing.device_id}) แจ้งซ่อมไว้แล้ว "
+                f"เลขที่ {existing.ticket_id} (สถานะ: {status_label}) — "
+                "บันทึกอาการที่แจ้งเพิ่มเข้าใบเดิมให้แล้ว ไม่ต้องแจ้งซ้ำ"
+            ),
+        }
     ticket = RepairTicket(
         ticket_id=generate_ticket_id(db, org_id),
         organization_id=org_id,
@@ -4782,6 +6281,129 @@ def delete_sales_lead(
     db.execute(text("DELETE FROM sales_leads WHERE id = :lid"), {"lid": lead_id})
     db.commit()
     return {"deleted": True, "id": lead_id, "name": row["name"]}
+
+
+# ─── สมัครสมาชิกลูกค้า (หน้าเว็บสาธารณะ /?customer=1) ──────────────────
+# ลูกค้าทั่วไปไม่ต้องมีบัญชีในระบบ — คำขอถูกบันทึกเป็น lead (source=WEB)
+# ใช้ตาราง/ชีต/การแจ้งกลุ่มไลน์ชุดเดียวกับ lead ที่มาจาก LINE จึงเห็นรวมกันในหน้า "ยอดขาย"
+class CustomerSignupIn(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=128)
+    phone: str = Field(..., min_length=9, max_length=20)
+    email: Optional[str] = Field(None, max_length=128)
+    organization: Optional[str] = Field(None, max_length=128)
+    interest: Optional[str] = Field(None, max_length=200)
+    products: Optional[str] = Field(None, max_length=500)
+    note: Optional[str] = Field(None, max_length=500)
+    consent: bool = False
+
+
+def _normalize_th_phone(raw: str) -> str:
+    """เหลือแต่ตัวเลข และแปลง +66xxxxxxxxx → 0xxxxxxxxx เพื่อให้เทียบ lead ซ้ำได้ตรงกัน"""
+    digits = "".join(ch for ch in str(raw or "") if ch.isdigit())
+    if digits.startswith("66") and len(digits) in (11, 12):
+        digits = "0" + digits[2:]
+    return digits
+
+
+@app.post("/api/public/customer-signup", status_code=201)
+@limiter.limit("10/hour")
+def public_customer_signup(
+    request: Request,
+    payload: CustomerSignupIn,
+    db: Session = Depends(get_db),
+):
+    """รับสมัครสมาชิกลูกค้าจากหน้าเว็บ (ไม่ต้อง login) → บันทึกเป็น lead รอทีมขายติดต่อกลับ"""
+    if not payload.consent:
+        raise HTTPException(
+            status_code=400,
+            detail="กรุณายอมรับการให้ข้อมูลเพื่อให้ทีมงานติดต่อกลับ",
+        )
+
+    name = payload.full_name.strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=422, detail="กรุณากรอกชื่อ-นามสกุล")
+
+    phone = _normalize_th_phone(payload.phone)
+    if not phone.startswith("0") or not (9 <= len(phone) <= 10):
+        raise HTTPException(status_code=422, detail="รูปแบบเบอร์โทรไม่ถูกต้อง (ตัวอย่าง 0812345678)")
+
+    email = (payload.email or "").strip() or None
+    if email and ("@" not in email or "." not in email.rsplit("@", 1)[-1]):
+        raise HTTPException(status_code=422, detail="รูปแบบอีเมลไม่ถูกต้อง")
+
+    interest = (payload.interest or "").strip() or "สมัครสมาชิกลูกค้า (เว็บ)"
+    products = (payload.products or "").strip()
+    organization = (payload.organization or "").strip()
+    note_parts: list[str] = []
+    if email:
+        note_parts.append(f"อีเมล: {email}")
+    if organization:
+        note_parts.append(f"หน่วยงาน: {organization}")
+    if (payload.note or "").strip():
+        note_parts.append(payload.note.strip())
+    note = " | ".join(note_parts)[:500]
+
+    # กันสมัครซ้ำ (ชื่อ+เบอร์เดิม) — ตอบข้อความเดียวกับที่ chatbot ใช้ ไม่สร้างแถวใหม่
+    dup = db.execute(
+        text("SELECT id FROM sales_leads WHERE phone = :p AND name = :n "
+             "ORDER BY id DESC LIMIT 1"),
+        {"p": phone, "n": name},
+    ).mappings().first()
+    if dup:
+        return {
+            "id": dup["id"],
+            "duplicate": True,
+            "message": "เราได้รับข้อมูลของคุณไว้แล้ว ทีมงานจะติดต่อกลับโดยเร็วที่สุด",
+        }
+
+    created_at = datetime.now(timezone.utc)
+    inserted = db.execute(
+        text("INSERT INTO sales_leads "
+             "(user_id, name, phone, interest, products, note, source, status, created_at) "
+             "VALUES (NULL, :n, :p, :i, :pr, :note, 'WEB', 'new', :t) RETURNING id"),
+        {"n": name[:128], "p": phone[:32], "i": interest[:200],
+         "pr": products[:500], "note": note, "t": created_at},
+    ).mappings().first()
+    db.commit()
+    lead_id = inserted["id"] if inserted else None
+
+    write_audit(
+        db, action="customer_signup", user=None,
+        entity_type="sales_lead", entity_id=str(lead_id) if lead_id else None,
+        new_value={"name": name, "source": "WEB", "products": products or None},
+        request=request,
+    )
+    db.commit()
+
+    # ชีต + แจ้งกลุ่มไลน์ เป็นช่องทางรายงานสำรอง — ล้มเหลวต้องไม่ทำให้การสมัครล้มเหลว
+    # และต้องไม่หน่วง response (Sheets API / LINE push มี timeout หลายวินาที)
+    def _report_web_lead() -> None:
+        try:
+            google_sheets.append_lead_row({
+                "id": lead_id, "user_id": "", "name": name, "phone": phone,
+                "interest": interest, "products": products, "source": "WEB",
+                "status": "new", "note": note, "created_at": created_at,
+            })
+        except Exception:
+            pass
+        try:
+            from app.chatbot_helpers import notify_sales_group
+            notify_sales_group(lead_id, name, phone, interest, products, source="WEB")
+        except Exception:
+            pass
+
+    try:
+        import threading
+        threading.Thread(target=_report_web_lead,
+                         name=f"web-lead-report-{lead_id}", daemon=True).start()
+    except Exception:
+        pass
+
+    return {
+        "id": lead_id,
+        "duplicate": False,
+        "message": "สมัครสมาชิกเรียบร้อย ทีมงานจะติดต่อกลับภายในเวลาทำการ",
+    }
 
 
 @app.get("/api/chatbot/logs")
