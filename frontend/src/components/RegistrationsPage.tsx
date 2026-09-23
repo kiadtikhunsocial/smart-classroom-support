@@ -153,8 +153,8 @@ function MetaItem({ label, value, mono }: { label: string; value: React.ReactNod
  * สิทธิ์คุมจาก backend (owner / super_admin / admin / admin_school) และ
  * admin_school จะเห็นเฉพาะคำขอของโรงเรียนตัวเอง
  *
- * โหลดคำขอทุกสถานะครั้งเดียวแล้วกรองในหน้า เพื่อให้แท็บแสดงจำนวนจริงของแต่ละสถานะ
- * และสลับแท็บ/ค้นหาได้ทันทีโดยไม่ยิง API ซ้ำ
+ * โหลดคำขอทุกสถานะเป็นหน้า ๆ (API จำกัดครั้งละ 200) แล้วกรองในหน้า
+ * เพื่อให้แท็บแสดงจำนวนจริงของแต่ละสถานะ และสลับแท็บ/ค้นหาได้ทันที
  */
 export default function RegistrationsPage({ onBack }: RegistrationsPageProps) {
   const [rows, setRows] = useState<MembershipApplication[]>([]);
@@ -172,8 +172,15 @@ export default function RegistrationsPage({ onBack }: RegistrationsPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.listRegistrations({ status: undefined, limit: 500 });
-      setRows(Array.isArray(data) ? (data as MembershipApplication[]) : []);
+      const pageSize = 200;
+      const all: MembershipApplication[] = [];
+      while (true) {
+        const page = await api.listRegistrations({ limit: pageSize, offset: all.length });
+        if (!Array.isArray(page)) throw new Error('รูปแบบข้อมูลคำขอสมัครสมาชิกไม่ถูกต้อง');
+        all.push(...(page as MembershipApplication[]));
+        if (page.length < pageSize) break;
+      }
+      setRows(all);
     } catch (err: any) {
       setError(err?.message || 'โหลดรายการคำขอสมัครสมาชิกไม่สำเร็จ');
       setRows([]);
