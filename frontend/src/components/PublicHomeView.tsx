@@ -137,14 +137,6 @@ function CheckIcon() {
   );
 }
 
-function PulseIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path d="M3 12h4l2.5-7 3 14L15 12h6" />
-    </svg>
-  );
-}
-
 function ShieldIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -197,41 +189,6 @@ function LivePill({ children }: { children: React.ReactNode }) {
       <span className="ph-live-dot" aria-hidden="true" />
       {children}
     </span>
-  );
-}
-
-interface HighlightItem {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-}
-
-/** จุดเด่นของระบบ — เนื้อหาอธิบายความสามารถจริงของหน้านี้ ไม่ใช่ตัวเลขสมมติ */
-const HIGHLIGHTS: HighlightItem[] = [
-  {
-    icon: <ScanIcon />,
-    title: 'แจ้งซ่อมด้วย QR',
-    desc: 'สแกนสติกเกอร์ที่ตัวอุปกรณ์ ระบบดึงรหัสเครื่องและห้องให้อัตโนมัติ',
-  },
-  {
-    icon: <PulseIcon />,
-    title: 'ติดตามได้ทุกขั้นตอน',
-    desc: 'เห็นความคืบหน้าจากรับเรื่องถึงปิดงาน พร้อมประวัติการดำเนินการ',
-  },
-  {
-    icon: <ShieldIcon />,
-    title: 'ไม่ต้องสร้างบัญชี',
-    desc: 'ผู้แจ้งใช้เพียงเลขใบงาน ข้อมูลเจ้าหน้าที่แยกอยู่หลังระบบล็อกอิน',
-  },
-];
-
-function HighlightCard({ item }: { item: HighlightItem }) {
-  return (
-    <li className="ph-highlight">
-      <span className="ph-highlight-icon" aria-hidden="true">{item.icon}</span>
-      <strong className="ph-highlight-title">{item.title}</strong>
-      <span className="ph-highlight-desc">{item.desc}</span>
-    </li>
   );
 }
 
@@ -566,11 +523,8 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
         </a>
         <div className="ph-topbar-right">
           <LivePill>ระบบพร้อมรับแจ้ง</LivePill>
-          <a className="ph-customer-link" href="/?customer=1">สำหรับลูกค้า</a>
+          <a className="ph-customer-link" href="/?customer=1">สนใจสินค้า / ฝากข้อมูลติดต่อ</a>
           <PublicThemeToggle />
-          <a className="ph-login-link" href="/?login=1">
-            เข้าสู่ระบบเจ้าหน้าที่
-          </a>
         </div>
       </header>
 
@@ -579,18 +533,16 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
           <div className="ph-hero-grid">
             <div className="ph-hero-copy">
               <span className="ph-eyebrow">IWA SMART CLASSROOM SUPPORT</span>
-              <h1 className="ph-hero-title">
-                ดูแลอุปกรณ์ห้องเรียน
-                <br /><span className="ph-hero-accent">ในที่เดียว</span>
-              </h1>
+              <h1 className="ph-hero-title">แจ้งซ่อมและติดตามงาน<br /><span className="ph-hero-accent">อุปกรณ์ห้องเรียน</span></h1>
               <p className="ph-hero-sub">
                 แจ้งซ่อม ติดตามงาน และตรวจสอบประกันได้ด้วยตัวเอง
-                ไม่ต้องเข้าสู่ระบบ ส่วนเจ้าหน้าที่มีพื้นที่ทำงานแยกต่างหาก
+                ไม่ต้องเข้าสู่ระบบ เพียงเลือกงานที่ต้องการด้านล่าง
               </p>
               <div className="ph-hero-cta">
                 <a href="/?publicreport=1" className="ph-cta-primary">แจ้งซ่อมอุปกรณ์ <ArrowIcon /></a>
                 <button type="button" className="ph-cta-secondary" onClick={focusTrack}>ติดตามงานซ่อม</button>
               </div>
+              <a className="ph-sales-inline" href="/?customer=1">ต้องการซื้อสินค้า หรือให้ทีมงานติดต่อกลับ? <strong>ฝากข้อมูลลูกค้า →</strong></a>
             </div>
             <div className="ph-hero-panel" aria-label="ขั้นตอนการใช้งาน">
               <span className="ph-panel-kicker">เริ่มใช้งานง่าย ๆ</span>
@@ -630,20 +582,13 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
             </a>
           </div>
 
-          <div className="ph-customer-band">
-            <div>
-              <span className="ph-panel-kicker">สำหรับผู้สนใจสินค้าและบริการ</span>
-              <h2>ต้องการข้อมูลสินค้า ราคา หรือให้ทีมงานติดต่อกลับ?</h2>
-              <p>ลงทะเบียนลูกค้าแยกจากบัญชีเจ้าหน้าที่ ข้อมูลจะส่งตรงถึงทีมขาย</p>
-            </div>
-            <a href="/?customer=1" className="ph-customer-cta">สมัครสมาชิกลูกค้า <ArrowIcon /></a>
-          </div>
+        </section>
 
-          <ul className="ph-highlights">
-            {HIGHLIGHTS.map((h) => (
-              <HighlightCard key={h.title} item={h} />
-            ))}
-          </ul>
+        <section className="ph-customer-band" aria-labelledby="ph-customer-title">
+          <div><span className="ph-panel-kicker">สำหรับผู้สนใจสินค้าและบริการ</span>
+            <h2 id="ph-customer-title">ให้ทีมงานช่วยเลือกอุปกรณ์ที่เหมาะกับคุณ</h2>
+            <p>ฝากชื่อและช่องทางติดต่อเพื่อขอข้อมูลสินค้า ราคา หรือการสาธิต โดยไม่ต้องสร้างบัญชีเจ้าหน้าที่</p></div>
+          <a href="/?customer=1" className="ph-customer-cta">ฝากข้อมูลให้ติดต่อกลับ <ArrowIcon /></a>
         </section>
 
         <section className="ph-card ph-track-card" ref={trackRef} aria-labelledby="ph-track-title">
@@ -860,9 +805,9 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
         <span className="ph-footer-brand">IWA Smart Classroom Support</span>
         {/* จัดลิงก์เป็นกลุ่มเดียว เพื่อให้ space-between ของ .ph-footer ยังแบ่งเป็นสองฝั่งเหมือนเดิม */}
         <nav className="ph-footer-links" aria-label="ลิงก์เพิ่มเติม">
-          <a href="/?login=1">เข้าสู่ระบบเจ้าหน้าที่</a>
+          <a className="ph-staff-footer-link" href="/?login=1">พื้นที่เจ้าหน้าที่</a>
           <a href="/?register=1">สมัครสมาชิกเจ้าหน้าที่</a>
-          <a href="/?customer=1">สมัครสมาชิกลูกค้า</a>
+          <a href="/?customer=1">ฝากข้อมูลลูกค้า</a>
         </nav>
       </footer>
     </div>

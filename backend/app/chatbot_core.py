@@ -1102,7 +1102,7 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
             pass
         return reply
 
-    from app.assistant_policy import contains_prompt_injection, classify_urgency, INJECTION_REPLY, SAFETY_REPLY
+    from app.assistant_policy import contains_prompt_injection, classify_urgency, allow_freeform_ai_reply, INJECTION_REPLY, SAFETY_REPLY
     # Security and safety gates must run before any optional Gemini call.
     if contains_prompt_injection(text):
         return _finish(INJECTION_REPLY, intent_used="security_refusal")
@@ -1161,7 +1161,7 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     # Gemini classifier is opt-in. Keyword routing remains the stable default.
     from app.company_catalog import _fuzzy_product_names
     _has_product = bool(_fuzzy_product_names(text))
-    if (ENABLE_GEMINI_CLASSIFIER and phase in ("new",) and intent in ("other", "service", "buy")
+    if (ENABLE_GEMINI_CLASSIFIER and phase in ("new",) and not session.get("resolving") and intent in ("other", "service", "buy")
             and not _is_product_followup(text) and not _has_product):
         try:
             from app.gemini_service import classify_intent
@@ -1176,7 +1176,7 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     # ── Gemini orchestration layer (opt-in): ให้ Gemini ตัดสินใจ+ร่างคำตอบธรรมชาติ
     # เฉพาะ phase ใหม่ + ข้อความปกติ (ไม่ใช่ flow เจาะจงที่ rule จัดการได้ดีอยู่แล้ว)
     # ถ้า Gemini ล่ม/429 → fallback ไป rule FSM เดิม (ปลอดภัย ไม่พัง)
-    if (ENABLE_GEMINI_ORCHESTRATION and phase in ("new", "done")
+    if (ENABLE_GEMINI_ORCHESTRATION and phase in ("new", "done") and not session.get("resolving")
             and intent in ("product", "service", "company", "greeting", "thanks", "other")
             and not _is_product_followup(text) and not _has_product):
         try:
@@ -1205,11 +1205,12 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                         return _finish(f"รับทราบนะคะ 🙏 ขอให้ลองทำตามนี้ก่อน ลองทีละขั้นดูค่ะ:\n{_steps}\n\n"
                                        "ถ้าทำแล้วไม่หาย พิมพ์ 'ยังไม่หาย' เดี๋ยวให้ช่างช่วยตรวจถึงที่ค่ะ",
                                        intent_used="orchestrate_search_kb")
-                    # ไม่เจอ KB → ใช้คำตอบ Gemini เดิม + เสนอแจ้งซ่อม
-                    return _finish(_go["reply"] + "\n\nถ้ายังแก้ไม่ได้ พิมพ์ 'แจ้งซ่อม' ได้เลยนะคะ",
+                    # ไม่มี KB ที่อ้างอิงได้: ห้ามส่งคำแนะนำที่ AI แต่งเอง
+                    return _finish("ยังไม่พบวิธีแก้ที่ยืนยันได้ในฐานความรู้ค่ะ เพื่อให้เจ้าหน้าที่ช่วยตรวจต่อ พิมพ์ 'แจ้งซ่อม' ได้เลยนะคะ",
                                    intent_used="orchestrate_search_kb_nokb")
-                # เฉพาะ action ปลอดภัย: answer/ask_info (ไม่ override การสร้าง ticket/ซ่อม)
-                if action in ("answer", "ask_info"):
+                # คำตอบข้อเท็จจริงสินค้า/บริการ/บริษัทต้องผ่าน catalog และ rule path ด้านล่าง
+                # AI freeform ใช้เฉพาะ small talk ที่ไม่มีราคา/สต็อก/ประกัน/สถานะให้เดา
+                if allow_freeform_ai_reply(intent, action):
                     return _finish(_go["reply"], intent_used=f"orchestrate_{action}")
         except Exception:
             pass
@@ -1403,7 +1404,12 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                 save_profile(user_id, {"name": flds.get("name"), "phone": flds.get("phone")})
         except Exception:
             pass
-    return _finish(reply, intent_used=intent)
+    self_service_resolved = bool(
+        (phase == "done" or (phase == "new" and session.get("resolving")))
+        and _has_reply_phrase(text, RESOLVED_WORDS)
+        and not _has_reply_phrase(text, NOT_RESOLVED_WORDS)
+    )
+    return _finish(reply, resolved=self_service_resolved, intent_used=intent)
 
 
 def _extract_name(text: str) -> str | None:

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import '../styles/chatbot-review.css';
 
 const DEVICE_TYPES = [
   'Interactive Display', 'Computer AIO', 'Computer Notebook', 'Computer Tablet',
@@ -15,6 +16,10 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
   // admin_school แก้ได้เฉพาะบทความของรรตัวเอง (บทความส่วนกลาง read-only)
   const canEditArticle = (a: any) =>
     canEditKB && !(userRole === 'admin_school' && (a?.organization_id ?? null) !== (userOrgId ?? null));
+  const canReviewBot = !userOrgId && ['owner', 'super_admin', 'admin', 'it_support'].includes(userRole || '');
+  const [botReviewOpen, setBotReviewOpen] = useState(false);
+  const [botStats, setBotStats] = useState<{ total_conversations: number; self_service_rate: number; missed_queries: string[] } | null>(null);
+  const [botReviewError, setBotReviewError] = useState<string | null>(null);
   const [articles, setArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +64,20 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
     setForm({ title: '', device_type: '', symptom_tags: '', steps: '', is_published: true });
     setShowForm(true);
     setSelected(null);
+  };
+
+  const reviewQuestion = (question: string) => {
+    setEditing(null);
+    setForm({ title: '', device_type: '', symptom_tags: question.slice(0, 120), steps: '', is_published: false });
+    setShowForm(true);
+    setSelected(null);
+  };
+
+  const toggleReview = async () => {
+    if (botReviewOpen) { setBotReviewOpen(false); return; }
+    setBotReviewOpen(true); setBotReviewError(null);
+    try { setBotStats(await api.getChatbotAnalytics(30)); }
+    catch (e: any) { setBotReviewError(e?.message || 'โหลดคำถามที่ควรตรวจไม่สำเร็จ'); }
   };
 
   const save = async (e: React.FormEvent) => {
@@ -111,8 +130,8 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           </button>
           <div>
-            <h1 className="top-bar-title">ฐานความรู้</h1>
-            <span className="top-bar-subtitle">{articles.length} บทความ · กดที่บทความเพื่อดูรายละเอียด</span>
+            <h1 className="top-bar-title">ฐานความรู้แชตบอต</h1>
+            <span className="top-bar-subtitle">แก้บทความได้เอง · เผยแพร่เฉพาะข้อมูลที่ตรวจสอบแล้ว</span>
           </div>
         </div>
         <div className="top-bar-actions">
@@ -129,6 +148,22 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
       </div>
 
       {error && <div style={{ padding: '10px 14px', background: 'var(--color-danger-light)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', marginBottom: 16 }}>{error}</div>}
+
+      <section className="bot-review-guide" aria-label="วิธีพัฒนาแชตบอต">
+        <div><span className="bot-review-kicker">ปรับคำตอบได้ด้วยตัวเอง</span>
+          <h2>ทบทวนคำถาม → เพิ่มความรู้ → ทดสอบ → เผยแพร่</h2>
+          <p>เขียนขั้นตอนที่ตรวจสอบได้พร้อมคำค้นหลายรูปแบบ บันทึกเป็นฉบับร่างก่อน ทวนข้อมูลกับผู้เชี่ยวชาญ แล้วจึงเปิด “เผยแพร่” และทดสอบในสภาพแวดล้อมทดสอบ</p></div>
+        {canReviewBot && <button className="btn" type="button" onClick={() => void toggleReview()} aria-expanded={botReviewOpen}>{botReviewOpen ? 'ซ่อนคำถามที่ควรตรวจ' : 'ดูคำถามที่บอตตอบไม่ชัด'}</button>}
+      </section>
+      {botReviewOpen && <section className="bot-review-panel" aria-label="คุณภาพแชตบอต">
+        <div className="bot-review-head"><h3>ทบทวนคำถามย้อนหลัง 30 วัน</h3><span>รายการนี้เป็นสัญญาณให้มนุษย์ตรวจ ไม่ใช่การตัดสินว่าบอตผิดทุกข้อ</span></div>
+        {botReviewError && <p role="alert">{botReviewError}</p>}
+        {botStats && <><p className="bot-review-summary">บทสนทนา {botStats.total_conversations.toLocaleString('th-TH')} ครั้ง · คำถามที่ควรทบทวน (ไม่ซ้ำ) {botStats.missed_queries.length} รายการ</p>
+          {botStats.missed_queries.length === 0 ? <p>ยังไม่มีคำถามที่ระบบจัดเป็น “ควรตรวจ” ในช่วงนี้</p>
+            : <ol>{botStats.missed_queries.slice(0, 20).map((question, index) => <li key={`${index}-${question}`}>
+                <span>{question}</span>{canEditKB && <button className="btn btn-ghost" type="button" onClick={() => reviewQuestion(question)}>สร้างบทความฉบับร่าง</button>}
+              </li>)}</ol>}</>}
+      </section>}
 
       {/* รายการบทความ (เต็มความกว้าง) */}
       {loading ? (

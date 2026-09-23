@@ -1,320 +1,140 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
+import '../styles/audit-log.css';
 
-const PAGE_SIZE = 50;
-
-// ป้ายกำกับของ action ที่ยืนยันแล้วว่ามีใน backend — ที่เหลือแสดงค่าดิบตามจริง
-const ACTION_LABELS: Record<string, string> = {
-  pm_plan_create: 'สร้างแผน PM',
-  pm_generate: 'สร้างงาน PM ตามรอบ',
-  pm_task_submit: 'ส่งผลตรวจ PM',
-  pm_task_skip: 'ข้ามงาน PM',
-  // งาน PM ที่ปิดแล้วถูกแก้ย้อนหลังโดยผู้ดูแลระดับสูง — แยก action จากการบันทึกครั้งแรก
-  pm_task_edit: 'แก้ไขงาน PM ย้อนหลัง',
+const PAGE_SIZE = 30;
+const ACTIONS: Record<string, string> = {
+  login: 'เข้าสู่ระบบ', login_failed: 'เข้าสู่ระบบไม่สำเร็จ',
+  device_create: 'เพิ่มอุปกรณ์', device_update: 'แก้ไขอุปกรณ์', device_delete: 'ลบอุปกรณ์',
+  user_create: 'เพิ่มผู้ใช้', user_update: 'แก้ไขผู้ใช้', user_delete: 'ลบผู้ใช้', user_role_change: 'เปลี่ยนสิทธิ์ผู้ใช้',
+  membership_apply: 'สมัครสมาชิก', membership_approve: 'อนุมัติสมาชิก', membership_reject: 'ปฏิเสธสมาชิก',
+  ticket_assign: 'มอบหมายงานซ่อม', ticket_accept: 'รับงานซ่อม', ticket_resolve: 'ซ่อมเสร็จ',
+  ticket_close: 'ปิดงานซ่อม', ticket_reopen: 'เปิดงานซ่อมอีกครั้ง', ticket_cancel: 'ยกเลิกงานซ่อม',
+  kb_create: 'เพิ่มบทความ', kb_update: 'แก้ไขบทความ', kb_delete: 'ลบบทความ',
+  pm_plan_create: 'สร้างแผน PM', pm_plan_update: 'แก้ไขแผน PM', pm_plan_delete: 'ลบแผน PM',
+  pm_generate: 'สร้างงาน PM', pm_task_submit: 'ส่งผลตรวจ PM', pm_task_skip: 'ข้ามงาน PM', pm_task_edit: 'แก้ไขงาน PM ย้อนหลัง',
+  pm_rules_run: 'ประมวลผลกฎ PM', pm_flag_update: 'อัปเดตสถานะอุปกรณ์',
+  settings_update: 'เปลี่ยนการตั้งค่า', sales_record_create: 'เพิ่มรายการขาย', sales_record_status: 'เปลี่ยนสถานะการขาย',
+  customer_signup: 'ลูกค้าลงทะเบียน',
 };
+const ENTITY: Record<string, string> = {
+  device: 'อุปกรณ์', user: 'ผู้ใช้', ticket: 'งานซ่อม', kb_article: 'บทความ',
+  pm_plan: 'แผน PM', pm_task: 'งาน PM', pm_rule: 'กฎ PM', device_health_flag: 'สุขภาพอุปกรณ์',
+  setting: 'การตั้งค่า', sales_record: 'รายการขาย', sales_lead: 'ลูกค้า', membership_application: 'คำขอสมาชิก',
+};
+type AuditRow = {
+  id: number; created_at: string; user_name?: string | null; user_id?: number | null; user_role?: string | null;
+  action: string; entity_type?: string | null; entity_id?: string | number | null;
+  old_value?: unknown; new_value?: unknown; ip_address?: string | null;
+};
+type Filters = { action: string; entity_id: string; user_id: string; date_from: string; date_to: string; include_logins: boolean };
+const emptyFilters: Filters = { action: '', entity_id: '', user_id: '', date_from: '', date_to: '', include_logins: false };
 
-function fmtDateTime(value?: string | null): string {
+function dateTime(value?: string | null): string {
   if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'medium' });
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
 }
-
-/** old_value/new_value อาจเป็น object, array หรือข้อความล้วน */
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
+function dayLabel(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'ไม่ทราบวันที่' : date.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+function dateKey(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'unknown' : `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+function valueText(value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'ไม่มีข้อมูล';
   if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function summarize(value: unknown, max = 60): string {
-  const text = formatValue(value).replace(/\s+/g, ' ').trim();
-  if (text === '—') return '—';
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  return JSON.stringify(value, null, 2);
 }
 
 export default function AuditLogPage({ onBack }: { onBack: () => void }) {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const [detail, setDetail] = useState<any | null>(null);
+  const [detail, setDetail] = useState<AuditRow | null>(null);
+  const [draft, setDraft] = useState<Filters>(emptyFilters);
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [advanced, setAdvanced] = useState(false);
 
-  // ค่าที่พิมพ์ในฟอร์ม (ยังไม่ยิง) แยกจากค่าที่ใช้ค้นจริง เพื่อไม่ยิง API ทุกตัวอักษร
-  const [draft, setDraft] = useState({ action: '', entity_type: '', entity_id: '', user_id: '' });
-  const [filters, setFilters] = useState({ action: '', entity_type: '', entity_id: '', user_id: '' });
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    const userId = Number(filters.user_id);
-    api
-      .listAuditLogs({
-        action: filters.action.trim() || undefined,
-        entity_type: filters.entity_type.trim() || undefined,
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const rows = await api.listAuditLogs({
+        action: filters.action || undefined,
+        include_logins: filters.include_logins,
         entity_id: filters.entity_id.trim() || undefined,
-        user_id: filters.user_id.trim() && Number.isFinite(userId) ? userId : undefined,
-        limit: PAGE_SIZE,
-        offset: page * PAGE_SIZE,
-      })
-      .then((rows) => setLogs(Array.isArray(rows) ? rows : []))
-      .catch((e: any) => setError(e?.message || 'โหลดประวัติการใช้งานไม่สำเร็จ'))
-      .finally(() => setLoading(false));
+        user_id: filters.user_id ? Number(filters.user_id) : undefined,
+        date_from: filters.date_from || undefined,
+        date_to: filters.date_to || undefined,
+        limit: PAGE_SIZE, offset: page * PAGE_SIZE,
+      });
+      setLogs(Array.isArray(rows) ? rows : []);
+    } catch (err: any) { setError(err?.message || 'โหลดประวัติไม่สำเร็จ'); }
+    finally { setLoading(false); }
   }, [filters, page]);
+  useEffect(() => { void load(); }, [load]);
 
-  useEffect(() => { load(); }, [load]);
-
-  const applyFilters = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(0);
-    setFilters({ ...draft });
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (draft.date_from && draft.date_to && draft.date_from > draft.date_to) {
+      setError('วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม'); return;
+    }
+    setPage(0); setFilters({ ...draft });
   };
+  const clear = () => { setDraft(emptyFilters); setFilters(emptyFilters); setPage(0); };
+  const groups = logs.reduce<{ key: string; label: string; rows: AuditRow[] }[]>((all, row) => {
+    const key = dateKey(row.created_at);
+    if (all[all.length - 1]?.key !== key) all.push({ key, label: dayLabel(row.created_at), rows: [] });
+    all[all.length - 1].rows.push(row);
+    return all;
+  }, []);
 
-  const clearFilters = () => {
-    const empty = { action: '', entity_type: '', entity_id: '', user_id: '' };
-    setDraft(empty);
-    setFilters(empty);
-    setPage(0);
-  };
-
-  const hasNext = logs.length === PAGE_SIZE;
-
-  return (
-    <div className="page-content">
-      <div className="top-bar">
-        <div className="top-bar-title-group">
-          <button className="btn btn-ghost btn-icon" onClick={onBack} aria-label="กลับ">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-          </button>
-          <div>
-            <h1 className="top-bar-title">ประวัติการใช้งานระบบ (Audit Log)</h1>
-            <span className="top-bar-subtitle">
-              หน้า {page + 1} · แสดง {logs.length} รายการ — เรียงจากใหม่ไปเก่า
-            </span>
-          </div>
-        </div>
-        <div className="top-bar-actions">
-          <button className="btn btn-ghost btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <path d="M21 12a9 9 0 11-3.5-7.1" />
-              <path d="M21 3v6h-6" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <form onSubmit={applyFilters}>
-        <div className="form-row" style={{ marginBottom: 8 }}>
-          <div className="form-group">
-            <label className="form-label">การกระทำ (action)</label>
-            <input
-              className="form-input"
-              value={draft.action}
-              onChange={(e) => setDraft({ ...draft, action: e.target.value })}
-              placeholder="เช่น pm_task_submit"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">ชนิดข้อมูล (entity type)</label>
-            <input
-              className="form-input"
-              value={draft.entity_type}
-              onChange={(e) => setDraft({ ...draft, entity_type: e.target.value })}
-              placeholder="เช่น pm_task"
-            />
-          </div>
-        </div>
-        <div className="form-row" style={{ marginBottom: 12 }}>
-          <div className="form-group">
-            <label className="form-label">รหัสข้อมูล (entity id)</label>
-            <input
-              className="form-input"
-              value={draft.entity_id}
-              onChange={(e) => setDraft({ ...draft, entity_id: e.target.value })}
-              placeholder="เช่น PM-202609-0001"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">รหัสผู้ใช้ (user id)</label>
-            <input
-              className="form-input"
-              type="number"
-              min={1}
-              value={draft.user_id}
-              onChange={(e) => setDraft({ ...draft, user_id: e.target.value })}
-              placeholder="เช่น 3"
-            />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          <button type="submit" className="btn btn-primary">ค้นหา</button>
-          <button type="button" className="btn btn-ghost" onClick={clearFilters}>ล้างตัวกรอง</button>
-        </div>
-      </form>
-
-      {error && (
-        <div style={{ padding: '10px 14px', background: 'var(--color-danger-light)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', marginBottom: 16 }}>
-          {error}
-        </div>
-      )}
-
-      <div className="page-section">
-        <div className="section-body">
-          {loading ? (
-            <div className="loading-state" style={{ padding: 40 }}>
-              <div className="spinner" />
-              <span>กำลังโหลด...</span>
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="empty-state" style={{ padding: 40 }}>
-              <svg className="empty-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                <path d="M14 2v6h6M9 13h6M9 17h6"/>
-              </svg>
-              <span className="empty-text">ไม่พบรายการตามเงื่อนไขนี้</span>
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>เวลา</th>
-                    <th>ผู้ใช้</th>
-                    <th>การกระทำ</th>
-                    <th>ข้อมูลที่ถูกแก้</th>
-                    <th>ค่าใหม่</th>
-                    <th>IP</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log) => (
-                    <tr key={log.id}>
-                      <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{fmtDateTime(log.created_at)}</td>
-                      <td style={{ fontSize: '0.82rem' }}>
-                        {log.user_name || (log.user_id ? `#${log.user_id}` : 'ระบบ')}
-                        {log.user_role && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>{log.user_role}</div>
-                        )}
-                      </td>
-                      <td style={{ fontSize: '0.82rem', fontWeight: 500 }}>
-                        {ACTION_LABELS[log.action] || log.action}
-                        {ACTION_LABELS[log.action] && (
-                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', fontWeight: 400 }}>{log.action}</div>
-                        )}
-                      </td>
-                      <td style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>
-                        {log.entity_type || '—'}
-                        {log.entity_id && <div style={{ fontSize: '0.72rem' }}>{log.entity_id}</div>}
-                      </td>
-                      <td style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', maxWidth: 240, overflowWrap: 'anywhere' }}>
-                        {summarize(log.new_value)}
-                      </td>
-                      <td style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>{log.ip_address || '—'}</td>
-                      <td>
-                        <button
-                          className="btn btn-ghost"
-                          style={{ padding: '4px 10px', fontSize: '0.78rem' }}
-                          onClick={() => setDetail(log)}
-                        >
-                          ดู
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-        <button className="btn btn-ghost" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loading}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginRight: 6, verticalAlign: '-2px' }}>
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          ก่อนหน้า
-        </button>
-        <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>หน้า {page + 1}</span>
-        <button className="btn btn-ghost" onClick={() => setPage((p) => p + 1)} disabled={!hasNext || loading}>
-          ถัดไป
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ marginLeft: 6, verticalAlign: '-2px' }}>
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
-      </div>
-
-      {detail && (
-        <div className="panel-overlay" onClick={() => setDetail(null)}>
-          <div className="repair-panel" style={{ width: 620, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
-            <div className="repair-panel-header">
-              <h3 className="repair-panel-title">{ACTION_LABELS[detail.action] || detail.action}</h3>
-              <button className="repair-panel-close" onClick={() => setDetail(null)} aria-label="ปิด" title="ปิด">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="repair-panel-body">
-              <div className="form-row" style={{ marginBottom: 12 }}>
-                <div className="form-group">
-                  <div className="form-label">เวลา</div>
-                  <div style={{ fontSize: '0.85rem' }}>{fmtDateTime(detail.created_at)}</div>
-                </div>
-                <div className="form-group">
-                  <div className="form-label">ผู้ใช้</div>
-                  <div style={{ fontSize: '0.85rem' }}>
-                    {detail.user_name || (detail.user_id ? `#${detail.user_id}` : 'ระบบ')}
-                    {detail.user_role ? ` · ${detail.user_role}` : ''}
-                  </div>
-                </div>
-              </div>
-              <div className="form-row" style={{ marginBottom: 12 }}>
-                <div className="form-group">
-                  <div className="form-label">ข้อมูล</div>
-                  <div style={{ fontSize: '0.85rem' }}>
-                    {detail.entity_type || '—'}{detail.entity_id ? ` · ${detail.entity_id}` : ''}
-                  </div>
-                </div>
-                <div className="form-group">
-                  <div className="form-label">IP</div>
-                  <div style={{ fontSize: '0.85rem' }}>{detail.ip_address || '—'}</div>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <div className="form-label">ค่าก่อนแก้</div>
-                <pre style={{
-                  margin: 0, padding: 12, background: 'var(--color-bg)',
-                  borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
-                  whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 200, overflowY: 'auto',
-                }}>
-                  {formatValue(detail.old_value)}
-                </pre>
-              </div>
-              <div className="form-group">
-                <div className="form-label">ค่าหลังแก้</div>
-                <pre style={{
-                  margin: 0, padding: 12, background: 'var(--color-bg)',
-                  borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
-                  whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 200, overflowY: 'auto',
-                }}>
-                  {formatValue(detail.new_value)}
-                </pre>
-              </div>
-
-              <button className="btn btn-ghost btn-full" onClick={() => setDetail(null)}>ปิด</button>
-            </div>
-          </div>
-        </div>
-      )}
+  return <div className="page-content audit-page">
+    <div className="top-bar">
+      <div className="top-bar-title-group"><button className="btn btn-ghost btn-icon" onClick={onBack} aria-label="กลับ">←</button>
+        <div><h1 className="top-bar-title">ประวัติการใช้งาน</h1><span className="top-bar-subtitle">ดูว่าใครทำอะไรกับข้อมูล เมื่อไร · เรียงล่าสุดก่อน</span></div></div>
+      <button className="btn" type="button" onClick={() => void load()} disabled={loading}>โหลดใหม่</button>
     </div>
-  );
+
+    <form className="audit-filters" onSubmit={submit}>
+      <div className="audit-filter-row">
+        <label>ประเภทเหตุการณ์<select className="form-input" value={draft.action} onChange={(e) => setDraft({ ...draft, action: e.target.value })}>
+          <option value="">ทุกประเภท</option>{Object.entries(ACTIONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <label>ตั้งแต่วันที่<input className="form-input" type="date" value={draft.date_from} onChange={(e) => setDraft({ ...draft, date_from: e.target.value })} /></label>
+        <label>ถึงวันที่<input className="form-input" type="date" value={draft.date_to} onChange={(e) => setDraft({ ...draft, date_to: e.target.value })} /></label>
+      </div>
+      <label className="audit-login-toggle"><input type="checkbox" checked={draft.include_logins} onChange={(e) => setDraft({ ...draft, include_logins: e.target.checked })} /> รวมเหตุการณ์เข้าสู่ระบบ</label>
+      <button type="button" className="audit-advanced-toggle" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>{advanced ? 'ซ่อนตัวกรองเพิ่มเติม ↑' : 'ค้นหาด้วยรหัสข้อมูล/ผู้ใช้ ↓'}</button>
+      {advanced && <div className="audit-filter-row audit-filter-advanced">
+        <label>รหัสข้อมูล<input className="form-input" value={draft.entity_id} onChange={(e) => setDraft({ ...draft, entity_id: e.target.value })} placeholder="เช่น รหัสใบงาน" /></label>
+        <label>รหัสผู้ใช้<input className="form-input" type="number" min="1" value={draft.user_id} onChange={(e) => setDraft({ ...draft, user_id: e.target.value })} placeholder="เช่น 3" /></label>
+      </div>}
+      <div className="audit-filter-actions"><button className="btn btn-primary" type="submit">แสดงผล</button><button className="btn btn-ghost" type="button" onClick={clear}>ล้างตัวกรอง</button></div>
+    </form>
+
+    {error && <p className="audit-error" role="alert">{error}</p>}
+    <div className="audit-list-head"><strong>เหตุการณ์ {logs.length} รายการ</strong><span>หน้า {page + 1}</span></div>
+    {loading ? <div className="loading-state"><div className="spinner" />กำลังโหลด...</div>
+      : logs.length === 0 ? <div className="audit-empty">ไม่พบเหตุการณ์ในช่วงเวลาหรือเงื่อนไขที่เลือก</div>
+        : groups.map((group) => <section className="audit-day" key={group.key} aria-label={group.label}>
+          <h2>{group.label}</h2><div className="audit-events">{group.rows.map((row) => <article className="audit-event" key={row.id}>
+            <div className="audit-event-time">{dateTime(row.created_at).split(' ').slice(-1)[0]}</div>
+            <div className="audit-event-main"><strong>{ACTIONS[row.action] || row.action}</strong>
+              <p>{row.user_name || (row.user_id ? `ผู้ใช้ #${row.user_id}` : 'ระบบ')} · {ENTITY[row.entity_type || ''] || row.entity_type || 'ข้อมูล'}{row.entity_id ? ` #${row.entity_id}` : ''}</p>
+            </div><button className="btn btn-ghost" type="button" onClick={() => setDetail(row)}>รายละเอียด</button>
+          </article>)}</div>
+        </section>)}
+    <div className="audit-pagination"><button className="btn" disabled={page === 0 || loading} onClick={() => setPage(page - 1)}>← ก่อนหน้า</button><span>หน้า {page + 1}</span><button className="btn" disabled={logs.length < PAGE_SIZE || loading} onClick={() => setPage(page + 1)}>ถัดไป →</button></div>
+
+    {detail && <div className="panel-overlay" onClick={() => setDetail(null)}><div className="repair-panel audit-detail" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="audit-detail-title">
+      <div className="repair-panel-header"><h2 className="repair-panel-title" id="audit-detail-title">{ACTIONS[detail.action] || detail.action}</h2><button className="repair-panel-close" onClick={() => setDetail(null)} aria-label="ปิด">×</button></div>
+      <div className="repair-panel-body"><dl className="audit-detail-meta"><div><dt>เวลา</dt><dd>{dateTime(detail.created_at)}</dd></div><div><dt>ผู้ใช้</dt><dd>{detail.user_name || (detail.user_id ? `#${detail.user_id}` : 'ระบบ')}</dd></div><div><dt>ข้อมูล</dt><dd>{ENTITY[detail.entity_type || ''] || detail.entity_type || '—'} {detail.entity_id || ''}</dd></div><div><dt>IP</dt><dd>{detail.ip_address || '—'}</dd></div></dl>
+        <details><summary>ข้อมูลก่อนแก้ไข</summary><pre>{valueText(detail.old_value)}</pre></details><details><summary>ข้อมูลหลังแก้ไข</summary><pre>{valueText(detail.new_value)}</pre></details>
+        <p className="audit-technical">รหัสเหตุการณ์: {detail.action} · ID: {detail.id}</p>
+      </div></div></div>}
+  </div>;
 }

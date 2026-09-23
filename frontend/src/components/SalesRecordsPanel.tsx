@@ -22,6 +22,9 @@ const money = (value: string | null | undefined) =>
 
 export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: SalesLead[]; canSyncSheet: boolean }) {
   const [kind, setKind] = useState<SalesRecordKind>('deal');
+  const [showForm, setShowForm] = useState(false);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [records, setRecords] = useState<SalesRecord[]>([]);
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [leadId, setLeadId] = useState('');
@@ -72,6 +75,7 @@ export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: Sale
         note: note.trim() || undefined,
       });
       setProduct(''); setQuantity('1'); setAmount(''); setNote('');
+      setShowForm(false);
       setNotice(kind === 'deal' ? 'บันทึกดีลแล้ว' : 'บันทึกคำขอชำระเงินแล้ว — ยังไม่ถือว่าชำระสำเร็จ');
       await load();
     } catch (err: any) {
@@ -100,14 +104,17 @@ export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: Sale
     }
   };
 
-  const visible = records.filter((record) => record.kind === kind);
+  const visible = records.filter((record) => record.kind === kind
+    && (statusFilter === 'all' || record.status === statusFilter)
+    && (!query.trim() || [record.lead_name, record.product, record.note].some((value) =>
+      (value || '').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))));
   return (
     <section className="page-section" aria-label="บันทึกการซื้อขายและคำขอชำระเงิน">
       <div className="section-header" style={{ flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <span className="section-title">การซื้อขาย</span>
+          <span className="section-title">บันทึกการซื้อขาย</span>
           <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
-            ดีลและคำขอชำระเงินเชื่อมกับรายชื่อลูกค้าในหน้านี้
+            เลือกหมวดก่อนบันทึกหรือตรวจสอบสถานะ แต่ละรายการเชื่อมกับลูกค้าที่ลงทะเบียนแล้ว
           </p>
         </div>
         <button className="btn" type="button" onClick={() => void load()} disabled={loading}>รีเฟรช</button>
@@ -124,11 +131,11 @@ export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: Sale
 
         <div role="tablist" aria-label="หมวดการซื้อขาย" className="sales-record-tabs">
           <button type="button" role="tab" aria-selected={kind === 'deal'}
-            className={kind === 'deal' ? 'btn btn-primary' : 'btn'} onClick={() => setKind('deal')}>
+            className={kind === 'deal' ? 'btn btn-primary' : 'btn'} onClick={() => { setKind('deal'); setStatusFilter('all'); setShowForm(false); }}>
             บันทึกดีล ({records.filter((r) => r.kind === 'deal').length})
           </button>
           <button type="button" role="tab" aria-selected={kind === 'payment_request'}
-            className={kind === 'payment_request' ? 'btn btn-primary' : 'btn'} onClick={() => setKind('payment_request')}>
+            className={kind === 'payment_request' ? 'btn btn-primary' : 'btn'} onClick={() => { setKind('payment_request'); setStatusFilter('all'); setShowForm(false); }}>
             ต้องการชำระเงิน ({records.filter((r) => r.kind === 'payment_request').length})
           </button>
         </div>
@@ -139,7 +146,14 @@ export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: Sale
           </p>
         )}
 
-        <form className="sales-record-form" onSubmit={submit}>
+        <div className="sales-record-toolbar">
+          <div><strong>{kind === 'deal' ? 'บันทึกดีล' : 'คำขอชำระเงิน'}</strong>
+            <small>{kind === 'deal' ? 'สนใจ → เสนอราคา → ปิดการขาย' : 'รับคำขอ → ตรวจสอบ → ดำเนินการ'}</small></div>
+          <button type="button" className="btn btn-primary" onClick={() => setShowForm((value) => !value)}
+            aria-expanded={showForm}>{showForm ? 'ปิดแบบฟอร์ม' : kind === 'deal' ? '+ เพิ่มบันทึกดีล' : '+ เพิ่มคำขอชำระเงิน'}</button>
+        </div>
+
+        {showForm && <form className="sales-record-form" onSubmit={submit}>
           <label>ลูกค้า / ผู้สนใจ
             <select className="form-input" value={leadId} onChange={(e) => setLeadId(e.target.value)} required>
               <option value="">เลือกลูกค้า</option>
@@ -164,10 +178,18 @@ export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: Sale
           <button className="btn btn-primary" type="submit" disabled={saving || leads.length === 0}>
             {saving ? 'กำลังบันทึก…' : kind === 'deal' ? 'บันทึกดีล' : 'บันทึกคำขอชำระเงิน'}
           </button>
-        </form>
+        </form>}
         {leads.length === 0 && <p>ยังไม่มีลูกค้า — ให้ลูกค้าลงทะเบียนผ่านหน้า “สมัครสมาชิกลูกค้า” ก่อน</p>}
         {notice && <p role="status" className="sales-record-notice">{notice}</p>}
         {error && <p role="alert" className="sales-record-error">{error}</p>}
+
+        <div className="sales-record-filters">
+          <input className="form-input" type="search" aria-label="ค้นหาลูกค้าหรือสินค้า" placeholder="ค้นหาลูกค้าหรือสินค้า" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="form-input" aria-label="กรองสถานะรายการ" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">ทุกสถานะ</option>{STATUS[kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>
+          <span>{visible.length} รายการ</span>
+        </div>
 
         {loading ? <p>กำลังโหลดบันทึก…</p> : visible.length === 0 ? (
           <p className="empty-text">ยังไม่มี{kind === 'deal' ? 'บันทึกดีล' : 'คำขอชำระเงิน'}ในหมวดนี้</p>

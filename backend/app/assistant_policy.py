@@ -29,6 +29,21 @@ def classify_urgency(message: str) -> str:
     return "safety_critical" if any(term in text for term in _SAFETY_PATTERNS) else "normal"
 
 
+def allow_freeform_ai_reply(intent: str, action: str) -> bool:
+    """Freeform model replies are for small talk only; facts use catalog/KB/backend."""
+    return intent in {"greeting", "thanks"} and action in {"answer", "ask_info"}
+
+
+def is_grounded_kb_explanation(reply: str, steps: list[str]) -> bool:
+    """Reject model-written troubleshooting unless every approved step stays intact."""
+    if not reply or not steps or len(reply) > 3000:
+        return False
+    compact_reply = re.sub(r"\s+", "", reply)
+    if any(term in compact_reply for term in ("ถอดฝา", "เปิดฝา", "แกะเครื่อง", "ต่อสายไฟเอง")):
+        return False
+    return all(re.sub(r"\s+", "", str(step)) in compact_reply for step in steps)
+
+
 def build_system_prompt() -> str:
     """Prompt for language understanding only; tools/backend remain authoritative."""
     return f"""คุณคือ {BOT_NAME} ของ {COMPANY_NAME}

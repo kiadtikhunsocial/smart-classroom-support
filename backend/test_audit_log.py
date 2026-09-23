@@ -498,3 +498,19 @@ def test_audit_log_endpoint_requires_admin(sandbox):
     assert client.get("/api/audit-logs").status_code == 401
     res = client.get("/api/audit-logs", headers=sandbox.headers(teacher))
     assert res.status_code == 403, res.text
+
+
+def test_audit_log_can_hide_login_noise_without_losing_other_events(sandbox):
+    admin = sandbox.user("admin")
+    sandbox.db.add_all([
+        AuditLog(user_id=admin.id, user_name="Audit test", action="login", entity_type="user", entity_id=str(admin.id)),
+        AuditLog(user_id=admin.id, user_name="Audit test", action="device_update", entity_type="device", entity_id="AUDITTEST-SAMPLE"),
+    ])
+    sandbox.db.commit()
+    params = {"user_id": admin.id, "include_logins": "false"}
+    hidden = client.get("/api/audit-logs", params=params, headers=sandbox.headers(admin))
+    assert hidden.status_code == 200, hidden.text
+    assert [row["action"] for row in hidden.json()] == ["device_update"]
+    shown = client.get("/api/audit-logs", params={"user_id": admin.id}, headers=sandbox.headers(admin))
+    assert shown.status_code == 200, shown.text
+    assert {row["action"] for row in shown.json()} == {"login", "device_update"}

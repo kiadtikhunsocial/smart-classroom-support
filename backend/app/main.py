@@ -5044,6 +5044,7 @@ def _parse_audit_date(raw: Optional[str], field: str) -> Optional[datetime]:
 @app.get("/api/audit-logs")
 def list_audit_logs(
     action: Optional[str] = Query(None),
+    include_logins: bool = Query(True, description="รวมเหตุการณ์เข้าสู่ระบบ"),
     entity_type: Optional[str] = Query(None),
     entity_id: Optional[str] = Query(None),
     user_id: Optional[int] = Query(None),
@@ -5058,6 +5059,8 @@ def list_audit_logs(
     stmt = select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
     if action:
         stmt = stmt.where(AuditLog.action == action)
+    elif not include_logins:
+        stmt = stmt.where(AuditLog.action.notin_(["login", "login_failed"]))
     if entity_type:
         stmt = stmt.where(AuditLog.entity_type == entity_type)
     if entity_id:
@@ -5738,13 +5741,14 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
         "SELECT intent, COUNT(*) FROM chatbot_logs WHERE created_at >= now() - make_interval(days => :days) GROUP BY intent ORDER BY COUNT(*) DESC"), params).fetchall()}
     missed = db.execute(text(
         "SELECT message FROM chatbot_logs WHERE (intent='other' OR ai_response='' OR ai_response IS NULL) "
-        "AND created_at >= now() - make_interval(days => :days) ORDER BY created_at DESC LIMIT 50"), params).fetchall()
+        "AND created_at >= now() - make_interval(days => :days) ORDER BY created_at DESC LIMIT 100"), params).fetchall()
+    from app.chatbot_quality import curate_review_questions
     return {
         "total_conversations": total,
         "self_service_resolved": resolved,
         "self_service_rate": round(resolved * 100.0 / total, 1) if total else 0.0,
         "intent_distribution": intents,
-        "missed_queries": [r[0] for r in missed],
+        "missed_queries": curate_review_questions((r[0] for r in missed)),
     }
 
 

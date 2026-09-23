@@ -31,6 +31,9 @@ function fmtDate(iso?: string | null): string {
 }
 
 export default function SalesPage({ onBack, userRole }: { onBack: () => void; userRole?: string }) {
+  const [view, setView] = useState<'overview' | 'records' | 'leads'>('overview');
+  const [leadQuery, setLeadQuery] = useState('');
+  const [leadStatus, setLeadStatus] = useState('all');
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [integrations, setIntegrations] = useState<{ google_sheet_configured: boolean; line_group_configured: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +89,12 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
     prods.forEach((p: string) => { productCount[p] = (productCount[p] || 0) + 1; });
   });
   const topProducts = Object.entries(productCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const visibleLeads = leads.filter((lead) => {
+    const needle = leadQuery.trim().toLocaleLowerCase();
+    return (leadStatus === 'all' || lead.status === leadStatus)
+      && (!needle || [lead.name, lead.phone, lead.interest, lead.products].some((value) =>
+        (value || '').toLocaleLowerCase().includes(needle)));
+  });
 
   if (loading) {
     return (
@@ -106,13 +115,13 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
           </button>
           <div>
-            <h1 className="top-bar-title">ยอดขาย &amp; การขอติดต่อ</h1>
-            <span className="top-bar-subtitle">ผู้สนใจซื้อ / ขอให้ติดต่อกลับ จาก LINE และเว็บ</span>
+            <h1 className="top-bar-title">ลูกค้าและการขาย</h1>
+            <span className="top-bar-subtitle">ติดตามผู้สนใจ บันทึกดีล และตรวจคำขอชำระเงินในที่เดียว</span>
           </div>
         </div>
         <div className="top-bar-actions">
-          <a className="btn btn-primary" href="/?customer=1" target="_blank" rel="noopener noreferrer">
-            ฟอร์มสมัครสมาชิกลูกค้า
+          <a className="btn" href="/?customer=1" target="_blank" rel="noopener noreferrer">
+            เปิดแบบฟอร์มลูกค้า ↗
           </a>
           <button
             className="btn btn-ghost btn-icon"
@@ -144,21 +153,40 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
         </div>
       )}
 
-      {/* สรุปยอด */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 16 }}>
+      <nav className="sales-main-tabs" aria-label="ส่วนของงานขาย">
+        {([
+          ['overview', 'ภาพรวม'], ['records', 'ดีลและการชำระเงิน'], ['leads', `รายชื่อลูกค้า (${total})`],
+        ] as const).map(([key, label]) => (
+          <button key={key} type="button" className={view === key ? 'sales-main-tab active' : 'sales-main-tab'}
+            aria-current={view === key ? 'page' : undefined} onClick={() => setView(key)}>{label}</button>
+        ))}
+      </nav>
+
+      {view === 'overview' && <>
+      <div className="sales-overview-intro">
+        <div><span className="sales-eyebrow">ภาพรวมงานขาย</span><h2>เริ่มจากลูกค้าที่รอการติดต่อ</h2>
+          <p>ตัวเลขนี้เป็นจำนวนรายการ ไม่ใช่ยอดเงินรับชำระ ใช้แทนกันไม่ได้</p></div>
+        <button type="button" className="btn btn-primary" onClick={() => setView('leads')}>ดูรายชื่อที่ต้องติดต่อ →</button>
+      </div>
+      <div className="sales-overview-kpis">
         {[
-          { label: 'Lead ทั้งหมด', value: total, color: 'var(--color-primary)' },
-          { label: 'รอติดต่อกลับ', value: newCount, color: 'var(--status-new, #EF4444)' },
-          { label: 'ติดต่อแล้ว', value: contacted, color: 'var(--status-resolved, #10B981)' },
+          { label: 'ลูกค้าทั้งหมด', value: total, color: 'var(--color-primary)', note: 'จากเว็บและ LINE' },
+          { label: 'รอติดต่อกลับ', value: newCount, color: 'var(--status-new, #EF4444)', note: 'ควรเริ่มจากกลุ่มนี้' },
+          { label: 'ติดต่อแล้ว', value: contacted, color: 'var(--status-resolved, #10B981)', note: 'ยังอาจมีดีลที่ต้องติดตาม' },
         ].map((c) => (
-          <div key={c.label} style={{
-            background: 'var(--color-surface-raised, var(--color-surface))',
-            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md, 12px)', padding: '16px 18px',
-          }}>
-            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-tertiary)' }}>{c.label}</div>
-            <div style={{ fontSize: '1.9rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
+          <div key={c.label} className="sales-overview-kpi">
+            <span>{c.label}</span><strong style={{ color: c.color }}>{c.value}</strong><small>{c.note}</small>
           </div>
         ))}
+      </div>
+
+      <div className="sales-next-actions">
+        <button type="button" onClick={() => { setLeadStatus('new'); setView('leads'); }}>
+          <strong>1 · ติดต่อผู้สนใจ</strong><span>ดูข้อมูลลูกค้าที่เพิ่งลงทะเบียนและบันทึกการติดต่อ</span><b>{newCount} ราย →</b>
+        </button>
+        <button type="button" onClick={() => setView('records')}>
+          <strong>2 · บันทึกการซื้อขาย</strong><span>ติดตามสถานะดีล หรือรับคำขอชำระเงินให้เจ้าหน้าที่ตรวจ</span><b>เปิดบันทึก →</b>
+        </button>
       </div>
 
       {/* สินค้าที่ถูกสนใจบ่อย */}
@@ -176,18 +204,25 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
           </div>
         </div>
       )}
+      </>}
 
-  <SalesRecordsPanel leads={leads} canSyncSheet={Boolean(integrations?.google_sheet_configured && canDelete)} />
+      {view === 'records' && <SalesRecordsPanel leads={leads} canSyncSheet={Boolean(integrations?.google_sheet_configured && canDelete)} />}
 
-      <div className="page-section">
+      {view === 'leads' && <div className="page-section">
         <div className="section-header">
-          <span className="section-title">รายชื่อผู้ขอติดต่อ / สนใจซื้อ ({total})</span>
+          <span className="section-title">รายชื่อลูกค้าและผู้สนใจ ({visibleLeads.length})</span>
           <span className="section-action">เรียงใหม่ล่าสุด</span>
         </div>
         <div className="section-body">
-          {leads.length === 0 ? (
+          <div className="sales-lead-filters">
+            <label>ค้นหาชื่อ เบอร์ หรือสินค้า<input className="form-input" type="search" value={leadQuery} onChange={(e) => setLeadQuery(e.target.value)} placeholder="พิมพ์คำค้น" /></label>
+            <label>สถานะ<select className="form-input" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}>
+              <option value="all">ทั้งหมด</option><option value="new">รอติดต่อกลับ</option><option value="contacted">ติดต่อแล้ว</option><option value="closed">ปิดแล้ว</option>
+            </select></label>
+          </div>
+          {visibleLeads.length === 0 ? (
             <div className="empty-state" style={{ padding: '24px' }}>
-              <span className="empty-text">ยังไม่มี lead — ผู้สนใจซื้อหรือขอติดต่อจาก LINE/เว็บจะปรากฏที่นี่</span>
+              <span className="empty-text">ไม่พบลูกค้าตามเงื่อนไขนี้</span>
             </div>
           ) : (
             <div className="table-wrap">
@@ -199,7 +234,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                   </tr>
                 </thead>
                 <tbody>
-                  {leads.map((l) => {
+                  {visibleLeads.map((l) => {
                     const st = LEAD_STATUS[l.status] || LEAD_STATUS.new;
                     return (
                       <tr key={l.id}>
@@ -265,7 +300,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
             </div>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

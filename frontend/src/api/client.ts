@@ -299,6 +299,7 @@ export const api = {
   // ─── Audit Log (Blueprint §40) ─────────────────────────────────────
   listAuditLogs: (params?: {
     action?: string;
+    include_logins?: boolean;
     entity_type?: string;
     entity_id?: string;
     user_id?: number;
@@ -311,6 +312,7 @@ export const api = {
   }) => {
     const qs = new URLSearchParams();
     if (params?.action) qs.set('action', params.action);
+    if (params?.include_logins !== undefined) qs.set('include_logins', String(params.include_logins));
     if (params?.entity_type) qs.set('entity_type', params.entity_type);
     if (params?.entity_id) qs.set('entity_id', params.entity_id);
     if (params?.user_id !== undefined) qs.set('user_id', String(params.user_id));

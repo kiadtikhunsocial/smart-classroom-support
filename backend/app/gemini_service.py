@@ -24,6 +24,7 @@ def mask_pii(text: str) -> str:
     text = re.sub(r'(?<!\d)(\+?66)?0\d{1,2}[- ]?\d{3}[- ]?\d{3,4}', '08X-XXX-XXXX', text)
     text = re.sub(r'[\w.+-]+@[\w-]+\.[\w.]+',
                   lambda m: m.group(0).split('@')[0][:2] + '***@' + m.group(0).split('@')[1], text)
+    text = re.sub(r'(?<!\w)@[A-Za-z0-9_.-]{3,}', '@***', text)
     return text
 
 
@@ -75,7 +76,7 @@ def explain_steps(symptom_text: str, kb_steps: list, device_type: str = "") -> s
         return None
     step_list = "\n".join(f"{i+1}. {s}" for i, s in enumerate(kb_steps))
     prompt = (
-        f"ลูกค้าแจ้งปัญหา: {symptom_text}\n"
+        f"ลูกค้าแจ้งปัญหา: {mask_pii(symptom_text)}\n"
         f"ประเภทอุปกรณ์: {device_type or 'ไม่ระบุ'}\n\n"
         "ขั้นตอนแก้ไขเบื้องต้นที่ระบบระบุไว้ (ใช้ขั้นตอนเหล่านี้เท่านั้น ห้ามเพิ่ม/แก้ไข/สร้างขั้นตอนใหม่):\n"
         f"{step_list}\n\n"
@@ -85,12 +86,14 @@ def explain_steps(symptom_text: str, kb_steps: list, device_type: str = "") -> s
         "ปิดท้ายด้วยคำแนะนำว่า ถ้าทำแล้วไม่หาย ให้บอก 'ยังไม่หาย' เพื่อให้ช่างช่วยต่อ\n"
         "ห้ามประดิษฐ์ขั้นตอนที่ไม่ใช่ในรายการ ห้ามแนะนำการถอด/เปิดฝาอุปกรณ์ ห้ามใช้คำว่า 'ฉัน' ใช้ 'คะ/ค่ะ'"
     )
-    return request_text(
+    answer = request_text(
         [_BASE_POLICY, prompt],
         generation_config={"temperature": 0.2, "maxOutputTokens": 500},
         timeout=12.0,
         retries=1,
     )
+    from app.assistant_policy import is_grounded_kb_explanation
+    return answer if is_grounded_kb_explanation(answer or "", kb_steps) else None
 
 
 def is_available() -> bool:
@@ -107,7 +110,7 @@ def classify_intent(text: str) -> dict | None:
         return None
     prompt = (
         "จงจำแนกเจตนาของข้อความลูกค้าต่อไปนี้ (ธุรกิจขาย ICT + สื่อการเรียนของไทย):\n"
-        f"ข้อความ: {text}\n\n"
+        f"ข้อความ: {mask_pii(text)}\n\n"
         "เลือก 1 เจตนาจาก: repair(แจ้งซ่อม/ปัญหาอุปกรณ์), buy(อยากซื้อ/ถามราคา/สั่งซื้อ), "
         "product(ถามข้อมูลสินค้าตัวไหน), service(ถามบริการตัวไหน), company(ถามข้อมูลบริษัท), "
         "contact(ขอช่องทางติดต่อ), track(ติดตามงาน/ticket), human(อยากคุยคนจริง), "
@@ -238,9 +241,9 @@ def gemini_orchestrate(text: str, user_context: dict) -> dict | None:
         if lines:
             history_text = "ประวัติการสนทนาที่ผ่านมา:\n" + "\n".join(lines) + "\n\n"
     prompt = (
-        f"ข้อความล่าสุดของลูกค้า: {text}\n"
+        f"ข้อความล่าสุดของลูกค้า: {mask_pii(text)}\n"
         f"{history_text}"
-        f"บริบทสนทนา: {user_context}\n"
+        f"บริบทสนทนา: {mask_pii(str(user_context))[:1000]}\n"
         f"ข้อมูลธุรกิจ:\n{ctx}\n\n"
         "จงตัดสินใจว่าบอทควรทำอะไรใน turn นี้ และร่างคำตอบถึงลูกค้า:\n"
         "- answer: ตอบตรงๆ (ข้อมูลสินค้า/บริการ/บริษัท/ทักทาย/ขอบคุณ)\n"
@@ -295,7 +298,7 @@ def phrase_repair_reply(context: str, detail: str) -> str | None:
     }.get(context, context)
     prompt = (
         f"สถานการณ์: {scenario}\n"
-        f"ข้อมูลประกอบ: {detail}\n\n"
+        f"ข้อมูลประกอบ: {mask_pii(detail)}\n\n"
         "จงเขียนคำตอบถึงลูกค้า 1-2 ประโยค ภาษาไทยสุภาพ อบอุ่น เป็นธรรมชาติ เหมือนพนักงานไทย "
         "ไม่ใช้รูปแบบเดิมซ้ำทุกครั้ง ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย ถ้าเป็น ticket_created ให้ระบุเลข ticket"
     )
@@ -323,7 +326,7 @@ def match_article(symptom_text: str, device_type: Optional[str], candidates: lis
         for a in candidates
     )
     instruction = (
-        f"ผู้ใช้แจ้งอาการ: {symptom_text}\n"
+        f"ผู้ใช้แจ้งอาการ: {mask_pii(symptom_text)}\n"
         f"ประเภทอุปกรณ์: {device_type or 'ไม่ระบุ'}\n\n"
         "รายการบทความในฐานความรู้ (เลือกจากรายการนี้เท่านั้น ห้ามสร้างบทความ/วิธีแก้เอง):\n"
         f"{list_text}\n\n"

@@ -9,9 +9,12 @@
   margin-bottom: 28px;
 }
 .ph-hero-copy .ph-eyebrow { margin-bottom: 16px; }
-.ph-hero-copy .ph-hero-title { max-width: 14ch; font-size: clamp(2.35rem, 4.5vw, 4.5rem); line-height: 1.08; }
+.ph-hero-copy .ph-hero-title { max-width: 18ch; font-size: clamp(2.2rem, 4.15vw, 3.9rem); line-height: 1.12; }
 .ph-hero-copy .ph-hero-sub { margin: 0 0 22px; max-width: 52ch; }
 .ph-hero-cta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ph-sales-inline { display: inline-block; margin-top: 16px; color: var(--ph-text-2); font-size: .84rem; text-decoration: none; }
+.ph-sales-inline strong { color: var(--ph-accent-text, var(--ph-blue)); }
+.ph-sales-inline:hover strong { text-decoration: underline; }
 .ph-hero-cta a, .ph-hero-cta button, .ph-customer-cta {
   display: inline-flex;
   align-items: center;
@@ -49,7 +52,7 @@
   justify-content: space-between;
   gap: 18px;
   padding: 22px 26px;
-  margin-top: 22px;
+  margin-top: 0;
   border: 1px solid var(--ph-line);
   border-radius: 18px;
   background: var(--ph-glass-strong);
@@ -57,8 +60,9 @@
 .ph-customer-band h2 { margin: 7px 0 4px; font-size: clamp(1rem, 1.5vw, 1.2rem); }
 .ph-customer-band p { margin: 0; color: var(--ph-text-2); font-size: 0.82rem; }
 .ph-customer-cta { flex-shrink: 0; }
-.ph-customer-link { color: var(--ph-text-2); font-size: 0.82rem; font-weight: 700; text-decoration: none; padding: 7px 9px; }
+.ph-customer-link { color: var(--ph-accent-text, var(--ph-blue)); font-size: 0.82rem; font-weight: 700; text-decoration: none; padding: 9px 13px; border: 1px solid var(--ph-line-strong); border-radius: 999px; white-space: nowrap; }
 .ph-customer-link:hover { color: var(--ph-blue); }
+.ph-staff-footer-link { opacity: .65; font-size: .76rem; }
 
 @media (max-width: 850px) {
   .ph-hero-grid { grid-template-columns: 1fr; }
@@ -72,7 +76,7 @@
   .ph-customer-band { align-items: stretch; flex-direction: column; padding: 20px; }
   .ph-customer-cta { width: 100%; box-sizing: border-box; }
   .ph-hero-panel { padding: 20px; }
-  .ph-customer-link { display: none; }
+  .ph-customer-link { font-size: .72rem; padding: 7px 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
