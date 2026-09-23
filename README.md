@@ -126,6 +126,7 @@ DATABASE_URL='<connection string>' JWT_SECRET=x PYTHONPATH=. \
 - QR ฝัง URL + token เท่านั้น (`/scan?t={token}`) ไม่ฝังข้อมูลอุปกรณ์ → ย้ายอุปกรณ์ได้ไม่ต้องพิมพ์ใหม่
 - ข้อมูลอุปกรณ์/ห้องอ่านจาก DB ตอน resolve token (ผ่าน `GET /api/qr/resolve/{token}`)
 - สร้าง QR ได้ที่หน้า "อุปกรณ์" (ปุ่ม QR ต่อเครื่อง) + "พิมพ์ QR" (batch)
+- `backend/scripts/generate_qr.py` เป็นตัวสร้าง QR แบบออฟไลน์ที่ฝังรหัสอุปกรณ์ (`?device=`) จากฐานข้อมูลที่เชื่อมอยู่ ค่าเริ่มต้นชี้ localhost และผลลัพธ์ใน `qr_codes/` ไม่ถูก commit เพราะ QR จากฐานข้อมูลเดโมใช้กับ production ไม่ได้; หากจะพิมพ์ใช้งานจริงให้สร้างจากอุปกรณ์ในฐานข้อมูล production เท่านั้น
 
 ## ดูรายละเอียด API
 

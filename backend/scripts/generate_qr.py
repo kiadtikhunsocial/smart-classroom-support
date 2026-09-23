@@ -16,6 +16,8 @@ generate_qr.py — สร้าง QR Code ของอุปกรณ์ "จ�
 
 URL ใน QR ปรับได้ด้วย --base-url หรือ env QR_BASE_URL
 (ต้องเป็นหน้าสแกนที่รับ ?device= เช่น https://<host>/scan)
+ค่าเริ่มต้นเป็น localhost เพราะ QR ที่สร้างจากฐานข้อมูลในเครื่องไม่ใช่ QR ของ production
+หากใช้กับ production ให้รันกับฐานข้อมูล production และระบุ --base-url อย่างชัดเจน
 """
 
 from __future__ import annotations
@@ -53,7 +55,7 @@ except Exception:  # pragma: no cover - import app.main ไม่ได้ก็
         return None
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "qr_codes"
-DEFAULT_BASE_URL = os.environ.get("QR_BASE_URL", "https://iwasmart-service.vercel.app/scan")
+DEFAULT_BASE_URL = os.environ.get("QR_BASE_URL", "http://localhost:5173/scan")
 
 # ชื่อโฟลเดอร์ของแต่ละหมวด — ตั้งเป็น ASCII เพื่อให้พาธพอร์ตข้ามเครื่อง/ระบบไฟล์
 # และใช้ใน URL ได้ตรง ๆ (ชื่อหมวดภาษาไทยยังใช้แสดงในหน้า index/manifest ตามเดิม)

@@ -57,6 +57,10 @@ backups/
 tmp_db.sqlite
 tmp_db.sqlite-*
 
+# Generated QR sheets are tied to the database they were created from.
+# Never commit local/demo QR images as production-ready device labels.
+/qr_codes/
+
 # ไฟล์ workflow ที่แทนค่าลับแล้ว (ห้ามขึ้น git)
 *.ready.json
 *.b64
