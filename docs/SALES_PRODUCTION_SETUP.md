@@ -37,6 +37,13 @@ tokens removed. Render imports the pack using its existing private DATABASE_URL
 on startup. A database marker makes the operation **one-time**, including
 future service restarts. No database credential is read out of Render.
 
+The separate `import_sales_demo.py` startup step adds ten fictional customer
+enquiries and ten deal/payment-request examples, once only. They are marked
+`DEMO`, contain no phone/email/LINE ID, and never sync to Sheet or notify LINE.
+Sales summary totals exclude them; the sales page labels and filters them.
+The startup log prints `Committed fictional sales demo:` on first import or
+`Sales demo already applied; no changes` on later deploys.
+
 Verify the Render deploy log contains `Committed demo pack:` with counts, or
 `Demo pack already applied; no changes`. After import, sign in to production
 as staff and check the five schools and their device/ticket counts. If import

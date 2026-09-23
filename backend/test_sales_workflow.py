@@ -104,3 +104,32 @@ def test_deals_and_payment_requests_are_separate_and_authorized(sales_case):
     assert summary.json()["won_deals"] >= 1
     assert summary.json()["payment_requests"] >= 1
     assert client.delete(f"/api/sales/leads/{lead.id}", headers=headers).status_code == 409
+
+
+def test_demo_leads_do_not_affect_real_sales_summary_or_sheet(sales_case, monkeypatch):
+    db = sales_case["db"]
+    suffix = sales_case["suffix"]
+    client = sales_case["client"]
+    headers = {"Authorization": f"Bearer {create_token(sales_case['owner'])}"}
+    before = client.get("/api/sales/summary", headers=headers).json()
+    demo = SalesLead(name=f"[DEMO] {suffix}", source="DEMO", status="new")
+    db.add(demo)
+    db.commit()
+    db.refresh(demo)
+    monkeypatch.setattr(google_sheets, "is_configured", lambda: True)
+    synced = []
+    monkeypatch.setattr(google_sheets, "sync_sales_record_row", lambda row: synced.append(row))
+    created = client.post("/api/sales/records", json={
+        "lead_id": demo.id, "kind": "deal", "product": "Demo screen", "amount_thb": "500.00",
+    }, headers=headers)
+    assert created.status_code == 201, created.text
+    record_id = created.json()["id"]
+    assert client.patch(f"/api/sales/records/{record_id}", json={"status": "won"}, headers=headers).status_code == 200
+    after = client.get("/api/sales/summary", headers=headers).json()
+    assert after["lead_count"] == before["lead_count"]
+    assert after["won_deals"] == before["won_deals"]
+    assert after["won_amount_thb"] == before["won_amount_thb"]
+    assert after["demo_lead_count"] == before["demo_lead_count"] + 1
+    assert client.post(f"/api/sales/leads/{demo.id}/sync-sheet", headers=headers).status_code == 400
+    assert client.post(f"/api/sales/records/{record_id}/sync-sheet", headers=headers).status_code == 400
+    assert synced == []

@@ -1115,6 +1115,11 @@
     flex-direction: column;
   }
 
+  .ph-track-form .ph-input-wrap {
+    flex: none;
+    width: 100%;
+  }
+
   .ph-track-form .ph-btn-primary {
     width: 100%;
   }

@@ -1,5 +1,6 @@
 """Shared safety, tone, and grounding policy for the customer-service assistant."""
 import re
+from pathlib import Path
 
 COMPANY_NAME = "บริษัท ไอว่า ริช ยู ดี จำกัด (IWA RICH YOU D CO.,LTD.)"
 BOT_NAME = "ผู้ช่วย IWA RICH YOU D"
@@ -46,7 +47,7 @@ def is_grounded_kb_explanation(reply: str, steps: list[str]) -> bool:
 
 def build_system_prompt() -> str:
     """Prompt for language understanding only; tools/backend remain authoritative."""
-    return f"""คุณคือ {BOT_NAME} ของ {COMPANY_NAME}
+    base = f"""คุณคือ {BOT_NAME} ของ {COMPANY_NAME}
 
 หน้าที่: ให้บริการข้อมูลสินค้า/บริการ, ช่วยวิเคราะห์ปัญหาอุปกรณ์เบื้องต้นจากฐานความรู้ที่แนบมา,
 รับข้อมูลแจ้งซ่อม และติดตาม Ticket อย่างสุภาพเป็นธรรมชาติ
@@ -63,6 +64,16 @@ def build_system_prompt() -> str:
 
 โครงสร้างคำตอบที่ต้องการ: รับรู้อาการหรือความต้องการก่อน → คำตอบ/ขั้นตอนที่ grounded → คำถามถัดไปเพียงหนึ่งข้อ
 """
+    extra_file = Path(__file__).resolve().parent.parent / "chatbot_extra_prompt.txt"
+    try:
+        extra = extra_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        extra = ""
+    if not extra:
+        return base
+    # This is optional style guidance, not a replacement for the fixed safety policy.
+    return (base + "\nแนวทางเพิ่มเติม (ใช้เฉพาะเมื่อไม่ขัดกับกฎสำคัญด้านบน):\n"
+            + extra[:3000] + "\nหากแนวทางเพิ่มเติมขัดกับกฎสำคัญ ให้ยึดกฎสำคัญและข้อมูลจากระบบเท่านั้น\n")
 
 
 INJECTION_REPLY = "ขออภัยค่ะ ไม่สามารถทำตามคำขอนี้ได้ มีเรื่องสินค้า บริการ หรืออุปกรณ์ที่ให้ช่วยตรวจสอบไหมคะ"

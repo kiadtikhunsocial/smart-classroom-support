@@ -6254,7 +6254,7 @@ class LeadStatusUpdate(BaseModel):
 
 def _sync_sales_lead_async(lead: SalesLead) -> None:
     """Best-effort Sheet mirror; database is authoritative if the service is down."""
-    if not google_sheets.is_configured():
+    if lead.source == "DEMO" or not google_sheets.is_configured():
         return
     snapshot = {
         "id": lead.id, "user_id": lead.user_id, "name": lead.name,
@@ -6294,6 +6294,8 @@ def retry_sales_lead_sheet_sync(
     lead = db.get(SalesLead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="ไม่พบลูกค้า")
+    if lead.source == "DEMO":
+        raise HTTPException(status_code=400, detail="ข้อมูลตัวอย่างไม่ส่งไป Google Sheet")
     if not google_sheets.is_configured():
         raise HTTPException(status_code=503, detail="ยังไม่ได้ตั้งค่า Google Sheet")
     _sync_sales_lead_async(lead)
@@ -6356,8 +6358,8 @@ def _sales_record_out(row: SalesRecord, lead_name: str = "") -> dict:
     }
 
 
-def _sync_sales_record_async(record: SalesRecord, lead_name: str) -> None:
-    if not google_sheets.is_configured():
+def _sync_sales_record_async(record: SalesRecord, lead_name: str, lead_source: str = "") -> None:
+    if lead_source == "DEMO" or not google_sheets.is_configured():
         return
     snapshot = _sales_record_out(record, lead_name)
     threading.Thread(
@@ -6420,7 +6422,7 @@ def create_sales_record(
     )
     db.commit()
     db.refresh(record)
-    _sync_sales_record_async(record, lead.name or "")
+    _sync_sales_record_async(record, lead.name or "", lead.source)
     return _sales_record_out(record, lead.name or "")
 
 
@@ -6448,7 +6450,7 @@ def update_sales_record(
     db.commit()
     db.refresh(record)
     lead = db.get(SalesLead, record.lead_id)
-    _sync_sales_record_async(record, lead.name if lead else "")
+    _sync_sales_record_async(record, lead.name if lead else "", lead.source if lead else "")
     return _sales_record_out(record, lead.name if lead else "")
 
 
@@ -6464,7 +6466,9 @@ def retry_sales_record_sheet_sync(
     if not google_sheets.is_configured():
         raise HTTPException(status_code=503, detail="ยังไม่ได้ตั้งค่า Google Sheet")
     lead = db.get(SalesLead, record.lead_id)
-    _sync_sales_record_async(record, lead.name if lead else "")
+    if lead and lead.source == "DEMO":
+        raise HTTPException(status_code=400, detail="ข้อมูลตัวอย่างไม่ส่งไป Google Sheet")
+    _sync_sales_record_async(record, lead.name if lead else "", lead.source if lead else "")
     return {"queued": True, "record_id": record_id}
 
 
@@ -6474,11 +6478,14 @@ def sales_summary(
     user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
 ):
     rows = db.execute(
-        text("SELECT kind, status, COUNT(*) AS count, "
-             "COALESCE(SUM(amount_thb), 0) AS amount FROM sales_records GROUP BY kind, status")
+        text("SELECT sr.kind, sr.status, COUNT(*) AS count, "
+             "COALESCE(SUM(sr.amount_thb), 0) AS amount FROM sales_records sr "
+             "JOIN sales_leads sl ON sl.id = sr.lead_id "
+             "WHERE sl.source <> 'DEMO' GROUP BY sr.kind, sr.status")
     ).mappings().all()
     return {
-        "lead_count": db.execute(select(func.count(SalesLead.id))).scalar_one(),
+        "lead_count": db.execute(select(func.count(SalesLead.id)).where(SalesLead.source != "DEMO")).scalar_one(),
+        "demo_lead_count": db.execute(select(func.count(SalesLead.id)).where(SalesLead.source == "DEMO")).scalar_one(),
         "open_deals": sum(r["count"] for r in rows if r["kind"] == "deal" and r["status"] in {"interested", "quoted"}),
         "won_deals": sum(r["count"] for r in rows if r["kind"] == "deal" and r["status"] == "won"),
         "won_amount_thb": str(sum((r["amount"] for r in rows if r["kind"] == "deal" and r["status"] == "won"), Decimal("0"))),

@@ -32,6 +32,7 @@ export interface SalesRecord {
 
 export interface SalesSummary {
   lead_count: number;
+  demo_lead_count: number;
   open_deals: number;
   won_deals: number;
   won_amount_thb: string;

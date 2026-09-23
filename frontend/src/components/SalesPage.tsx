@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import type { SalesLead } from '../types/sales';
+import type { SalesLead, SalesSummary } from '../types/sales';
 import SalesRecordsPanel from './SalesRecordsPanel';
 import '../styles/sales.css';
 
@@ -18,6 +18,7 @@ const LEAD_STATUS: Record<string, { label: string; color: string }> = {
 const LEAD_SOURCE_LABEL: Record<string, string> = {
   LINE: 'LINE',
   WEB: 'เว็บไซต์',
+  DEMO: 'ตัวอย่าง',
 };
 
 function fmtDate(iso?: string | null): string {
@@ -34,7 +35,9 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
   const [view, setView] = useState<'overview' | 'records' | 'leads'>('overview');
   const [leadQuery, setLeadQuery] = useState('');
   const [leadStatus, setLeadStatus] = useState('all');
+  const [leadType, setLeadType] = useState<'all' | 'real' | 'demo'>('all');
   const [leads, setLeads] = useState<SalesLead[]>([]);
+  const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [integrations, setIntegrations] = useState<{ google_sheet_configured: boolean; line_group_configured: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +60,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
       .catch((e) => setError(e?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
     api.getSalesIntegrations().then(setIntegrations).catch(() => setIntegrations(null));
+    api.getSalesSummary().then(setSummary).catch(() => setSummary(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,12 +83,14 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
   };
 
   // ── สรุปยอด ──
-  const total = leads.length;
-  const contacted = leads.filter((l) => l.status === 'contacted').length;
-  const newCount = leads.filter((l) => l.status === 'new').length;
+  const realLeads = leads.filter((l) => l.source !== 'DEMO');
+  const demoCount = leads.length - realLeads.length;
+  const total = realLeads.length;
+  const contacted = realLeads.filter((l) => l.status === 'contacted').length;
+  const newCount = realLeads.filter((l) => l.status === 'new').length;
   // สินค้าที่ถูกสนใจบ่อย (จาก products/interest)
   const productCount: Record<string, number> = {};
-  leads.forEach((l) => {
+  realLeads.forEach((l) => {
     const prods = (l.products || '').split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
     prods.forEach((p: string) => { productCount[p] = (productCount[p] || 0) + 1; });
   });
@@ -92,6 +98,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
   const visibleLeads = leads.filter((lead) => {
     const needle = leadQuery.trim().toLocaleLowerCase();
     return (leadStatus === 'all' || lead.status === leadStatus)
+      && (leadType === 'all' || (leadType === 'demo') === (lead.source === 'DEMO'))
       && (!needle || [lead.name, lead.phone, lead.interest, lead.products].some((value) =>
         (value || '').toLocaleLowerCase().includes(needle)));
   });
@@ -153,9 +160,14 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
         </div>
       )}
 
+      {demoCount > 0 && <div role="note" className="sales-demo-notice">
+        มีข้อมูลตัวอย่าง {demoCount} รายชื่อเพื่อทดลองหน้าจอ — ไม่มีข้อมูลติดต่อจริง และไม่นับรวมยอดขายจริง
+        <button type="button" onClick={() => { setLeadType('demo'); setView('leads'); }}>ดูข้อมูลตัวอย่าง →</button>
+      </div>}
+
       <nav className="sales-main-tabs" aria-label="ส่วนของงานขาย">
         {([
-          ['overview', 'ภาพรวม'], ['records', 'ดีลและการชำระเงิน'], ['leads', `รายชื่อลูกค้า (${total})`],
+          ['overview', 'ภาพรวม'], ['records', 'ดีลและการชำระเงิน'], ['leads', `รายชื่อลูกค้า (${leads.length})`],
         ] as const).map(([key, label]) => (
           <button key={key} type="button" className={view === key ? 'sales-main-tab active' : 'sales-main-tab'}
             aria-current={view === key ? 'page' : undefined} onClick={() => setView(key)}>{label}</button>
@@ -166,7 +178,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
       <div className="sales-overview-intro">
         <div><span className="sales-eyebrow">ภาพรวมงานขาย</span><h2>เริ่มจากลูกค้าที่รอการติดต่อ</h2>
           <p>ตัวเลขนี้เป็นจำนวนรายการ ไม่ใช่ยอดเงินรับชำระ ใช้แทนกันไม่ได้</p></div>
-        <button type="button" className="btn btn-primary" onClick={() => setView('leads')}>ดูรายชื่อที่ต้องติดต่อ →</button>
+        <button type="button" className="btn btn-primary" onClick={() => { setLeadType('real'); setLeadStatus('new'); setView('leads'); }}>ดูรายชื่อที่ต้องติดต่อ →</button>
       </div>
       <div className="sales-overview-kpis">
         {[
@@ -180,8 +192,15 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
         ))}
       </div>
 
+      {summary && <div className="sales-record-kpis sales-overview-record-kpis" aria-label="สถานะการขายจริง">
+        <span>ดีลที่กำลังติดตาม <strong>{summary.open_deals}</strong></span>
+        <span>ปิดการขาย <strong>{summary.won_deals}</strong></span>
+        <span>มูลค่าดีลที่ปิด <strong>{Number(summary.won_amount_thb).toLocaleString('th-TH')} ฿</strong></span>
+        <span>คำขอชำระเงินรอตรวจ <strong>{summary.payment_requests}</strong></span>
+      </div>}
+
       <div className="sales-next-actions">
-        <button type="button" onClick={() => { setLeadStatus('new'); setView('leads'); }}>
+        <button type="button" onClick={() => { setLeadType('real'); setLeadStatus('new'); setView('leads'); }}>
           <strong>1 · ติดต่อผู้สนใจ</strong><span>ดูข้อมูลลูกค้าที่เพิ่งลงทะเบียนและบันทึกการติดต่อ</span><b>{newCount} ราย →</b>
         </button>
         <button type="button" onClick={() => setView('records')}>
@@ -219,6 +238,9 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
             <label>สถานะ<select className="form-input" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}>
               <option value="all">ทั้งหมด</option><option value="new">รอติดต่อกลับ</option><option value="contacted">ติดต่อแล้ว</option><option value="closed">ปิดแล้ว</option>
             </select></label>
+            <label>ประเภทข้อมูล<select className="form-input" value={leadType} onChange={(e) => setLeadType(e.target.value as 'all' | 'real' | 'demo')}>
+              <option value="all">ทั้งหมด</option><option value="real">ลูกค้าจริง</option><option value="demo">ข้อมูลตัวอย่าง</option>
+            </select></label>
           </div>
           {visibleLeads.length === 0 ? (
             <div className="empty-state" style={{ padding: '24px' }}>
@@ -238,7 +260,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                     const st = LEAD_STATUS[l.status] || LEAD_STATUS.new;
                     return (
                       <tr key={l.id}>
-                        <td style={{ fontWeight: 600 }}>{l.name || '—'}</td>
+                        <td style={{ fontWeight: 600 }}>{l.name || '—'}{l.source === 'DEMO' && <span className="sales-demo-badge">ตัวอย่าง</span>}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>{l.phone || '—'}</td>
                         <td style={{ fontSize: '0.82rem' }}>{l.interest || '—'}</td>
                         <td style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>{l.products || '—'}</td>
@@ -256,7 +278,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            {l.status === 'new' ? (
+                            {l.source === 'DEMO' ? <span className="sales-demo-muted">ไม่ต้องติดต่อ</span> : l.status === 'new' ? (
                               <button
                                 className="btn btn-primary"
                                 style={{ padding: '4px 10px', fontSize: '0.78rem' }}
@@ -268,7 +290,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                             ) : (
                               <span style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>ติดต่อแล้ว</span>
                             )}
-                            {canDelete && (
+                            {canDelete && l.source !== 'DEMO' && (
                               <button
                                 className="btn"
                                 style={{ padding: '4px 10px', fontSize: '0.78rem' }}
@@ -279,7 +301,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                                 title="ส่งรายการนี้ไป Google Sheet อีกครั้ง"
                               >ชีต</button>
                             )}
-                            {canDelete && (
+                            {canDelete && l.source !== 'DEMO' && (
                               <button
                                 className="btn btn-danger"
                                 style={{ padding: '4px 10px', fontSize: '0.78rem' }}

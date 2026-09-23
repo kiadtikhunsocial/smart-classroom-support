@@ -152,7 +152,8 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
       <section className="bot-review-guide" aria-label="วิธีพัฒนาแชตบอต">
         <div><span className="bot-review-kicker">ปรับคำตอบได้ด้วยตัวเอง</span>
           <h2>ทบทวนคำถาม → เพิ่มความรู้ → ทดสอบ → เผยแพร่</h2>
-          <p>เขียนขั้นตอนที่ตรวจสอบได้พร้อมคำค้นหลายรูปแบบ บันทึกเป็นฉบับร่างก่อน ทวนข้อมูลกับผู้เชี่ยวชาญ แล้วจึงเปิด “เผยแพร่” และทดสอบในสภาพแวดล้อมทดสอบ</p></div>
+          <p>เขียนขั้นตอนที่ตรวจสอบได้พร้อมคำค้นหลายรูปแบบ บันทึกเป็นฉบับร่างก่อน ทวนข้อมูลกับผู้เชี่ยวชาญ แล้วจึงเปิด “เผยแพร่” และทดสอบในสภาพแวดล้อมทดสอบ</p>
+          <p>หากต้องการปรับน้ำเสียง/แนวทางสนทนาของ AI เพิ่มเติม ให้แก้ <code>backend/chatbot_extra_prompt.txt</code> แล้วทดสอบและ deploy backend ใหม่ ส่วนข้อมูลสินค้า ราคา และวิธีซ่อมให้แก้ที่แหล่งข้อมูลของแต่ละเรื่อง ไม่ใส่ใน prompt</p></div>
         {canReviewBot && <button className="btn" type="button" onClick={() => void toggleReview()} aria-expanded={botReviewOpen}>{botReviewOpen ? 'ซ่อนคำถามที่ควรตรวจ' : 'ดูคำถามที่บอตตอบไม่ชัด'}</button>}
       </section>
       {botReviewOpen && <section className="bot-review-panel" aria-label="คุณภาพแชตบอต">

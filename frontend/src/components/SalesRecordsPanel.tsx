@@ -121,12 +121,15 @@ export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: Sale
       </div>
       <div className="section-body">
         {summary && (
+          <>
+          <p className="sales-summary-hint">ตัวเลขสรุปด้านล่างนับเฉพาะลูกค้าจริง ไม่รวมรายการที่ติดป้าย DEMO</p>
           <div className="sales-record-kpis">
             <span>ดีลที่กำลังติดตาม <strong>{summary.open_deals}</strong></span>
             <span>ปิดการขาย <strong>{summary.won_deals}</strong></span>
             <span>มูลค่าดีลที่ปิด <strong>{money(summary.won_amount_thb)}</strong></span>
             <span>คำขอชำระเงินที่รอจัดการ <strong>{summary.payment_requests}</strong></span>
           </div>
+          </>
         )}
 
         <div role="tablist" aria-label="หมวดการซื้อขาย" className="sales-record-tabs">
@@ -199,18 +202,19 @@ export default function SalesRecordsPanel({ leads, canSyncSheet }: { leads: Sale
               <thead><tr><th>ลูกค้า</th><th>สินค้า / บริการ</th><th>จำนวน</th><th>มูลค่า</th><th>สถานะ</th><th>วันที่</th>{canSyncSheet && <th>ชีต</th>}</tr></thead>
               <tbody>{visible.map((record) => (
                 <tr key={record.id}>
-                  <td>{record.lead_name}</td>
+                  <td>{record.lead_name}{record.lead_name.startsWith('[DEMO]') && <span className="sales-demo-badge">ตัวอย่าง</span>}</td>
                   <td>{record.product}{record.note && <small className="sales-record-subnote">{record.note}</small>}</td>
                   <td>{record.quantity}</td>
                   <td>{money(record.amount_thb)}</td>
                   <td>
                     <select className="form-input" aria-label={`สถานะรายการ ${record.id}`}
+                      disabled={record.lead_name.startsWith('[DEMO]')}
                       value={record.status} onChange={(e) => void changeStatus(record, e.target.value)}>
                       {STATUS[record.kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                     </select>
                   </td>
                   <td>{new Date(record.created_at).toLocaleDateString('th-TH')}</td>
-                  {canSyncSheet && <td><button className="btn" type="button" onClick={() => void retrySheet(record.id)}>ซิงก์ใหม่</button></td>}
+                  {canSyncSheet && <td>{record.lead_name.startsWith('[DEMO]') ? '—' : <button className="btn" type="button" onClick={() => void retrySheet(record.id)}>ซิงก์ใหม่</button>}</td>}
                 </tr>
               ))}</tbody>
             </table>
