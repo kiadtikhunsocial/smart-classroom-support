@@ -64,3 +64,6 @@ tmp_db.sqlite-*
 # ไฟล์ workflow ที่แทนค่าลับแล้ว (ห้ามขึ้น git)
 *.ready.json
 *.b64
+
+/.vercel/
+/.env.local
