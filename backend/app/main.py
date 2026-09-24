@@ -3917,6 +3917,25 @@ def download_upload(
 _CHATBOT_MANAGER = require_roles("owner", "super_admin")
 
 
+def _is_ratings_viewer(user: User) -> bool:
+    # Ratings contain staff feedback; restrict to the designated account, not
+    # merely every future account that may be granted the super_admin role.
+    allowed_id = os.environ.get("RATINGS_VIEWER_USERNAME", "iwasuperadmin").strip().casefold()
+    return bool(allowed_id and user.role == "super_admin"
+                and (user.line_user_id or "").strip().casefold() == allowed_id)
+
+
+def require_ratings_viewer(user: User = Depends(get_current_user)) -> User:
+    if not _is_ratings_viewer(user):
+        raise HTTPException(status_code=403, detail="ผลประเมินเปิดเฉพาะบัญชี superadmin ที่กำหนด")
+    return user
+
+
+@app.get("/api/chatbot/manage/access")
+def chatbot_manage_access(user: User = Depends(_CHATBOT_MANAGER)):
+    return {"can_view_ratings": _is_ratings_viewer(user)}
+
+
 class ChatbotKnowledgeInput(BaseModel):
     question: str = Field(..., min_length=3, max_length=500)
     answer: str = Field(..., min_length=3, max_length=3000)
@@ -4030,7 +4049,7 @@ def update_chatbot_prompt(task: str, payload: ChatbotPromptInput, request: Reque
 
 @app.get("/api/chatbot/manage/ratings")
 def list_line_ratings(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
-                      user: User = Depends(require_roles("super_admin"))):
+                      user: User = Depends(require_ratings_viewer)):
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     rows = db.execute(select(LineServiceRating).where(LineServiceRating.created_at >= cutoff)
                       .order_by(LineServiceRating.created_at.desc()).limit(200)).scalars().all()
@@ -6068,7 +6087,7 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
         "missed_queries": curate_review_questions((r[0] for r in missed)),
     }
     # Ratings are personnel feedback; only top-level administrators can see them.
-    if user.role == "super_admin":
+    if _is_ratings_viewer(user):
         result["line_ratings"] = {
             target: {"count": db.execute(select(func.count(LineServiceRating.id)).where(LineServiceRating.target == target)).scalar_one(),
                      "average": round(float(db.execute(select(func.avg(LineServiceRating.score)).where(LineServiceRating.target == target)).scalar_one() or 0), 1)}

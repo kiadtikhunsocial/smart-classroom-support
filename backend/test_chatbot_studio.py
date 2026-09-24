@@ -13,28 +13,31 @@ from app.prompt_extensions import with_extension
 
 
 @pytest.fixture
-def studio():
+def studio(monkeypatch):
     try:
         init_db()
     except Exception as exc:
         pytest.skip(f"PostgreSQL unavailable: {exc}")
     db = SessionLocal()
     suffix = uuid.uuid4().hex[:12]
+    monkeypatch.setenv("RATINGS_VIEWER_USERNAME", f"studio-admin-{suffix}")
     previous_prompt = db.get(ChatbotPromptSetting, "line_reply")
     prompt_backup = ({"guidance": previous_prompt.guidance, "enabled": previous_prompt.enabled,
                       "updated_by": previous_prompt.updated_by} if previous_prompt else None)
     admin = User(line_user_id=f"studio-admin-{suffix}", role="super_admin", is_active=True)
     regular = User(line_user_id=f"studio-regular-{suffix}", role="admin", is_active=True)
     owner = User(line_user_id=f"studio-owner-{suffix}", role="owner", is_active=True)
-    db.add_all([admin, regular, owner]); db.commit()
+    other_superadmin = User(line_user_id=f"studio-other-{suffix}", role="super_admin", is_active=True)
+    db.add_all([admin, regular, owner, other_superadmin]); db.commit()
     headers = {"Authorization": f"Bearer {create_token(admin)}"}
     denied = {"Authorization": f"Bearer {create_token(regular)}"}
     owner_headers = {"Authorization": f"Bearer {create_token(owner)}"}
+    other_superadmin_headers = {"Authorization": f"Bearer {create_token(other_superadmin)}"}
     try:
-        yield TestClient(app), headers, denied, owner_headers, suffix
+        yield TestClient(app), headers, denied, owner_headers, other_superadmin_headers, suffix
     finally:
         db.rollback()
-        db.execute(text("DELETE FROM audit_logs WHERE user_id IN (:a, :r, :o)"), {"a": admin.id, "r": regular.id, "o": owner.id})
+        db.execute(text("DELETE FROM audit_logs WHERE user_id IN (:a, :r, :o, :s)"), {"a": admin.id, "r": regular.id, "o": owner.id, "s": other_superadmin.id})
         db.execute(text("DELETE FROM chatbot_knowledge_entries WHERE updated_by = :a"), {"a": admin.id})
         if prompt_backup is None:
             db.execute(text("DELETE FROM chatbot_prompt_settings WHERE task = 'line_reply' AND updated_by = :a"), {"a": admin.id})
@@ -44,11 +47,11 @@ def studio():
             prompt.enabled = prompt_backup["enabled"]
             prompt.updated_by = prompt_backup["updated_by"]
         db.execute(text("DELETE FROM line_service_ratings WHERE line_user_id = :uid"), {"uid": suffix})
-        db.delete(admin); db.delete(regular); db.delete(owner); db.commit(); db.close()
+        db.delete(admin); db.delete(regular); db.delete(owner); db.delete(other_superadmin); db.commit(); db.close()
 
 
 def test_knowledge_is_draft_until_published_and_role_is_enforced(studio):
-    client, headers, denied, _owner_headers, suffix = studio
+    client, headers, denied, _owner_headers, _other_headers, suffix = studio
     question = f"เปิดให้บริการวันใด {suffix}"
     payload = {"question": question, "answer": "เปิดวันจันทร์ถึงศุกร์ค่ะ", "aliases": [], "is_published": False}
     assert client.post("/api/chatbot/manage/knowledge", json=payload, headers=denied).status_code == 403
@@ -64,7 +67,7 @@ def test_knowledge_is_draft_until_published_and_role_is_enforced(studio):
 
 
 def test_prompt_override_and_ratings_are_private(studio):
-    client, headers, denied, owner_headers, suffix = studio
+    client, headers, denied, owner_headers, other_headers, suffix = studio
     assert client.get("/api/chatbot/manage/prompts", headers=denied).status_code == 403
     response = client.put("/api/chatbot/manage/prompts/line_reply", headers=headers,
                           json={"guidance": f"ใช้คำสั้น {suffix}", "enabled": True})
@@ -79,6 +82,9 @@ def test_prompt_override_and_ratings_are_private(studio):
         db.close()
     assert client.get("/api/chatbot/manage/ratings", headers=denied).status_code == 403
     assert client.get("/api/chatbot/manage/ratings", headers=owner_headers).status_code == 403
+    assert client.get("/api/chatbot/manage/ratings", headers=other_headers).status_code == 403
+    assert client.get("/api/chatbot/manage/access", headers=other_headers).json()["can_view_ratings"] is False
+    assert client.get("/api/chatbot/manage/access", headers=headers).json()["can_view_ratings"] is True
     ratings = client.get("/api/chatbot/manage/ratings", headers=headers)
     assert ratings.status_code == 200
     assert any(item["score"] == 5 for item in ratings.json()["recent"])

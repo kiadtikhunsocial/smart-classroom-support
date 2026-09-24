@@ -16,11 +16,12 @@ const PROMPT_LABELS: Record<string, string> = {
 };
 const EMPTY = { question: '', answer: '', aliases: '', is_published: false };
 
-export default function ChatbotStudioPage({ onBack, onNavigate, canViewRatings }: { onBack: () => void; onNavigate: (menu: string) => void; canViewRatings: boolean }) {
+export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () => void; onNavigate: (menu: string) => void }) {
   const [tab, setTab] = useState<Tab>('knowledge');
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [ratings, setRatings] = useState<Ratings | null>(null);
+  const [canViewRatings, setCanViewRatings] = useState(false);
   const [days, setDays] = useState(30);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState(EMPTY);
@@ -34,8 +35,9 @@ export default function ChatbotStudioPage({ onBack, onNavigate, canViewRatings }
   const refresh = async () => {
     setError('');
     try {
-      const [k, p, r] = await Promise.all([api.listChatbotKnowledge(), api.listChatbotPrompts(), canViewRatings ? api.getLineRatings(days) : Promise.resolve(null)]);
-      setKnowledge(k); setPrompts(p); setRatings(r);
+      const [k, p, access] = await Promise.all([api.listChatbotKnowledge(), api.listChatbotPrompts(), api.getChatbotManageAccess()]);
+      const r = access.can_view_ratings ? await api.getLineRatings(days) : null;
+      setKnowledge(k); setPrompts(p); setRatings(r); setCanViewRatings(access.can_view_ratings);
     } catch (e: any) { setError(e.message || 'โหลดข้อมูลไม่สำเร็จ'); }
   };
   useEffect(() => { void refresh(); }, [days]);

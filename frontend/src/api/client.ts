@@ -137,6 +137,7 @@ export const api = {
     }),
 
   listChatbotKnowledge: () => request<any[]>('/chatbot/manage/knowledge'),
+  getChatbotManageAccess: () => request<{ can_view_ratings: boolean }>('/chatbot/manage/access'),
   createChatbotKnowledge: (data: any) => request<any>('/chatbot/manage/knowledge', { method: 'POST', body: JSON.stringify(data) }),
   updateChatbotKnowledge: (id: number, data: any) => request<any>(`/chatbot/manage/knowledge/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   listChatbotPrompts: () => request<any[]>('/chatbot/manage/prompts'),
