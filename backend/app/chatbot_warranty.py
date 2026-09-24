@@ -47,8 +47,10 @@ def warranty_answer(code: str) -> str:
             status = ("หมดประกันแล้ว" if days < 0 else
                       "ใกล้หมดประกัน" if days <= pm_rules.WARRANTY_WARN_DAYS else "อยู่ในระยะประกัน")
             date_text = until.astimezone(timezone.utc).strftime("%d/%m/%Y")
+        details = f"รายละเอียดประกันที่บันทึก: {device.warranty_details.strip()}\n" if device.warranty_details and device.warranty_details.strip() else ""
         return (f"ตรวจจากทะเบียนอุปกรณ์รหัส {device.device_id} ({device.device_type}) ค่ะ\n"
                 f"สถานะ: {status}\nวันสิ้นสุดประกันที่บันทึก: {date_text}\n"
+                f"{details}"
                 "ข้อมูลนี้อ้างอิงทะเบียนในระบบ หากต้องการยืนยันสิทธิ์เคลมจริง กรุณาให้เจ้าหน้าที่ตรวจใบซื้อและเงื่อนไขผู้ขายอีกครั้งค่ะ")
     finally:
         db.close()

@@ -144,6 +144,8 @@ export const api = {
   updateChatbotPrompt: (task: string, data: { guidance: string; enabled: boolean }) =>
     request<any>(`/chatbot/manage/prompts/${encodeURIComponent(task)}`, { method: 'PUT', body: JSON.stringify(data) }),
   getLineRatings: (days = 30) => request<any>(`/chatbot/manage/ratings?days=${days}`),
+  getChatbotRuntime: () => request<any>('/chatbot/manage/runtime'),
+  previewChatbot: (message: string) => request<any>('/chatbot/manage/preview', { method: 'POST', body: JSON.stringify({ message }) }),
 
   importDevicesCsv: async (file: File, commit = false) => {
     const form = new FormData();

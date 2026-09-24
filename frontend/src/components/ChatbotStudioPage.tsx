@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import '../styles/chatbot-studio.css';
 
-type Knowledge = { id: number; question: string; answer: string; aliases: string[]; is_published: boolean; updated_at: string };
+type Knowledge = { id: number; question: string; answer: string; aliases: string[]; source_label: string | null; source_url: string | null; is_published: boolean; updated_at: string };
 type Prompt = { task: string; guidance: string; enabled: boolean; source: string };
-type Rating = { id: number; target: 'bot' | 'staff'; score: number; ticket_id: string | null; created_at: string };
-type Ratings = { days: number; summary: Record<'bot' | 'staff', { count: number; average: number }>; recent: Rating[] };
-type Tab = 'knowledge' | 'prompts' | 'ratings';
+type Rating = { id: number; target: 'bot' | 'staff'; score: number; resolved: boolean | null; ticket_id: string | null; created_at: string };
+type RatingSummary = { count: number; average: number; scores: Record<string, number>; solved?: number; not_solved?: number };
+type Ratings = { days: number; summary: Record<'bot' | 'staff', RatingSummary>; recent: Rating[] };
+type Runtime = { provider: string; model: string; base_key_configured: boolean; tuned_endpoint_configured: boolean; classifier_enabled: boolean; orchestration_enabled: boolean; natural_replies_enabled: boolean };
+type Preview = { route: string; intent: string; reply: string | null; note: string };
+type Tab = 'knowledge' | 'prompts' | 'test' | 'guide' | 'ratings';
 
 const PROMPT_LABELS: Record<string, string> = {
   global_style: 'น้ำเสียงและแนวทางร่วม',
@@ -14,13 +17,16 @@ const PROMPT_LABELS: Record<string, string> = {
   kb_explanation: 'อธิบายวิธีแก้', orchestration: 'วางลำดับบทสนทนา',
   repair_reply: 'ตอบเรื่องแจ้งซ่อม', slot_question: 'ถามข้อมูลที่ขาด', line_reply: 'รูปแบบคำตอบ LINE',
 };
-const EMPTY = { question: '', answer: '', aliases: '', is_published: false };
+const EMPTY = { question: '', answer: '', aliases: '', source_label: '', source_url: '', is_published: false };
 
 export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () => void; onNavigate: (menu: string) => void }) {
   const [tab, setTab] = useState<Tab>('knowledge');
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [ratings, setRatings] = useState<Ratings | null>(null);
+  const [runtime, setRuntime] = useState<Runtime | null>(null);
+  const [testMessage, setTestMessage] = useState('');
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [canViewRatings, setCanViewRatings] = useState(false);
   const [days, setDays] = useState(30);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -35,9 +41,9 @@ export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () =
   const refresh = async () => {
     setError('');
     try {
-      const [k, p, access] = await Promise.all([api.listChatbotKnowledge(), api.listChatbotPrompts(), api.getChatbotManageAccess()]);
+      const [k, p, access, status] = await Promise.all([api.listChatbotKnowledge(), api.listChatbotPrompts(), api.getChatbotManageAccess(), api.getChatbotRuntime()]);
       const r = access.can_view_ratings ? await api.getLineRatings(days) : null;
-      setKnowledge(k); setPrompts(p); setRatings(r); setCanViewRatings(access.can_view_ratings);
+      setKnowledge(k); setPrompts(p); setRatings(r); setCanViewRatings(access.can_view_ratings); setRuntime(status);
     } catch (e: any) { setError(e.message || 'โหลดข้อมูลไม่สำเร็จ'); }
   };
   useEffect(() => { void refresh(); }, [days]);
@@ -50,6 +56,7 @@ export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () =
     e.preventDefault(); setError(''); setNotice(''); setBusy(true);
     try {
       const payload = { question: form.question.trim(), answer: form.answer.trim(),
+        source_label: form.source_label.trim() || null, source_url: form.source_url.trim() || null,
         aliases: form.aliases.split('\n').map((s) => s.trim()).filter(Boolean), is_published: form.is_published };
       if (editingId != null) await api.updateChatbotKnowledge(editingId, payload);
       else await api.createChatbotKnowledge(payload);
@@ -69,6 +76,13 @@ export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () =
     finally { setBusy(false); }
   };
 
+  const runPreview = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true); setError(''); setPreview(null);
+    try { setPreview(await api.previewChatbot(testMessage.trim())); }
+    catch (err: any) { setError(err.message || 'ทดลองไม่สำเร็จ'); }
+    finally { setBusy(false); }
+  };
+
   return <div className="page-content chatbot-studio">
     <div className="top-bar"><div className="top-bar-title-group">
       <button className="btn btn-ghost btn-icon" onClick={onBack} aria-label="กลับแดชบอร์ด">←</button>
@@ -77,11 +91,11 @@ export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () =
     {error && <div className="alert alert-error" role="alert">{error}</div>}
     {notice && <div className="alert alert-success" role="status">{notice}</div>}
     <div className="studio-intro panel-card">
-      <div><strong>เพิ่มข้อมูลโดยไม่ต้องแก้โค้ด</strong><p>คำถาม–คำตอบที่เผยแพร่จะตอบใน LINE เมื่อข้อความตรงกัน ส่วนบทความแก้ปัญหาอุปกรณ์อยู่ในฐานความรู้เดิม อุปกรณ์ที่ยังไม่มีให้เจ้าหน้าที่ตรวจข้อมูลโรงเรียนและเพิ่มจากทะเบียนอุปกรณ์ก่อน บอตจะไม่ลงทะเบียนเครื่องให้เอง</p></div>
+      <div><strong>เพิ่มข้อมูลโดยไม่ต้องแก้โค้ด</strong><p>คำถาม–คำตอบที่เผยแพร่จะตอบใน LINE เมื่อข้อความตรงกัน ส่วนบทความแก้ปัญหาอุปกรณ์อยู่ในฐานความรู้เดิม อุปกรณ์ที่ยังไม่มีให้เจ้าหน้าที่ตรวจข้อมูลโรงเรียนและเพิ่มจากทะเบียนอุปกรณ์ก่อน บอตจะไม่ลงทะเบียนเครื่องให้เอง</p><small>AI: {runtime?.provider || 'กำลังตรวจ'} {runtime?.model || ''} · คีย์ {runtime?.base_key_configured ? 'พร้อม' : 'ยังไม่ตั้ง'} · จำแนกเจตนา {runtime?.classifier_enabled ? 'เปิด' : 'ปิด'} · วางบทสนทนา {runtime?.orchestration_enabled ? 'เปิด' : 'ปิด'}</small></div>
       <div className="studio-intro-actions"><button className="btn btn-secondary" onClick={() => onNavigate('kb')}>จัดการฐานความรู้</button><button className="btn btn-secondary" onClick={() => onNavigate('devices')}>+ เพิ่มอุปกรณ์ที่ยังไม่มี</button></div>
     </div>
     <div className="studio-tabs" role="tablist" aria-label="หมวดการจัดการแชตบอต">
-      {([['knowledge', 'คำถาม–คำตอบ'], ['prompts', 'คำแนะนำ AI'], ...(canViewRatings ? [['ratings', 'ผลประเมิน'] as const] : [])] as const).map(([key, label]) =>
+      {([['knowledge', 'คำถาม–คำตอบ'], ['prompts', 'คำแนะนำ AI'], ['test', 'ทดลองถาม'], ['guide', 'คู่มือ'], ...(canViewRatings ? [['ratings', 'ผลประเมิน'] as const] : [])] as const).map(([key, label]) =>
         <button key={key} role="tab" aria-selected={tab === key} className={`btn ${tab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setTab(key); setError(''); setNotice(''); }}>{label}</button>)}
     </div>
 
@@ -92,6 +106,8 @@ export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () =
           <label>คำถามหลัก<input className="form-input" required minLength={3} maxLength={500} value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} placeholder="เช่น ติดต่อฝ่ายบริการเวลาใด" /></label>
           <label>คำถามทางเลือก<textarea className="form-input" rows={3} value={form.aliases} onChange={(e) => setForm({ ...form, aliases: e.target.value })} placeholder="พิมพ์บรรทัดละหนึ่งรูปแบบ" /></label>
           <label>คำตอบที่ตรวจสอบแล้ว<textarea className="form-input" required minLength={3} maxLength={3000} rows={6} value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} /></label>
+          <label>แหล่งข้อมูล / ผู้ยืนยัน<input className="form-input" maxLength={160} value={form.source_label} onChange={(e) => setForm({ ...form, source_label: e.target.value })} placeholder="เช่น คู่มือผู้ผลิต รุ่น X ฉบับ 2026 หรือฝ่ายบริการ" /></label>
+          <label>ลิงก์อ้างอิง (ถ้ามี)<input className="form-input" type="url" maxLength={500} value={form.source_url} onChange={(e) => setForm({ ...form, source_url: e.target.value })} placeholder="https://..." /></label>
           <label className="studio-check"><input type="checkbox" checked={form.is_published} onChange={(e) => setForm({ ...form, is_published: e.target.checked })} /> เผยแพร่ให้ LINE ตอบได้</label>
           <div className="studio-actions"><button className="btn btn-primary" disabled={busy}>{busy ? 'กำลังบันทึก...' : 'บันทึกลงฐานข้อมูล'}</button>{editingId != null && <button type="button" className="btn btn-ghost" onClick={() => { setEditingId(null); setForm(EMPTY); }}>ยกเลิกแก้ไข</button>}</div>
         </form>
@@ -99,8 +115,8 @@ export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () =
       <section className="panel-card"><h2>คำตอบที่มีอยู่ ({knowledge.length})</h2>
         {knowledge.length === 0 ? <p className="studio-help">ยังไม่มีคำตอบที่เพิ่มเอง</p> : <div className="studio-list">{knowledge.map((item) =>
           <article key={item.id} className="studio-item"><div><strong>{item.question}</strong><span className={`studio-status ${item.is_published ? 'live' : ''}`}>{item.is_published ? 'เผยแพร่' : 'ฉบับร่าง'}</span></div>
-            <p>{item.answer}</p><small>คำถามทางเลือก {item.aliases.length} รายการ</small>
-            <button className="btn btn-ghost" onClick={() => { setEditingId(item.id); setForm({ question: item.question, answer: item.answer, aliases: item.aliases.join('\n'), is_published: item.is_published }); }}>แก้ไข</button>
+            <p>{item.answer}</p><small>คำถามทางเลือก {item.aliases.length} รายการ · ที่มา: {item.source_label || 'ยังไม่ระบุ'}{item.source_url && <> · <a href={item.source_url} target="_blank" rel="noopener noreferrer">เปิดแหล่งข้อมูล</a></>}</small>
+            <button className="btn btn-ghost" onClick={() => { setEditingId(item.id); setForm({ question: item.question, answer: item.answer, aliases: item.aliases.join('\n'), source_label: item.source_label || '', source_url: item.source_url || '', is_published: item.is_published }); }}>แก้ไข</button>
           </article>)}</div>}
       </section>
     </div>}
@@ -116,9 +132,26 @@ export default function ChatbotStudioPage({ onBack, onNavigate }: { onBack: () =
       </form>
     </section>}
 
+    {tab === 'test' && <section className="panel-card studio-prompt"><h2>ทดลองถามก่อนเผยแพร่</h2>
+      <p className="studio-help">พรีวิวนี้ตรวจชั้นกฎ คำตอบที่เผยแพร่ และประกันตามรหัสจริงเท่านั้น ไม่ส่งข้อความไป LINE ไม่สร้างใบงาน ไม่บันทึกบทสนทนาลูกค้า และไม่เรียก Gemini คำตอบจริงอาจต่างเมื่อมีบริบทแชต</p>
+      <div className="studio-examples">{['ช่วยด้วย', 'จอเสียอยากซื้อใหม่', 'รอเจ้าหน้าที่ติดต่อกลับอยู่', 'ตรวจประกันได้ไหม'].map((example) => <button type="button" className="btn btn-secondary" key={example} onClick={() => { setTestMessage(example); setPreview(null); }}>{example}</button>)}</div>
+      <form onSubmit={runPreview} className="studio-form"><label>ข้อความตัวอย่าง<input className="form-input" required maxLength={1000} value={testMessage} onChange={(e) => setTestMessage(e.target.value)} placeholder="เช่น จอเสียอยากซื้อใหม่ หรือ ประกัน SCH01-..." /></label><button className="btn btn-primary" disabled={busy || !testMessage.trim()}>{busy ? 'กำลังตรวจ...' : 'ตรวจเส้นทางคำตอบ'}</button></form>
+      {preview && <div className="studio-preview" role="status"><strong>เส้นทาง: {preview.route} · เจตนา: {preview.intent}</strong><p>{preview.reply || 'ข้อความนี้จะเข้าสู่บทสนทนาจริง จึงไม่มีคำตอบจำลองในพรีวิว'}</p><small>{preview.note}</small></div>}
+    </section>}
+
+    {tab === 'guide' && <section className="panel-card studio-guide"><h2>คู่มือปรับปรุงบอตอย่างปลอดภัย</h2>
+      <ol><li><strong>ข้อมูลทั่วไป:</strong> เพิ่มคำถาม คำตอบ และคำถามทางเลือกในแท็บแรก ระบุแหล่งข้อมูล เก็บเป็นฉบับร่างก่อน เมื่อทดสอบแล้วค่อยเผยแพร่ ข้อความตรงกันจะใช้คำตอบใหม่ทันที</li>
+        <li><strong>วิธีแก้ปัญหา:</strong> เข้า “ฐานความรู้” เพิ่มอาการและขั้นตอนที่ตรวจแล้ว แล้วเผยแพร่ บอตใช้บทความที่เผยแพร่จากฐานข้อมูล ไม่ควรใส่วิธีที่เสี่ยงอันตราย</li>
+        <li><strong>ประกัน/สินค้า:</strong> เข้า “ทะเบียนอุปกรณ์” เพิ่มรหัสอุปกรณ์ Serial วันสิ้นสุดประกัน และ “รายละเอียดประกันที่ให้บอตตอบลูกค้า” หรืออัปโหลด CSV จาก Google Sheets แล้วตรวจตัวอย่างก่อนนำเข้า ลูกค้าต้องแจ้งรหัสหรือ Serial ก่อน บอตอ่านข้อมูลนี้จากทะเบียนทันที ไม่ควรใส่ข้อมูลประกันลงคำตอบทั่วไป</li>
+        <li><strong>น้ำเสียง/ความกำกวม:</strong> ใช้แท็บ “คำแนะนำ AI” เพิ่มคำแนะนำสั้น ๆ พร้อมตัวอย่างคำถามกลับหนึ่งข้อ แล้วเปิดใช้ ค่านี้มีผลต่อคำขอ AI ใหม่ทันที เฉพาะขั้นตอนที่เปิด Gemini อยู่ ไม่ใช่การฝึกน้ำหนักโมเดล</li>
+        <li><strong>วัดผลซ้ำ:</strong> ทดลองหลายรูปแบบในแท็บ “ทดลองถาม” ทดสอบ LINE จริงด้วยบัญชีทดสอบ ดูผลประเมินและบทสนทนาที่ตอบไม่ตรง แล้วแก้ข้อมูลหรือคำแนะนำทีละเรื่อง</li></ol>
+      <p className="studio-help">ระบบไม่อ่าน URL หรือ Google Sheets อัตโนมัติ: ต้องตรวจความถูกต้องและนำเข้าข้อมูลเองก่อนเผยแพร่ หลีกเลี่ยงข้อมูลส่วนบุคคล รหัสผ่าน ราคา และสิทธิ์เคลมที่ยังไม่ยืนยัน</p>
+    </section>}
+
     {tab === 'ratings' && canViewRatings && <section className="panel-card"><div className="studio-rating-head"><div><h2>ผลประเมินจาก LINE</h2><p className="studio-help">แยกคะแนนแชตบอตกับงานเจ้าหน้าที่ ข้อมูลนี้เปิดเฉพาะ superadmin</p></div><label>ช่วงเวลา <select className="form-select" value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={7}>7 วัน</option><option value={30}>30 วัน</option><option value={90}>90 วัน</option><option value={365}>365 วัน</option></select></label></div>
-      <div className="studio-rating-cards">{(['bot', 'staff'] as const).map((target) => <div className="studio-rating-card" key={target}><span>{target === 'bot' ? 'แชตบอต' : 'เจ้าหน้าที่'}</span><strong>{ratings?.summary[target]?.count ? `${ratings.summary[target].average}/5` : '—'}</strong><small>{ratings?.summary[target]?.count || 0} รายการ</small></div>)}</div>
-      <h3>รายการล่าสุด</h3>{!ratings?.recent.length ? <p className="studio-help">ยังไม่มีคะแนนในช่วงนี้</p> : <div className="studio-table-wrap"><table className="data-table"><thead><tr><th>วันที่</th><th>ประเมิน</th><th>คะแนน</th><th>ใบงาน</th></tr></thead><tbody>{ratings.recent.map((r) => <tr key={r.id}><td>{new Date(r.created_at).toLocaleString('th-TH')}</td><td>{r.target === 'bot' ? 'แชตบอต' : 'เจ้าหน้าที่'}</td><td>{r.score}/5</td><td>{r.ticket_id || '—'}</td></tr>)}</tbody></table></div>}
+      <div className="studio-rating-cards">{(['bot', 'staff'] as const).map((target) => <div className="studio-rating-card" key={target}><span>{target === 'bot' ? 'แชตบอตช่วยแก้เบื้องต้น' : 'เจ้าหน้าที่หลังปิดงาน'}</span><strong>{ratings?.summary[target]?.count ? `${ratings.summary[target].average}/5` : '—'}</strong><small>{ratings?.summary[target]?.count || 0} รายการ</small>{target === 'bot' && <small>แก้ได้ {ratings?.summary.bot.solved || 0} · ยังไม่หาย {ratings?.summary.bot.not_solved || 0} · ไม่ระบุผล {(ratings?.summary.bot.count || 0) - (ratings?.summary.bot.solved || 0) - (ratings?.summary.bot.not_solved || 0)}</small>}<div className="studio-score-bars">{[5,4,3,2,1].map((score) => <span key={score}>{score}★ {ratings?.summary[target]?.scores?.[score] || 0}</span>)}</div></div>)}</div>
+      <p className="studio-help">ลูกค้าพิมพ์ “ประเมินบอท 5 แก้ได้” หรือ “ประเมินบอท 2 ยังไม่หาย”; งานเจ้าหน้าที่ต้องปิดงานแล้วและใช้เลข Ticket ที่ผูกกับผู้แจ้ง</p>
+      <h3>รายการล่าสุด</h3>{!ratings?.recent.length ? <p className="studio-help">ยังไม่มีคะแนนในช่วงนี้</p> : <div className="studio-table-wrap"><table className="data-table"><thead><tr><th>วันที่</th><th>ประเมิน</th><th>คะแนน</th><th>ผลแก้เบื้องต้น</th><th>ใบงาน</th></tr></thead><tbody>{ratings.recent.map((r) => <tr key={r.id}><td>{new Date(r.created_at).toLocaleString('th-TH')}</td><td>{r.target === 'bot' ? 'แชตบอต' : 'เจ้าหน้าที่'}</td><td>{r.score}/5</td><td>{r.target === 'bot' ? r.resolved == null ? 'ไม่ระบุ' : r.resolved ? 'แก้ได้' : 'ยังไม่หาย' : '—'}</td><td>{r.ticket_id || '—'}</td></tr>)}</tbody></table></div>}
     </section>}
   </div>;
 }

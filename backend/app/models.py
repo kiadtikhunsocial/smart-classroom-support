@@ -224,6 +224,7 @@ class Device(Base):
     warranty_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    warranty_details: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -650,6 +651,7 @@ class LineServiceRating(Base):
     target: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # bot | staff
     ticket_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     score: Mapped[int] = mapped_column(Integer, nullable=False)
+    resolved: Mapped[Optional[bool]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -661,6 +663,8 @@ class ChatbotKnowledgeEntry(Base):
     question: Mapped[str] = mapped_column(String(500), nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     aliases: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source_label: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_published: Mapped[bool] = mapped_column(default=False, nullable=False)
     updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

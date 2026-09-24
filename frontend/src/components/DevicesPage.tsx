@@ -144,6 +144,7 @@ const EMPTY_FORM = {
   status: 'active',
   purchase_date: '',
   warranty_until: '',
+  warranty_details: '',
   notes: '',
 };
 
@@ -268,6 +269,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
       status: d.status || 'active',
       purchase_date: toDateInput(d.purchase_date),
       warranty_until: toDateInput(d.warranty_until),
+      warranty_details: d.warranty_details || '',
       notes: d.notes || '',
     });
     setEditingId(d.device_id);
@@ -299,6 +301,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           // ล้างช่องวันที่ให้ว่างได้ → ส่ง null (PATCH ใช้ exclude_unset จึงต้องส่งค่ามาจริง)
           purchase_date: dateInputToIso(form.purchase_date),
           warranty_until: dateInputToIso(form.warranty_until),
+          warranty_details: form.warranty_details.trim() || null,
           notes: form.notes,
         });
       } else {
@@ -314,6 +317,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           status: form.status,
           purchase_date: dateInputToIso(form.purchase_date) ?? undefined,
           warranty_until: dateInputToIso(form.warranty_until) ?? undefined,
+          warranty_details: form.warranty_details.trim() || undefined,
           notes: form.notes || undefined,
         });
       }
@@ -477,9 +481,9 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           <div className="repair-panel-header"><h3 className="repair-panel-title">นำเข้าอุปกรณ์จาก Google Sheets</h3><button className="repair-panel-close" onClick={() => setImportFile(null)} aria-label="ปิด">×</button></div>
           <div className="repair-panel-body">
             <p>ใน Google Sheets เลือก ไฟล์ → ดาวน์โหลด → ค่าที่คั่นด้วยจุลภาค (.csv) แล้วเลือกไฟล์ที่นี่ ระบบจะตรวจทุกแถวก่อนเพิ่มข้อมูล โดยไม่เขียนทับอุปกรณ์เดิม</p>
-            <p>คอลัมน์จำเป็น: <code>organization_code, device_id, device_type</code> · เพิ่ม <code>room_code, brand, model, serial_number, firmware_version, status, purchase_date, warranty_until, notes</code> ได้ วันที่ใช้ YYYY-MM-DD</p>
+            <p>คอลัมน์จำเป็น: <code>organization_code, device_id, device_type</code> · เพิ่ม <code>room_code, brand, model, serial_number, firmware_version, status, purchase_date, warranty_until, warranty_details, notes</code> ได้ วันที่ใช้ YYYY-MM-DD</p>
             <button className="btn btn-secondary" type="button" onClick={() => {
-              const csv = '\uFEFForganization_code,device_id,device_type,room_code,brand,model,serial_number,firmware_version,status,purchase_date,warranty_until,notes\r\n';
+              const csv = '\uFEFForganization_code,device_id,device_type,room_code,brand,model,serial_number,firmware_version,status,purchase_date,warranty_until,warranty_details,notes\r\n';
               const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
               const link = document.createElement('a'); link.href = url; link.download = 'device-import-template.csv'; link.click();
               window.setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -650,6 +654,11 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                   </div>
                 </div>
                 <div className="form-group">
+                  <label className="form-label">รายละเอียดประกันที่ให้บอตตอบลูกค้า</label>
+                  <textarea className="form-textarea" rows={3} maxLength={500} value={form.warranty_details} onChange={(e) => setForm({ ...form, warranty_details: e.target.value })} placeholder="เช่น ประกันอุปกรณ์ 3 ปีจากผู้ขาย ติดต่อฝ่ายบริการพร้อมใบเสร็จ" />
+                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>ข้อมูลนี้อาจถูกแสดงใน LINE หลังลูกค้าระบุรหัสอุปกรณ์หรือ Serial ห้ามใส่ข้อมูลส่วนตัว</div>
+                </div>
+                <div className="form-group">
                   <label className="form-label">หมายเหตุ</label>
                   <textarea className="form-textarea" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                 </div>
@@ -757,6 +766,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                     <DetailRow label="วันที่จัดซื้อ" value={fmtDateTh(detailView.purchase_date)} />
                     <DetailRow label="อายุใช้งาน" value={deviceAgeText(detailView.purchase_date)} />
                     <DetailRow label="ประกันสิ้นสุด" value={fmtDateTh(detailView.warranty_until)} />
+                    <DetailRow label="รายละเอียดประกันสำหรับลูกค้า" value={detailView.warranty_details || 'ยังไม่ระบุ'} />
                   </div>
 
                   <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>

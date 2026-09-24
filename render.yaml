@@ -14,7 +14,7 @@ services:
     buildCommand: "pip install -r backend/requirements.txt"
     # Both migrations are repeatable. Run them before serving requests so an
     # existing Neon database has the membership columns and all role labels.
-    startCommand: "cd backend && python scripts/migrate_membership.py && python scripts/migrate_role_enum.py --apply && python scripts/import_demo_pack.py --apply && python scripts/import_sales_demo.py --apply && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "cd backend && python scripts/migrate_membership.py && python scripts/migrate_role_enum.py --apply && python scripts/migrate_chatbot_studio.py && python scripts/import_demo_pack.py --apply && python scripts/import_sales_demo.py --apply && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     envVars:
       # Pin Python 3.11 — โค้ดทดสอบบน 3.11 และ Pillow 12.3.0 (ใน requirements.txt) มี wheel cp311

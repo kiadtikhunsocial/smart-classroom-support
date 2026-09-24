@@ -39,6 +39,8 @@ def test_reviewed_general_answer_does_not_override_live_facts(monkeypatch):
     monkeypatch.setattr(chatbot_knowledge, "answer_for_question", lambda value: seen.append(value) or "คำตอบที่ตรวจแล้ว")
     assert chatbot_core.handle_message("u-test", "เปิดให้บริการวันใด", "") == "คำตอบที่ตรวจแล้ว"
     assert seen == ["เปิดให้บริการวันใด"]
+    monkeypatch.setattr(chatbot_helpers, "detect_intent", lambda _text: "service")
+    assert chatbot_core.handle_message("u-test", "เปิดให้บริการวันใด", "") == "คำตอบที่ตรวจแล้ว"
     monkeypatch.setattr(chatbot_warranty, "warranty_answer", lambda _code: "ข้อมูลประกันจากทะเบียน")
     assert chatbot_core.handle_message("u-test", "ประกัน SERIAL-12345", "") == "ข้อมูลประกันจากทะเบียน"
-    assert seen == ["เปิดให้บริการวันใด"]
+    assert seen == ["เปิดให้บริการวันใด", "เปิดให้บริการวันใด"]

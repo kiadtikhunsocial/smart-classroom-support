@@ -347,6 +347,7 @@ class DeviceInfo(BaseModel):
     # วันที่จัดซื้อ — ใช้คู่กับ warranty_until ในทะเบียนทรัพย์สิน/PM Rule 3 (§38)
     purchase_date: Optional[datetime] = None
     warranty_until: Optional[datetime] = None
+    warranty_details: Optional[str] = None
     notes: Optional[str] = None
     # กันแจ้งซ้ำ: หน้าที่เปิดจากการสแกน QR ใช้ response นี้เป็นข้อมูลเครื่อง จึงต้อง
     # รู้ตั้งแต่ตอนเปิดหน้าว่ามีใบงานค้างอยู่แล้ว ไม่ใช่ไปรู้ตอนกดส่งฟอร์มแล้วโดน 409
@@ -450,6 +451,7 @@ class DeviceCreate(BaseModel):
     notes: Optional[str] = None
     purchase_date: Optional[datetime] = None
     warranty_until: Optional[datetime] = None
+    warranty_details: Optional[str] = Field(None, max_length=500)
 
 
 class DeviceUpdate(BaseModel):
@@ -464,6 +466,7 @@ class DeviceUpdate(BaseModel):
     notes: Optional[str] = None
     purchase_date: Optional[datetime] = None
     warranty_until: Optional[datetime] = None
+    warranty_details: Optional[str] = Field(None, max_length=500)
 
 
 class PublicReportIn(BaseModel):
@@ -1448,6 +1451,7 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
         organization_id=device.organization_id,
         purchase_date=device.purchase_date,
         warranty_until=device.warranty_until,
+        warranty_details=device.warranty_details,
         notes=device.notes,
     )
 
@@ -2323,6 +2327,7 @@ def list_devices(
             organization_id=device.organization_id,
             purchase_date=device.purchase_date,
             warranty_until=device.warranty_until,
+            warranty_details=device.warranty_details,
             notes=device.notes,
         ))
     return result
@@ -2341,6 +2346,7 @@ _DEVICE_IMPORT_COLUMNS = {
     "status": ("status", "สถานะ"),
     "purchase_date": ("purchase_date", "วันที่จัดซื้อ"),
     "warranty_until": ("warranty_until", "วันสิ้นสุดประกัน"),
+    "warranty_details": ("warranty_details", "รายละเอียดประกันสำหรับลูกค้า"),
     "notes": ("notes", "หมายเหตุ"),
 }
 
@@ -2415,7 +2421,7 @@ async def import_devices_csv(
                     row[date_field] = parsed_date.replace(tzinfo=timezone(timedelta(hours=7))).isoformat()
                 except ValueError:
                     errors.append(f"{date_field} ต้องเป็น YYYY-MM-DD")
-        for field_name, max_length in (("brand", 128), ("model", 128), ("serial_number", 128), ("firmware_version", 64)):
+        for field_name, max_length in (("brand", 128), ("model", 128), ("serial_number", 128), ("firmware_version", 64), ("warranty_details", 500)):
             if len(row[field_name]) > max_length:
                 errors.append(f"{field_name} ยาวเกิน {max_length} ตัวอักษร")
         results.append({"row": row_number, "device_id": row["device_id"], "organization_code": row["organization_code"],
@@ -2434,6 +2440,7 @@ async def import_devices_csv(
                       device_type=row["device_type"], brand=row["brand"] or None, model=row["model"] or None,
                       serial_number=row["serial_number"] or None, firmware_version=row["firmware_version"] or None,
                       status=row["status"] or "active", notes=row["notes"] or None,
+                      warranty_details=row["warranty_details"] or None,
                       purchase_date=datetime.fromisoformat(row["purchase_date"]) if row["purchase_date"] else None,
                       warranty_until=datetime.fromisoformat(row["warranty_until"]) if row["warranty_until"] else None,
                       qr_token=secrets.token_urlsafe(24)))
@@ -2490,6 +2497,7 @@ def create_device(payload: DeviceCreate, request: Request, db: Session = Depends
         notes=payload.notes,
         purchase_date=payload.purchase_date,
         warranty_until=payload.warranty_until,
+        warranty_details=payload.warranty_details,
     )
     db.add(device)
     # §40: สร้าง Asset ต้องบันทึก Audit Log (commit พร้อม transaction เดียวกัน)
@@ -2532,6 +2540,7 @@ def create_device(payload: DeviceCreate, request: Request, db: Session = Depends
         organization_id=device.organization_id,
         purchase_date=device.purchase_date,
         warranty_until=device.warranty_until,
+        warranty_details=device.warranty_details,
         notes=device.notes,
     )
 
@@ -2589,6 +2598,7 @@ def update_device(device_id: str, payload: DeviceUpdate, request: Request, db: S
         organization_name=org.name if org else "",
         purchase_date=device.purchase_date,
         warranty_until=device.warranty_until,
+        warranty_details=device.warranty_details,
         notes=device.notes,
     )
 
@@ -3940,12 +3950,15 @@ class ChatbotKnowledgeInput(BaseModel):
     question: str = Field(..., min_length=3, max_length=500)
     answer: str = Field(..., min_length=3, max_length=3000)
     aliases: list[str] = Field(default_factory=list, max_length=12)
+    source_label: Optional[str] = Field(default=None, max_length=160)
+    source_url: Optional[str] = Field(default=None, max_length=500)
     is_published: bool = False
 
 
 def _knowledge_out(row: ChatbotKnowledgeEntry) -> dict:
     return {"id": row.id, "question": row.question, "answer": row.answer,
             "aliases": json.loads(row.aliases or "[]"), "is_published": row.is_published,
+            "source_label": row.source_label, "source_url": row.source_url,
             "updated_at": row.updated_at}
 
 
@@ -3956,6 +3969,8 @@ def _validate_knowledge(payload: ChatbotKnowledgeInput, db: Session, exclude_id:
     aliases = [alias.strip() for alias in payload.aliases]
     if len(question) < 3 or len(payload.answer.strip()) < 3:
         raise HTTPException(status_code=422, detail="กรอกคำถามและคำตอบให้ครบอย่างน้อย 3 ตัวอักษร")
+    if payload.source_url and not payload.source_url.strip().lower().startswith("https://"):
+        raise HTTPException(status_code=422, detail="ลิงก์แหล่งข้อมูลต้องขึ้นต้นด้วย https://")
     if any(not alias or len(alias) > 500 for alias in aliases):
         raise HTTPException(status_code=422, detail="คำถามทางเลือกต้องไม่ว่างและยาวไม่เกิน 500 ตัวอักษร")
     variants = [question, *aliases]
@@ -3988,6 +4003,8 @@ def create_chatbot_knowledge(payload: ChatbotKnowledgeInput, request: Request,
     aliases = _validate_knowledge(payload, db)
     row = ChatbotKnowledgeEntry(question=payload.question.strip(), answer=payload.answer.strip(),
                                 aliases=json.dumps(aliases, ensure_ascii=False),
+                                source_label=(payload.source_label or "").strip() or None,
+                                source_url=(payload.source_url or "").strip() or None,
                                 is_published=payload.is_published, updated_by=user.id)
     db.add(row)
     db.flush()
@@ -4008,6 +4025,8 @@ def update_chatbot_knowledge(entry_id: int, payload: ChatbotKnowledgeInput, requ
     old = {"question": row.question, "is_published": row.is_published}
     row.question, row.answer = payload.question.strip(), payload.answer.strip()
     row.aliases, row.is_published, row.updated_by = json.dumps(aliases, ensure_ascii=False), payload.is_published, user.id
+    row.source_label = (payload.source_label or "").strip() or None
+    row.source_url = (payload.source_url or "").strip() or None
     write_audit(db, action="chatbot_knowledge_update", user=user, entity_type="chatbot_knowledge",
                 entity_id=str(row.id), old_value=old,
                 new_value={"question": row.question, "is_published": row.is_published}, request=request)
@@ -4057,10 +4076,69 @@ def list_line_ratings(days: int = Query(30, ge=1, le=365), db: Session = Depends
     for target in ("bot", "staff"):
         aggregate = db.execute(select(func.count(LineServiceRating.id), func.avg(LineServiceRating.score))
                                .where(LineServiceRating.target == target, LineServiceRating.created_at >= cutoff)).one()
-        summary[target] = {"count": aggregate[0], "average": round(float(aggregate[1] or 0), 1)}
+        distribution = dict(db.execute(select(LineServiceRating.score, func.count(LineServiceRating.id))
+                               .where(LineServiceRating.target == target, LineServiceRating.created_at >= cutoff)
+                               .group_by(LineServiceRating.score)).all())
+        summary[target] = {"count": aggregate[0], "average": round(float(aggregate[1] or 0), 1),
+                           "scores": {str(score): distribution.get(score, 0) for score in range(1, 6)}}
+        if target == "bot":
+            summary[target]["solved"] = db.execute(select(func.count(LineServiceRating.id)).where(
+                LineServiceRating.target == "bot", LineServiceRating.resolved.is_(True),
+                LineServiceRating.created_at >= cutoff)).scalar_one()
+            summary[target]["not_solved"] = db.execute(select(func.count(LineServiceRating.id)).where(
+                LineServiceRating.target == "bot", LineServiceRating.resolved.is_(False),
+                LineServiceRating.created_at >= cutoff)).scalar_one()
     return {"days": days, "summary": summary,
             "recent": [{"id": row.id, "target": row.target, "score": row.score,
-                        "ticket_id": row.ticket_id, "created_at": row.created_at} for row in rows]}
+                        "resolved": row.resolved, "ticket_id": row.ticket_id,
+                        "created_at": row.created_at} for row in rows]}
+
+
+@app.get("/api/chatbot/manage/runtime")
+def chatbot_runtime(user: User = Depends(_CHATBOT_MANAGER)):
+    """Configuration status only; never return keys, credentials, or endpoint IDs."""
+    from app import ai_client, chatbot_core, gemini_service, line_bot
+    return {"provider": "Gemini", "model": line_bot.GEMINI_MODEL,
+            "base_key_configured": bool(ai_client.API_KEY),
+            "tuned_endpoint_configured": bool(ai_client.TUNED_ENDPOINT),
+            "classifier_enabled": chatbot_core.ENABLE_GEMINI_CLASSIFIER,
+            "orchestration_enabled": chatbot_core.ENABLE_GEMINI_ORCHESTRATION,
+            "natural_replies_enabled": gemini_service.ENABLE_NATURAL_REPLIES}
+
+
+class ChatbotPreviewInput(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000)
+
+
+@app.post("/api/chatbot/manage/preview")
+def chatbot_preview(payload: ChatbotPreviewInput, user: User = Depends(_CHATBOT_MANAGER)):
+    """Read-only, rule-layer preview. No LINE, Gemini, ticket, profile or log writes."""
+    import re
+    from app import chatbot_nlu
+    from app.chatbot_helpers import detect_intent
+    from app.chatbot_knowledge import answer_for_question
+    from app.chatbot_warranty import extract_code, is_warranty_question, warranty_answer
+    from app.assistant_policy import contains_prompt_injection, classify_urgency, INJECTION_REPLY, SAFETY_REPLY
+    message = payload.message.strip()
+    if contains_prompt_injection(message):
+        return {"route": "security", "intent": "security", "reply": INJECTION_REPLY, "note": "กฎความปลอดภัย"}
+    if classify_urgency(message) == "safety_critical":
+        return {"route": "safety", "intent": "repair", "reply": SAFETY_REPLY, "note": "เหตุฉุกเฉิน"}
+    if is_warranty_question(message):
+        code = extract_code(message)
+        return {"route": "warranty", "intent": "warranty",
+                "reply": warranty_answer(code) if code else "ขอรหัสอุปกรณ์หรือหมายเลข Serial ก่อนนะคะ",
+                "note": "อ่านทะเบียนอุปกรณ์จริงแบบระบุรหัส; ไม่ส่ง LINE"}
+    intent = detect_intent(message)
+    if not re.search(r"ราคา|ประกัน|ชำระ|จ่าย|ใบงาน|ticket|สถานะ|ซ่อม|ซื้อ|สินค้า", message, re.I):
+        answer = answer_for_question(message)
+        if answer:
+            return {"route": "reviewed_knowledge", "intent": intent, "reply": answer,
+                    "note": "คำตอบเผยแพร่จากฐานข้อมูล"}
+    clarify = chatbot_nlu.clarify_prompt(message) if intent in ("other", "ambiguous") else None
+    return {"route": "clarify" if clarify else "intent_only", "intent": intent,
+            "reply": clarify["message"] if clarify else None,
+            "note": "พรีวิวชั้นกฎเท่านั้น; คำตอบจริงอาจต่างตามประวัติแชตและ AI"}
 
 
 # ─── Knowledge Base (KB — TOR 1.5.5 / 5.6) ────────────────────────────

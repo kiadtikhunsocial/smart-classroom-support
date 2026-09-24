@@ -27,5 +27,13 @@
 .studio-rating-card strong { font-size: 1.6rem; }
 .studio-rating-card small { color: var(--color-text-secondary); }
 .studio-table-wrap { overflow-x: auto; }
+.studio-preview { margin-top: 18px; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; }
+.studio-examples { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.studio-preview p { white-space: pre-wrap; line-height: 1.6; }
+.studio-preview small { color: var(--color-text-secondary); }
+.studio-guide { max-width: 950px; }
+.studio-guide li { margin: 0 0 14px; line-height: 1.65; }
+.studio-score-bars { display: flex; flex-wrap: wrap; gap: 6px; font-size: .76rem; }
+.studio-score-bars span { padding: 3px 7px; border-radius: 7px; background: var(--color-surface-secondary, #f4f4f5); }
 @media (max-width: 850px) { .studio-columns { grid-template-columns: 1fr; } .studio-intro { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 520px) { .studio-rating-head { flex-direction: column; } .studio-rating-cards { grid-template-columns: 1fr; } }

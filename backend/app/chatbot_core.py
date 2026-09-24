@@ -540,7 +540,8 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                 print(f"[chatbot] save self-service failed: {_e}")
             clear_session(user_id)
             from app.gemini_service import phrase_repair_reply as _pr
-            return _pr("resolve_success", "") or "ดีใจด้วยนะคะ 🎉 ที่แก้ได้ด้วยตัวเอง! บันทึกเป็นการแก้ไขเบื้องต้นไว้แล้วค่ะ 😊"
+            success = _pr("resolve_success", "") or "ดีใจด้วยนะคะ 🎉 ที่แก้ได้ด้วยตัวเอง! บันทึกเป็นการแก้ไขเบื้องต้นไว้แล้วค่ะ 😊"
+            return success + "\n\nช่วยประเมินคำแนะนำบอตได้ไหมคะ? พิมพ์ 'ประเมินบอท 5 แก้ได้' (เปลี่ยนคะแนน 1–5 ได้ค่ะ)"
         return "ลองทำตามขั้นตอนที่แนะนำแล้วเป็นอย่างไรบ้างคะ? พิมพ์ **หายแล้ว** หรือ **ยังไม่หาย** ได้เลยค่ะ 😊"
 
     # เริ่มต้นรอบใหม่เฉพาะ phase==new (ไม่ reset state resolving)
@@ -1164,7 +1165,7 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
 
     # Only answer reviewed, exact general questions. Dynamic facts (warranty,
     # prices, payment, tickets) must continue through their authoritative flows.
-    if (intent == "other" and phase in ("new", "done") and not session.get("resolving")
+    if (phase in ("new", "done") and not session.get("resolving")
             and not re.search(r"ราคา|ประกัน|ชำระ|จ่าย|ใบงาน|ticket|สถานะ|ซ่อม|ซื้อ|สินค้า", text, re.I)):
         from app.chatbot_knowledge import answer_for_question
         reviewed_answer = answer_for_question(text)

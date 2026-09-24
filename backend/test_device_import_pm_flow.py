@@ -45,8 +45,8 @@ def test_import_preview_commit_duplicate_and_pm(sample):
     db, (org_id, _user_id, plan_id, code), headers = sample
     client = TestClient(app)
     device_id = f"{code[:8]}-CAM-01"
-    csv_data = ("organization_code,device_id,device_type,brand,status\n"
-                f"{code},{device_id},Camera,Example,active\n").encode()
+    csv_data = ("organization_code,device_id,device_type,brand,status,warranty_details\n"
+                f"{code},{device_id},Camera,Example,active,ประกันกล้องตามใบซื้อ\n").encode()
 
     def upload(commit=False, data=csv_data):
         return client.post(f"/api/devices/import-csv?commit={str(commit).lower()}",
@@ -61,7 +61,10 @@ def test_import_preview_commit_duplicate_and_pm(sample):
     assert imported.status_code == 200, imported.text
     assert imported.json()["imported"] == 1
     db.rollback()  # close the snapshot opened by the preview assertion
-    assert db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none(), imported.json()
+    saved = db.execute(select(Device).where(Device.device_id == device_id)).scalar_one_or_none()
+    assert saved and saved.warranty_details == "ประกันกล้องตามใบซื้อ", imported.json()
+    from app.chatbot_warranty import warranty_answer
+    assert "ประกันกล้องตามใบซื้อ" in warranty_answer(device_id)
     assert upload().json()["invalid"] == 1
     assert upload(True).status_code == 422
 

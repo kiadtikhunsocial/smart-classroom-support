@@ -53,7 +53,8 @@ def studio(monkeypatch):
 def test_knowledge_is_draft_until_published_and_role_is_enforced(studio):
     client, headers, denied, _owner_headers, _other_headers, suffix = studio
     question = f"เปิดให้บริการวันใด {suffix}"
-    payload = {"question": question, "answer": "เปิดวันจันทร์ถึงศุกร์ค่ะ", "aliases": [], "is_published": False}
+    payload = {"question": question, "answer": "เปิดวันจันทร์ถึงศุกร์ค่ะ", "aliases": [],
+               "source_label": "ฝ่ายบริการ", "source_url": "https://example.org/service", "is_published": False}
     assert client.post("/api/chatbot/manage/knowledge", json=payload, headers=denied).status_code == 403
     created = client.post("/api/chatbot/manage/knowledge", json=payload, headers=headers)
     assert created.status_code == 201, created.text
@@ -61,7 +62,15 @@ def test_knowledge_is_draft_until_published_and_role_is_enforced(studio):
     payload["is_published"] = True
     updated = client.put(f"/api/chatbot/manage/knowledge/{created.json()['id']}", json=payload, headers=headers)
     assert updated.status_code == 200, updated.text
+    assert updated.json()["source_label"] == "ฝ่ายบริการ"
     assert answer_for_question(question) == payload["answer"]
+    preview = client.post("/api/chatbot/manage/preview", json={"message": question}, headers=headers)
+    assert preview.status_code == 200 and preview.json()["route"] == "reviewed_knowledge"
+    assert preview.json()["reply"] == payload["answer"]
+    assert client.post("/api/chatbot/manage/preview", json={"message": "จอเสียอยากซื้อใหม่"}, headers=headers).json()["route"] in {"clarify", "intent_only"}
+    assert client.post("/api/chatbot/manage/preview", json={"message": question}, headers=denied).status_code == 403
+    bad_source = {**payload, "question": f"ติดต่อเมื่อใด {suffix}", "source_url": "http://unsafe.example"}
+    assert client.post("/api/chatbot/manage/knowledge", json=bad_source, headers=headers).status_code == 422
     assert client.get("/api/chatbot/manage/knowledge", headers=denied).status_code == 403
     assert client.post("/api/chatbot/manage/knowledge", json={**payload, "question": f"ราคา {suffix}"}, headers=headers).status_code == 422
 
@@ -88,6 +97,14 @@ def test_prompt_override_and_ratings_are_private(studio):
     ratings = client.get("/api/chatbot/manage/ratings", headers=headers)
     assert ratings.status_code == 200
     assert any(item["score"] == 5 for item in ratings.json()["recent"])
+    assert ratings.json()["summary"]["bot"]["scores"]["5"] >= 1
+    from app.chatbot_rating import record_rating
+    assert "ขอบคุณ" in record_rating(suffix, "ประเมินบอท 4 แก้ได้", None)
+    refreshed = client.get("/api/chatbot/manage/ratings", headers=headers).json()
+    assert any(item["resolved"] is True for item in refreshed["recent"] if item["target"] == "bot")
+    runtime = client.get("/api/chatbot/manage/runtime", headers=headers)
+    assert runtime.status_code == 200 and runtime.json()["provider"] == "Gemini"
+    assert "api_key" not in runtime.text.lower()
     general_report = client.get("/api/reports/chatbot-analytics", headers=denied)
     assert general_report.status_code == 200
     assert "line_ratings" not in general_report.json()
