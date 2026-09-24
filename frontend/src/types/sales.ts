@@ -37,4 +37,7 @@ export interface SalesSummary {
   won_deals: number;
   won_amount_thb: string;
   payment_requests: number;
+  deal_status_counts?: Record<string, number>;
+  lead_by_source?: Record<string, number>;
+  new_leads_7d?: number;
 }

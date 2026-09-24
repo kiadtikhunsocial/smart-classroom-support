@@ -389,7 +389,7 @@ function WarrantyCard() {
   );
 }
 
-export default function PublicHomeView({ initialTicketId }: { initialTicketId?: string }) {
+export default function PublicHomeView({ initialTicketId, staffLoggedIn = false }: { initialTicketId?: string; staffLoggedIn?: boolean }) {
   const [input, setInput] = useState((initialTicketId || '').toUpperCase());
   const [ticket, setTicket] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -512,7 +512,7 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
       </div>
 
       <header className="ph-topbar">
-        <a className="ph-brand" href="/">
+        <a className="ph-brand" href={staffLoggedIn ? '/' : '/?home=1'}>
           <span className="ph-brand-mark">
             <img className="ph-brand-logo" src="/logo.jpg" alt="IWA" />
           </span>
@@ -523,6 +523,7 @@ export default function PublicHomeView({ initialTicketId }: { initialTicketId?: 
         </a>
         <div className="ph-topbar-right">
           <LivePill>ระบบพร้อมรับแจ้ง</LivePill>
+          {staffLoggedIn && <a className="ph-customer-link" href="/">พื้นที่เจ้าหน้าที่ →</a>}
           <a className="ph-customer-link" href="/?customer=1">สนใจสินค้า / ฝากข้อมูลติดต่อ</a>
           <PublicThemeToggle />
         </div>

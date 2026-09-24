@@ -88,6 +88,9 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
   const [plans, setPlans] = useState<any[]>([]);
   const [orgs, setOrgs] = useState<any[]>([]);
   const [deviceTypes, setDeviceTypes] = useState<string[]>([]);
+  const [allDevices, setAllDevices] = useState<any[]>([]);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskForm, setTaskForm] = useState({ plan_id: '', device_id: '', due_date: '' });
 
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [orgFilter, setOrgFilter] = useState<number | ''>('');
@@ -192,9 +195,10 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
         .catch(() => { /* ตัวกรองโรงเรียนไม่ขึ้น ไม่ถือว่าหน้าเสีย */ });
     }
     api
-      .listDevices(200)
+      .listAllDevices()
       .then((rows) => {
         if (!alive) return;
+        setAllDevices(Array.isArray(rows) ? rows : []);
         const types = Array.from(
           new Set((Array.isArray(rows) ? rows : []).map((d: any) => d?.device_type).filter(Boolean)),
         ) as string[];
@@ -224,6 +228,23 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
     } finally {
       setGenerating(false);
     }
+  };
+
+  const taskPlan = plans.find((p) => String(p.id) === taskForm.plan_id);
+  const taskDevices = allDevices.filter((d) =>
+    (!taskPlan?.device_type || d.device_type === taskPlan.device_type)
+    && (effectiveOrgId == null || d.organization_id === effectiveOrgId)
+    && d.status === 'active');
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault(); setSaving(true); setPanelError(null);
+    try {
+      await api.createPMTask({ plan_id: Number(taskForm.plan_id), device_id: taskForm.device_id,
+        due_date: `${taskForm.due_date}T17:00:00+07:00` });
+      setShowTaskForm(false); setTaskForm({ plan_id: '', device_id: '', due_date: '' });
+      setNotice('สร้างงาน PM รายเครื่องแล้ว'); loadTasks();
+    } catch (err: any) { setPanelError(err?.message || 'สร้างงาน PM ไม่สำเร็จ'); }
+    finally { setSaving(false); }
   };
 
   const openSubmit = (task: any) => {
@@ -481,6 +502,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
           </div>
         </div>
         <div className="top-bar-actions">
+          {tab === 'tasks' && <button className="btn btn-primary" onClick={() => { setPanelError(null); setShowTaskForm(true); }}>+ สร้างงาน PM รายเครื่อง</button>}
           {tab === 'flags' ? (
             <button className="btn btn-secondary" onClick={handleRunRules} disabled={runningRules}>
               {runningRules ? 'กำลังตรวจ...' : 'ตรวจตามกฎทันที'}
@@ -1073,6 +1095,21 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
           </div>
         </div>
       )}
+
+      {showTaskForm && <div className="panel-overlay" onClick={() => setShowTaskForm(false)}>
+        <div className="repair-panel" style={{ width: 560, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="สร้างงาน PM รายเครื่อง">
+          <div className="repair-panel-header"><h3 className="repair-panel-title">สร้างงาน PM รายเครื่อง</h3><button className="repair-panel-close" onClick={() => setShowTaskForm(false)} aria-label="ปิด">×</button></div>
+          <div className="repair-panel-body"><form onSubmit={handleCreateTask}>
+            <p>เลือกแผนและเครื่องที่ต้องตรวจ กำหนดวันครบกำหนด แล้วทวนรายการตรวจก่อนออกงาน</p>
+            <div className="form-group"><label className="form-label" htmlFor="pm-task-plan">แผน PM *</label><select id="pm-task-plan" className="form-select" required value={taskForm.plan_id} onChange={(e) => setTaskForm({ ...taskForm, plan_id: e.target.value, device_id: '' })}><option value="">เลือกแผน</option>{plans.filter((p) => p.is_active).map((p) => <option key={p.id} value={p.id}>{p.name} · {p.device_type || 'ทุกประเภท'}</option>)}</select></div>
+            <div className="form-group"><label className="form-label" htmlFor="pm-task-device">อุปกรณ์ *</label><select id="pm-task-device" className="form-select" required value={taskForm.device_id} onChange={(e) => setTaskForm({ ...taskForm, device_id: e.target.value })}><option value="">เลือกอุปกรณ์</option>{taskDevices.map((d) => <option key={d.device_id} value={d.device_id}>{d.device_id} · {d.device_type} · {d.organization_name} · {d.room_name || d.room_code || 'ไม่ระบุห้อง'}</option>)}</select></div>
+            <div className="form-group"><label className="form-label" htmlFor="pm-task-due">วันครบกำหนด *</label><input id="pm-task-due" className="form-input" type="date" required value={taskForm.due_date} onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })} /></div>
+            <div className="form-group"><span className="form-label">รายการตรวจของแผน</span>{taskPlan ? (Array.isArray(taskPlan.checklist) && taskPlan.checklist.length ? <ol>{taskPlan.checklist.map((item: any, i: number) => <li key={i}>{checklistItemLabel(item, i)}</li>)}</ol> : <p role="alert">แผนนี้ไม่มีรายการตรวจ กรุณาแก้แผนก่อนสร้างงาน</p>) : <p>เลือกแผนเพื่อดูรายการตรวจ</p>}</div>
+            {panelError && <p role="alert" style={{ color: 'var(--color-danger)' }}>{panelError}</p>}
+            <button className="btn btn-primary" type="submit" disabled={saving || !taskPlan?.checklist?.length || !taskForm.device_id || !taskForm.due_date}>{saving ? 'กำลังสร้าง...' : 'ยืนยันสร้างงาน PM'}</button>
+          </form></div>
+        </div>
+      </div>}
 
       {/* ─── Panel: เพิ่มแผน PM ─────────────────────────────────── */}
       {showPlanForm && (

@@ -136,6 +136,19 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  importDevicesCsv: async (file: File, commit = false) => {
+    const form = new FormData();
+    form.append('file', file);
+    const token = getToken();
+    const response = await fetch(`${BASE}/devices/import-csv?commit=${commit}`, {
+      method: 'POST', body: form, cache: 'no-store',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : data.detail?.message || `HTTP ${response.status}`);
+    return data;
+  },
+
   updateDevice: (deviceId: string, data: any) =>
     request<any>(`/devices/${deviceId}`, {
       method: 'PATCH',
@@ -247,6 +260,8 @@ export const api = {
   deletePMPlan: (planId: number) =>
     request<any>(`/pm/plans/${planId}`, { method: 'DELETE' }),
   generatePMTasks: () => request<any>('/pm/generate', { method: 'POST' }),
+  createPMTask: (data: { plan_id: number; device_id: string; due_date: string }) =>
+    request<any>('/pm/tasks', { method: 'POST', body: JSON.stringify(data) }),
   listPMTasks: (params?: {
     status?: string;
     device_id?: string;

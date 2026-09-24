@@ -1020,6 +1020,12 @@ input, select, textarea {
   background: var(--color-bg);
 }
 
+.clickable-data-row { cursor: pointer; }
+.clickable-data-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.ticket-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+.ticket-detail-grid > div { padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; overflow-wrap: anywhere; }
+.ticket-detail-grid small { display: block; color: var(--color-text-tertiary); margin-bottom: 4px; }
+
 .table-id {
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 0.8rem;

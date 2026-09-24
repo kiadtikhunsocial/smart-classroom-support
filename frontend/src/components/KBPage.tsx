@@ -18,12 +18,13 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
     canEditKB && !(userRole === 'admin_school' && (a?.organization_id ?? null) !== (userOrgId ?? null));
   const canReviewBot = !userOrgId && ['owner', 'super_admin', 'admin', 'it_support'].includes(userRole || '');
   const [botReviewOpen, setBotReviewOpen] = useState(false);
-  const [botStats, setBotStats] = useState<{ total_conversations: number; self_service_rate: number; missed_queries: string[] } | null>(null);
+  const [botStats, setBotStats] = useState<{ total_conversations: number; self_service_rate: number; missed_queries: string[]; line_ratings?: Record<string, { count: number; average: number }> } | null>(null);
   const [botReviewError, setBotReviewError] = useState<string | null>(null);
   const [articles, setArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [publishFilter, setPublishFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
@@ -33,12 +34,12 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
     device_type: '',
     symptom_tags: '',
     steps: '',
-    is_published: true,
+    is_published: false,
   });
 
   const load = () => {
     setLoading(true);
-    api.listKB({ q: q || undefined, limit: 100 })
+    api.listKB({ q: q || undefined, limit: 200 })
       .then(setArticles)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -61,7 +62,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
 
   const openNew = () => {
     setEditing(null);
-    setForm({ title: '', device_type: '', symptom_tags: '', steps: '', is_published: true });
+    setForm({ title: '', device_type: '', symptom_tags: '', steps: '', is_published: false });
     setShowForm(true);
     setSelected(null);
   };
@@ -83,6 +84,9 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) { setError('กรอกหัวข้อ'); return; }
+    if (form.is_published && (!form.symptom_tags.trim() || !form.steps.trim())) {
+      setError('ก่อนเผยแพร่ ต้องมีคำค้นและขั้นตอนอย่างน้อยอย่างละ 1 รายการ'); return;
+    }
     setSaving(true);
     setError(null);
     const data = {
@@ -97,7 +101,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
       else await api.createKB(data);
       setShowForm(false);
       setEditing(null);
-      setForm({ title: '', device_type: '', symptom_tags: '', steps: '', is_published: true });
+      setForm({ title: '', device_type: '', symptom_tags: '', steps: '', is_published: false });
       load();
     } catch (err: any) {
       setError(err.message);
@@ -121,6 +125,8 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
     if (Array.isArray(a.steps)) return a.steps.map((s: any) => typeof s === 'string' ? s : (s.text || ''));
     return [];
   };
+  const visibleArticles = articles.filter((a) => publishFilter === 'all' ||
+    (publishFilter === 'published' ? a.is_published : !a.is_published));
 
   return (
     <div className="page-content">
@@ -148,18 +154,23 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
       </div>
 
       {error && <div style={{ padding: '10px 14px', background: 'var(--color-danger-light)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', marginBottom: 16 }}>{error}</div>}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        {([['all', 'ทั้งหมด'], ['published', 'เผยแพร่แล้ว'], ['draft', 'ฉบับร่าง']] as const).map(([key, label]) =>
+          <button key={key} className={`btn ${publishFilter === key ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setPublishFilter(key)}>{label} ({key === 'all' ? articles.length : articles.filter((a) => a.is_published === (key === 'published')).length})</button>)}
+      </div>
 
       <section className="bot-review-guide" aria-label="วิธีพัฒนาแชตบอต">
         <div><span className="bot-review-kicker">ปรับคำตอบได้ด้วยตัวเอง</span>
           <h2>ทบทวนคำถาม → เพิ่มความรู้ → ทดสอบ → เผยแพร่</h2>
           <p>เขียนขั้นตอนที่ตรวจสอบได้พร้อมคำค้นหลายรูปแบบ บันทึกเป็นฉบับร่างก่อน ทวนข้อมูลกับผู้เชี่ยวชาญ แล้วจึงเปิด “เผยแพร่” และทดสอบในสภาพแวดล้อมทดสอบ</p>
-          <p>หากต้องการปรับน้ำเสียง/แนวทางสนทนาของ AI เพิ่มเติม ให้แก้ <code>backend/chatbot_extra_prompt.txt</code> แล้วทดสอบและ deploy backend ใหม่ ส่วนข้อมูลสินค้า ราคา และวิธีซ่อมให้แก้ที่แหล่งข้อมูลของแต่ละเรื่อง ไม่ใส่ใน prompt</p></div>
+          <p>ปรับน้ำเสียงรวมที่ <code>backend/chatbot_extra_prompt.txt</code> หรือปรับแยกงานที่ <code>backend/chatbot_prompts/</code> เช่น intent, kb_match, line_reply แล้วทดสอบและ deploy backend ใหม่ วิธีแก้ให้แก้เป็นบทความที่นี่ ไม่ใช่ใส่ใน prompt</p></div>
         {canReviewBot && <button className="btn" type="button" onClick={() => void toggleReview()} aria-expanded={botReviewOpen}>{botReviewOpen ? 'ซ่อนคำถามที่ควรตรวจ' : 'ดูคำถามที่บอตตอบไม่ชัด'}</button>}
       </section>
       {botReviewOpen && <section className="bot-review-panel" aria-label="คุณภาพแชตบอต">
         <div className="bot-review-head"><h3>ทบทวนคำถามย้อนหลัง 30 วัน</h3><span>รายการนี้เป็นสัญญาณให้มนุษย์ตรวจ ไม่ใช่การตัดสินว่าบอตผิดทุกข้อ</span></div>
         {botReviewError && <p role="alert">{botReviewError}</p>}
         {botStats && <><p className="bot-review-summary">บทสนทนา {botStats.total_conversations.toLocaleString('th-TH')} ครั้ง · คำถามที่ควรทบทวน (ไม่ซ้ำ) {botStats.missed_queries.length} รายการ</p>
+          <p>คะแนนจาก LINE: แชทบอท {botStats.line_ratings?.bot?.average || '—'}/5 ({botStats.line_ratings?.bot?.count || 0} คน) · เจ้าหน้าที่ {botStats.line_ratings?.staff?.average || '—'}/5 ({botStats.line_ratings?.staff?.count || 0} งาน)</p>
           {botStats.missed_queries.length === 0 ? <p>ยังไม่มีคำถามที่ระบบจัดเป็น “ควรตรวจ” ในช่วงนี้</p>
             : <ol>{botStats.missed_queries.slice(0, 20).map((question, index) => <li key={`${index}-${question}`}>
                 <span>{question}</span>{canEditKB && <button className="btn btn-ghost" type="button" onClick={() => reviewQuestion(question)}>สร้างบทความฉบับร่าง</button>}
@@ -169,11 +180,11 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
       {/* รายการบทความ (เต็มความกว้าง) */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" style={{ width: 30, height: 30, margin: '0 auto 12px' }} /></div>
-      ) : articles.length === 0 ? (
-        <div className="panel-card empty-text" style={{ padding: 40, textAlign: 'center' }}>ยังไม่มีบทความ — กด "+ เพิ่มบทความ" เพื่อสร้าง</div>
+      ) : visibleArticles.length === 0 ? (
+        <div className="panel-card empty-text" style={{ padding: 40, textAlign: 'center' }}>ไม่พบบทความในตัวกรองนี้</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
-          {articles.map((a) => (
+          {visibleArticles.map((a) => (
             <div
               key={a.kb_id}
               onClick={() => { setSelected(a); setShowForm(false); }}
@@ -254,7 +265,6 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
               <ol style={{ margin: 0, padding: '0 0 0 22px', lineHeight: 1.9 }}>
                 {stepsArray(selected).map((s: string, i: number) => (
                   <li key={i} style={{ fontSize: '0.92rem', color: 'var(--color-text)', marginBottom: 8 }}>
-                    <span style={{ color: 'var(--color-primary)', fontWeight: 600, marginRight: 6 }}>{i + 1}.</span>
                     {s}
                   </li>
                 ))}
@@ -323,6 +333,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
               <div className="form-group">
                 <label className="form-label">ขั้นตอน (ทีละบรรทัด)</label>
                 <textarea className="form-textarea" rows={6} value={form.steps} onChange={(e) => setForm({ ...form, steps: e.target.value })} placeholder={'ตรวจสอบสาย HDMI\nกดปุ่ม Source\nปิดจอค้าง 10 วิ'} />
+                <small>เขียนเฉพาะขั้นตอนที่เจ้าหน้าที่ตรวจสอบแล้ว หลีกเลี่ยงการแกะเครื่องและข้อมูลส่วนบุคคล</small>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>

@@ -494,7 +494,7 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
             </svg>
           </button>
         )}
-        <AppLogo size={22} />
+        <a href="/?home=1" aria-label="ไปหน้าแรกแจ้งซ่อม" style={{ display: 'inline-flex' }}><AppLogo size={22} /></a>
         <h2 className="header-page-title">{pageTitle}</h2>
       </div>
       <div className="header-right">
@@ -1241,6 +1241,30 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
 }) {
   const [updating, setUpdating] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [detailTicket, setDetailTicket] = useState<any | null>(null);
+  const [detailHistory, setDetailHistory] = useState<any[]>([]);
+  const [detailComments, setDetailComments] = useState<any[]>([]);
+  const [detailAttachments, setDetailAttachments] = useState<any[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const detailRequest = React.useRef(0);
+  const openTicketDetail = async (ticket: Ticket) => {
+    const requestId = ++detailRequest.current;
+    setDetailTicket(ticket); setDetailLoading(true); setDetailError('');
+    setDetailHistory([]); setDetailComments([]); setDetailAttachments([]);
+    const [full, history, comments, attachments] = await Promise.allSettled([
+      api.getTicket(ticket.ticket_id), api.getTicketHistory(ticket.ticket_id),
+      api.listTicketComments(ticket.ticket_id), api.listTicketAttachments(ticket.ticket_id),
+    ]);
+    if (requestId !== detailRequest.current) return;
+    if (full.status === 'fulfilled') setDetailTicket(full.value);
+    else setDetailError('โหลดรายละเอียดล่าสุดไม่สำเร็จ กำลังแสดงข้อมูลจากรายการ');
+    if (history.status === 'fulfilled') setDetailHistory(history.value);
+    if (comments.status === 'fulfilled') setDetailComments(comments.value);
+    if (attachments.status === 'fulfilled') setDetailAttachments(attachments.value);
+    setDetailLoading(false);
+  };
+  const closeTicketDetail = () => { detailRequest.current += 1; setDetailTicket(null); };
   // ── ตัวกรองรายการ Ticket: คำค้น / สถานะ / ความเร่งด่วน / ประเภทอุปกรณ์ ──
   const [q, setQ] = useState('');
   const [fStatus, setFStatus] = useState('');
@@ -1458,7 +1482,10 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
                 </thead>
                 <tbody>
                   {filtered.map((ticket) => (
-                    <tr key={ticket.ticket_id}>
+                    <tr key={ticket.ticket_id} className="clickable-data-row" tabIndex={0}
+                      aria-label={`ดูรายละเอียด Ticket ${ticket.ticket_id}`}
+                      onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a, select, input')) void openTicketDetail(ticket); }}
+                      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); void openTicketDetail(ticket); } }}>
                       <td className="table-id">{ticket.ticket_id}</td>
                       <td>
                         <div className="table-meta">
@@ -1502,7 +1529,8 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
                         })}
                       </td>
                       {canManage && (
-                        <td>
+                        <td style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => void openTicketDetail(ticket)}>รายละเอียด</button>
                           <button
                             className="btn btn-danger btn-sm"
                             disabled={deleting === ticket.ticket_id}
@@ -1521,6 +1549,34 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
           )}
         </div>
       </div>
+      {detailTicket && <div className="panel-overlay" onClick={closeTicketDetail}>
+        <div className="repair-panel" style={{ width: 680, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`รายละเอียด Ticket ${detailTicket.ticket_id}`}>
+          <div className="repair-panel-header"><h3 className="repair-panel-title">Ticket {detailTicket.ticket_id}</h3><button className="repair-panel-close" onClick={closeTicketDetail} aria-label="ปิด">×</button></div>
+          <div className="repair-panel-body" style={{ overflowY: 'auto' }}>
+            {detailLoading && <p>กำลังโหลดรายละเอียด...</p>}
+            {detailError && <p role="alert">{detailError}</p>}
+            <h3>{detailTicket.title}</h3>
+            <div className="ticket-detail-grid">
+              {([
+                ['สถานะ', STATUS_LABELS_TICKET[detailTicket.status] || detailTicket.status],
+                ['ความเร่งด่วน', detailTicket.priority], ['อุปกรณ์', detailTicket.device_label || detailTicket.device_id],
+                ['รหัสอุปกรณ์', detailTicket.device_id], ['โรงเรียน', detailTicket.organization_name],
+                ['ผู้แจ้ง', detailTicket.reporter_name], ['เบอร์ติดต่อ', detailTicket.reporter_phone],
+                ['ผู้รับผิดชอบ', detailTicket.assigned_to], ['ช่องทาง', detailTicket.channel],
+                ['สร้างเมื่อ', detailTicket.created_at && new Date(detailTicket.created_at).toLocaleString('th-TH')],
+                ['อัปเดตล่าสุด', detailTicket.updated_at && new Date(detailTicket.updated_at).toLocaleString('th-TH')],
+                ['กำหนด SLA', detailTicket.sla_due_at && new Date(detailTicket.sla_due_at).toLocaleString('th-TH')],
+              ] as [string, any][]).map(([label, value]) => <div key={label}><small>{label}</small><div>{value || '—'}</div></div>)}
+            </div>
+            <h4>อาการ / รายละเอียด</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
+            {detailTicket.root_cause && <><h4>สาเหตุ</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.root_cause}</p></>}
+            {detailTicket.solution && <><h4>วิธีแก้ไข</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.solution}</p></>}
+            <h4>ประวัติสถานะ</h4>{detailHistory.length ? detailHistory.map((h, i) => <p key={h.id || i}>{h.created_at ? new Date(h.created_at).toLocaleString('th-TH') : ''} · {STATUS_LABELS_TICKET[h.to_status] || h.to_status || 'อัปเดต'}{h.note ? ` — ${h.note}` : ''}</p>) : <p>ไม่มีประวัติสถานะ</p>}
+            <h4>ความเห็น</h4>{detailComments.length ? detailComments.map((c, i) => <p key={c.id || i}>{c.author_name || 'เจ้าหน้าที่'}{c.is_internal ? ' (ภายใน)' : ''}: {c.note || '—'}</p>) : <p>ไม่มีความเห็น</p>}
+            <h4>ไฟล์แนบ</h4>{detailAttachments.length ? detailAttachments.map((a, i) => <p key={a.id || i}><a href={a.file_url || a.url} target="_blank" rel="noreferrer">{a.file_name || a.filename || `ไฟล์ ${i + 1}`}</a></p>) : <p>ไม่มีไฟล์แนบ</p>}
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }
@@ -2874,6 +2930,10 @@ function AppInner() {
   //     คนละอย่างกับ /?register=1 ซึ่งเป็นการขอเปิดบัญชีเจ้าหน้าที่
   if (qrParams.get('customer') !== null) {
     return <CustomerSignupPage />;
+  }
+
+  if (qrParams.get('home') !== null) {
+    return <PublicHomeView staffLoggedIn={auth.isAuthenticated} />;
   }
 
   // ─── สมัครสมาชิก (ไม่ต้อง login): /?register=1 → ฟอร์มขอเปิดบัญชีเจ้าหน้าที่

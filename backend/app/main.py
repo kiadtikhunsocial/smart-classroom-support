@@ -10,15 +10,17 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 import base64
+import csv
 import hashlib
 import hmac
+import io
 import logging
 import os
 import threading
 from typing import Literal, Optional
 from decimal import Decimal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from slowapi import Limiter
@@ -34,12 +36,13 @@ from sqlalchemy.orm import Session, selectinload
 from app.kb_loader import invalidate_kb_cache
 # Audit Log (§40) + Preventive Maintenance (§38) — โมเดลที่เพิ่มใหม่
 from app import google_sheets, pm_rules
-from app.models import AuditLog, DeviceHealthFlag, PMPlan, PMTask
+from app.models import AuditLog, DeviceHealthFlag, LineServiceRating, PMPlan, PMTask
 from app.models import (
     Base,
     Building,
     CustomerSignupInvite,
     Device,
+    DeviceType,
     KBArticle,
     KBSuggestion,
     MEMBERSHIP_APPROVED,
@@ -2325,6 +2328,120 @@ def list_devices(
 
 
 
+_DEVICE_IMPORT_COLUMNS = {
+    "organization_code": ("organization_code", "school_code", "รหัสโรงเรียน"),
+    "device_id": ("device_id", "รหัสอุปกรณ์"),
+    "room_code": ("room_code", "รหัสห้อง"),
+    "device_type": ("device_type", "ประเภทอุปกรณ์"),
+    "brand": ("brand", "ยี่ห้อ"),
+    "model": ("model", "รุ่น"),
+    "serial_number": ("serial_number", "serial", "หมายเลขซีเรียล"),
+    "firmware_version": ("firmware_version", "เฟิร์มแวร์"),
+    "status": ("status", "สถานะ"),
+    "purchase_date": ("purchase_date", "วันที่จัดซื้อ"),
+    "warranty_until": ("warranty_until", "วันสิ้นสุดประกัน"),
+    "notes": ("notes", "หมายเหตุ"),
+}
+
+
+@app.post("/api/devices/import-csv")
+async def import_devices_csv(
+    request: Request,
+    file: UploadFile = File(...),
+    commit: bool = Query(False),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support")),
+):
+    """Google Sheets → CSV: ตรวจทุกแถวก่อนบันทึกทั้งหมดแบบ atomic; ไม่แก้ข้อมูลเดิม."""
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="รองรับเฉพาะไฟล์ CSV ที่ส่งออกจาก Google Sheets")
+    raw = await file.read(2_000_001)
+    if len(raw) > 2_000_000:
+        raise HTTPException(status_code=413, detail="ไฟล์ใหญ่เกิน 2 MB")
+    try:
+        content = raw.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(content))
+        if not reader.fieldnames:
+            raise ValueError("ไฟล์ไม่มีหัวตาราง")
+        headers = {h.strip().lower(): h for h in reader.fieldnames if h}
+        mapping = {key: next((headers[a.lower()] for a in aliases if a.lower() in headers), None)
+                   for key, aliases in _DEVICE_IMPORT_COLUMNS.items()}
+        if not mapping["organization_code"] or not mapping["device_id"] or not mapping["device_type"]:
+            raise ValueError("ต้องมีคอลัมน์ organization_code, device_id, device_type (หรือชื่อภาษาไทยตามตัวอย่าง)")
+        source_rows = list(reader)
+    except (UnicodeDecodeError, csv.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"อ่าน CSV ไม่ได้: {exc}") from exc
+    if not source_rows or len(source_rows) > 500:
+        raise HTTPException(status_code=400, detail="ไฟล์ต้องมีข้อมูล 1–500 แถว")
+
+    orgs = {o.code.upper(): o for o in db.execute(select(Organization)).scalars()}
+    existing = set(db.execute(select(Device.device_id)).scalars())
+    seen: set[str] = set()
+    results: list[dict] = []
+    pending: list[dict] = []
+    for row_number, source in enumerate(source_rows, 2):
+        row = {key: str(source.get(header) or "").strip() if header else ""
+               for key, header in mapping.items()}
+        errors: list[str] = []
+        org = orgs.get(row["organization_code"].upper())
+        if not org:
+            errors.append("ไม่พบรหัสโรงเรียน")
+        elif not check_org_access(user, org.id, raise_http=False):
+            errors.append("ไม่มีสิทธิ์ในโรงเรียนนี้")
+        if org and not errors:
+            try:
+                row["device_id"] = _normalize_manual_device_id(db, org, row["device_id"])
+            except HTTPException as exc:
+                errors.append(str(exc.detail))
+        if row["device_id"] in existing or row["device_id"] in seen:
+            errors.append("รหัสอุปกรณ์ซ้ำ")
+        seen.add(row["device_id"])
+        valid_types = {value for name, value in vars(DeviceType).items() if name.isupper()}
+        if row["device_type"] not in valid_types:
+            errors.append("ประเภทอุปกรณ์ไม่อยู่ในรายการที่รองรับ")
+        if row["status"] and row["status"] not in {"active", "inactive", "decommissioned"}:
+            errors.append("สถานะไม่ถูกต้อง")
+        room = None
+        if org and row["room_code"]:
+            room = db.execute(select(Room).where(Room.organization_id == org.id,
+                                                Room.code == row["room_code"])).scalar_one_or_none()
+            if not room:
+                errors.append("ไม่พบรหัสห้องในโรงเรียนนี้")
+        for date_field in ("purchase_date", "warranty_until"):
+            if row[date_field]:
+                try:
+                    parsed_date = datetime.strptime(row[date_field], "%Y-%m-%d")
+                    row[date_field] = parsed_date.replace(tzinfo=timezone(timedelta(hours=7))).isoformat()
+                except ValueError:
+                    errors.append(f"{date_field} ต้องเป็น YYYY-MM-DD")
+        for field_name, max_length in (("brand", 128), ("model", 128), ("serial_number", 128), ("firmware_version", 64)):
+            if len(row[field_name]) > max_length:
+                errors.append(f"{field_name} ยาวเกิน {max_length} ตัวอักษร")
+        results.append({"row": row_number, "device_id": row["device_id"], "organization_code": row["organization_code"],
+                        "device_type": row["device_type"], "errors": errors})
+        if not errors:
+            pending.append({"row": row, "org": org, "room": room})
+    error_count = sum(bool(r["errors"]) for r in results)
+    if not commit:
+        return {"total": len(results), "valid": len(pending), "invalid": error_count, "rows": results}
+    if error_count:
+        raise HTTPException(status_code=422, detail={"message": "มีแถวผิดพลาด ไม่ได้บันทึกอุปกรณ์ใด", "rows": results})
+    import secrets
+    for item in pending:
+        row, org, room = item["row"], item["org"], item["room"]
+        db.add(Device(device_id=row["device_id"], organization_id=org.id, room_id=room.id if room else None,
+                      device_type=row["device_type"], brand=row["brand"] or None, model=row["model"] or None,
+                      serial_number=row["serial_number"] or None, firmware_version=row["firmware_version"] or None,
+                      status=row["status"] or "active", notes=row["notes"] or None,
+                      purchase_date=datetime.fromisoformat(row["purchase_date"]) if row["purchase_date"] else None,
+                      warranty_until=datetime.fromisoformat(row["warranty_until"]) if row["warranty_until"] else None,
+                      qr_token=secrets.token_urlsafe(24)))
+    write_audit(db, action="device_import_csv", user=user, entity_type="device",
+                new_value={"count": len(pending), "device_ids": [x["row"]["device_id"] for x in pending]}, request=request)
+    db.commit()
+    return {"imported": len(pending), "rows": results}
+
+
 @app.post("/api/devices", response_model=DeviceInfo, status_code=201)
 def create_device(payload: DeviceCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """เพิ่มอุปกรณ์ใหม่ — บังคับ org ตาม scope ของบทบาท"""
@@ -3801,7 +3918,7 @@ class KBArticleCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=255)
     symptom_tags: Optional[list[str]] = None
     steps: Optional[list] = None
-    is_published: bool = True
+    is_published: bool = False
 
 class KBArticleUpdate(BaseModel):
     device_type: Optional[str] = None
@@ -3847,6 +3964,8 @@ def list_kb_articles(
     user: Optional[User] = Depends(get_current_user_optional),
 ):
     stmt = select(KBArticle).order_by(KBArticle.title)
+    if user is None:
+        stmt = stmt.where(KBArticle.is_published.is_(True), KBArticle.organization_id.is_(None))
     # เห็นบทความหลัก (org None) + บทความของรรตัวเอง (ถ้ามีสังกัด)
     scope = visible_org_ids(user) if user else None
     if scope is not None:
@@ -3858,21 +3977,35 @@ def list_kb_articles(
     if is_published is not None:
         stmt = stmt.where(KBArticle.is_published == is_published)
     if q:
-        stmt = stmt.where(KBArticle.title.ilike(f"%{q}%"))
+        stmt = stmt.where((KBArticle.title.ilike(f"%{q}%")) | (KBArticle.symptom_tags.ilike(f"%{q}%")))
     rows = db.execute(stmt.offset(offset).limit(limit)).scalars().all()
     return [_kb_to_out(a) for a in rows]
 
 
 @app.get("/api/kb/articles/{kb_id}", response_model=KBArticleOut)
-def get_kb_article(kb_id: str, db: Session = Depends(get_db)):
+def get_kb_article(kb_id: str, db: Session = Depends(get_db), user: Optional[User] = Depends(get_current_user_optional)):
     a = db.execute(select(KBArticle).where(KBArticle.kb_id == kb_id)).scalar_one_or_none()
-    if not a:
+    if not a or (user is None and (not a.is_published or a.organization_id is not None)):
         raise HTTPException(status_code=404, detail="KB article not found")
+    if user is not None and a.organization_id is not None:
+        check_org_access(user, a.organization_id)
     return _kb_to_out(a)
+
+
+def _validate_kb_publish(title: str, tags: list, steps: list, published: bool) -> None:
+    if not published:
+        return
+    if not isinstance(title, str) or len(title.strip()) < 3 or not tags or not steps:
+        raise HTTPException(status_code=422, detail="เผยแพร่ได้เมื่อมีหัวข้อ คำค้น และขั้นตอนอย่างน้อย 1 ข้อ")
+    for step in steps:
+        text_value = step if isinstance(step, str) else step.get("text", "") if isinstance(step, dict) else ""
+        if not str(text_value).strip():
+            raise HTTPException(status_code=422, detail="ขั้นตอนต้องไม่ว่าง")
 
 
 @app.post("/api/kb/articles", response_model=KBArticleOut, status_code=201)
 def create_kb_article(payload: KBArticleCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+    _validate_kb_publish(payload.title, payload.symptom_tags or [], payload.steps or [], payload.is_published)
     # สร้าง kb_id ใหม่จากเลขสูงสุดที่มีอยู่ (count+1 ผิดเมื่อมีการลบบทความ)
     last = db.execute(
         select(func.max(KBArticle.kb_id))
@@ -3919,6 +4052,8 @@ def update_kb_article(kb_id: str, payload: KBArticleUpdate, request: Request, db
     elif a.organization_id is not None:
         raise HTTPException(status_code=403, detail="บทความนี้เป็นของโรงเรียนเฉพาะ — ผู้ดูแลบริษัทแก้ไขเฉพาะบทความหลัก")
     data = payload.model_dump(exclude_unset=True)
+    _validate_kb_publish(data.get("title", a.title), data.get("symptom_tags", json.loads(a.symptom_tags or "[]")) or [],
+                         data.get("steps", json.loads(a.steps or "[]")) or [], data.get("is_published", a.is_published))
     if "symptom_tags" in data and data["symptom_tags"] is not None:
         data["symptom_tags"] = json.dumps(data["symptom_tags"], ensure_ascii=False)
     if "steps" in data and data["steps"] is not None:
@@ -4698,6 +4833,52 @@ def pm_generate(
     }
 
 
+class PMTaskCreate(BaseModel):
+    plan_id: int
+    device_id: str = Field(..., min_length=1, max_length=64)
+    due_date: datetime
+
+
+@app.post("/api/pm/tasks", status_code=201)
+def create_pm_task(
+    payload: PMTaskCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin", "admin", "it_support")),
+):
+    """สร้างงาน PM รายเครื่องจากแผน พร้อมวันกำหนดและ checklist ที่ตรวจได้ก่อนบันทึก."""
+    plan = db.get(PMPlan, payload.plan_id)
+    device = db.execute(select(Device).where(Device.device_id == payload.device_id)).scalar_one_or_none()
+    if not plan or not device:
+        raise HTTPException(status_code=404, detail="ไม่พบแผนหรืออุปกรณ์")
+    check_org_access(user, device.organization_id)
+    if plan.device_type and plan.device_type != device.device_type:
+        raise HTTPException(status_code=422, detail="แผนนี้ใช้กับอุปกรณ์ประเภทอื่น")
+    if not plan.is_active:
+        raise HTTPException(status_code=422, detail="แผนนี้ปิดใช้งานอยู่")
+    if not plan.checklist or not json.loads(plan.checklist):
+        raise HTTPException(status_code=422, detail="แผนต้องมีรายการตรวจก่อนสร้างงาน")
+    existing = db.execute(select(PMTask.id).where(
+        PMTask.plan_id == plan.id, PMTask.device_id == device.device_id,
+        PMTask.status.in_(["pending", "overdue"]),
+    ).limit(1)).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="อุปกรณ์นี้มีงาน PM ค้างของแผนนี้แล้ว")
+    due = payload.due_date
+    if due.tzinfo is None:
+        raise HTTPException(status_code=422, detail="due_date ต้องระบุ timezone")
+    task = PMTask(task_no=_gen_pm_task_no(db), plan_id=plan.id, device_id=device.device_id,
+                  organization_id=device.organization_id, due_date=due,
+                  status="overdue" if due < datetime.now(timezone.utc) else "pending")
+    db.add(task)
+    db.flush()
+    write_audit(db, action="pm_task_create", user=user, entity_type="pm_task", entity_id=task.id,
+                new_value={"task_no": task.task_no, "plan_id": plan.id,
+                           "device_id": device.device_id, "due_date": due.isoformat()}, request=request)
+    db.commit()
+    return {"id": task.id, "task_no": task.task_no, "status": task.status}
+
+
 @app.get("/api/pm/tasks")
 def list_pm_tasks(
     status: Optional[str] = Query(None),
@@ -4710,6 +4891,9 @@ def list_pm_tasks(
 ):
     """รายการงาน PM + checklist ของแผนที่ผูกไว้"""
     stmt = select(PMTask).order_by(PMTask.due_date)
+    scope = visible_org_ids(user)
+    if scope is not None:
+        stmt = stmt.where(PMTask.organization_id.in_(scope))
     if status:
         stmt = stmt.where(PMTask.status == status)
     if device_id:
@@ -5749,6 +5933,11 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
         "self_service_rate": round(resolved * 100.0 / total, 1) if total else 0.0,
         "intent_distribution": intents,
         "missed_queries": curate_review_questions((r[0] for r in missed)),
+        "line_ratings": {
+            target: {"count": db.execute(select(func.count(LineServiceRating.id)).where(LineServiceRating.target == target)).scalar_one(),
+                     "average": round(float(db.execute(select(func.avg(LineServiceRating.score)).where(LineServiceRating.target == target)).scalar_one() or 0), 1)}
+            for target in ("bot", "staff")
+        },
     }
 
 
@@ -6490,6 +6679,14 @@ def sales_summary(
         "won_deals": sum(r["count"] for r in rows if r["kind"] == "deal" and r["status"] == "won"),
         "won_amount_thb": str(sum((r["amount"] for r in rows if r["kind"] == "deal" and r["status"] == "won"), Decimal("0"))),
         "payment_requests": sum(r["count"] for r in rows if r["kind"] == "payment_request" and r["status"] in {"requested", "reviewing"}),
+        "deal_status_counts": {status: sum(r["count"] for r in rows if r["kind"] == "deal" and r["status"] == status)
+                               for status in ("interested", "quoted", "won", "lost")},
+        "lead_by_source": {source: count for source, count in db.execute(
+            select(SalesLead.source, func.count(SalesLead.id)).where(SalesLead.source != "DEMO").group_by(SalesLead.source)
+        ).all()},
+        "new_leads_7d": db.execute(select(func.count(SalesLead.id)).where(
+            SalesLead.source != "DEMO", SalesLead.created_at >= datetime.now(timezone.utc) - timedelta(days=7)
+        )).scalar_one(),
     }
 
 

@@ -177,6 +177,10 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
   const [detailRecent, setDetailRecent] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<any | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState('');
   // กันผลลัพธ์ของเครื่องที่กดก่อนหน้ามาทับ เมื่อผู้ใช้กดสลับเครื่องเร็ว ๆ
   const detailReqRef = useRef<string | null>(null);
 
@@ -399,6 +403,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
   const detailView = detailData || detailDevice;
   const detailWarranty = warrantyInfo(detailView?.warranty_until);
   const detailOpenTicket = detailView?.open_ticket ?? null;
+  const detailIsDemo = /mock|ตัวอย่าง|เดโม/i.test(`${detailView?.notes || ''} ${detailView?.serial_number || ''}`);
 
   return (
     <div className="page-content">
@@ -449,6 +454,15 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
             </svg>
             เพิ่มอุปกรณ์
           </button>
+          {canManage && <button className="btn btn-secondary" onClick={() => { setImportFile(null); setImportPreview(null); setImportError(''); document.getElementById('device-csv-import')?.click(); }}>นำเข้า Google Sheets CSV</button>}
+          <input id="device-csv-import" type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={async (e) => {
+            const file = e.target.files?.[0]; e.target.value = '';
+            if (!file) return;
+            setImportFile(file); setImportPreview(null); setImportBusy(true); setImportError('');
+            try { setImportPreview(await api.importDevicesCsv(file)); }
+            catch (err: any) { setImportError(err.message || 'ตรวจไฟล์ไม่สำเร็จ'); }
+            finally { setImportBusy(false); }
+          }} />
           <button className="btn btn-ghost btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M21 12a9 9 0 11-3.5-7.1" />
@@ -457,6 +471,35 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
           </button>
         </div>
       </div>
+
+      {(importFile || importBusy) && <div className="panel-overlay" onClick={() => { if (!importBusy) setImportFile(null); }}>
+        <div className="repair-panel" style={{ width: 680, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="นำเข้าอุปกรณ์จาก Google Sheets">
+          <div className="repair-panel-header"><h3 className="repair-panel-title">นำเข้าอุปกรณ์จาก Google Sheets</h3><button className="repair-panel-close" onClick={() => setImportFile(null)} aria-label="ปิด">×</button></div>
+          <div className="repair-panel-body">
+            <p>ใน Google Sheets เลือก ไฟล์ → ดาวน์โหลด → ค่าที่คั่นด้วยจุลภาค (.csv) แล้วเลือกไฟล์ที่นี่ ระบบจะตรวจทุกแถวก่อนเพิ่มข้อมูล โดยไม่เขียนทับอุปกรณ์เดิม</p>
+            <p>คอลัมน์จำเป็น: <code>organization_code, device_id, device_type</code> · เพิ่ม <code>room_code, brand, model, serial_number, firmware_version, status, purchase_date, warranty_until, notes</code> ได้ วันที่ใช้ YYYY-MM-DD</p>
+            <button className="btn btn-secondary" type="button" onClick={() => {
+              const csv = '\uFEFForganization_code,device_id,device_type,room_code,brand,model,serial_number,firmware_version,status,purchase_date,warranty_until,notes\r\n';
+              const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+              const link = document.createElement('a'); link.href = url; link.download = 'device-import-template.csv'; link.click();
+              window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}>ดาวน์โหลดแม่แบบ CSV</button>
+            <p>ไฟล์: {importFile?.name} {importBusy ? '· กำลังตรวจ...' : ''}</p>
+            {importError && <p role="alert" style={{ color: 'var(--color-danger)' }}>{importError}</p>}
+            {importPreview && <>
+              <p><strong>ทั้งหมด {importPreview.total} แถว · พร้อมนำเข้า {importPreview.valid} · ต้องแก้ไข {importPreview.invalid}</strong></p>
+              <div style={{ maxHeight: 280, overflowY: 'auto' }}><table className="data-table"><thead><tr><th>แถว</th><th>โรงเรียน</th><th>รหัส</th><th>ประเภท</th><th>ผลตรวจ</th></tr></thead><tbody>{importPreview.rows.map((r: any) => <tr key={r.row}><td>{r.row}</td><td>{r.organization_code}</td><td>{r.device_id}</td><td>{r.device_type}</td><td style={{ color: r.errors.length ? 'var(--color-danger)' : 'var(--color-success)' }}>{r.errors.length ? r.errors.join(', ') : 'พร้อม'}</td></tr>)}</tbody></table></div>
+              <button className="btn btn-primary" disabled={importBusy || importPreview.invalid > 0 || !importPreview.valid} onClick={async () => {
+                if (!importFile) return;
+                setImportBusy(true); setImportError('');
+                try { const result = await api.importDevicesCsv(importFile, true); setImportFile(null); setImportPreview(null); load(); alert(`นำเข้าอุปกรณ์ ${result.imported} รายการแล้ว`); }
+                catch (err: any) { setImportError(err.message || 'นำเข้าไม่สำเร็จ'); }
+                finally { setImportBusy(false); }
+              }}>ยืนยันนำเข้า {importPreview.valid} รายการ</button>
+            </>}
+          </div>
+        </div>
+      </div>}
 
       {error && (
         <div style={{ padding: '10px 14px', background: 'var(--color-danger-light)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', marginBottom: 16 }}>
@@ -687,6 +730,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
               {detailView && (
                 <>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+                    {detailIsDemo && <span className="badge badge-pending">ข้อมูลตัวอย่าง · ต้องตรวจสอบก่อนใช้งานจริง</span>}
                     <span className={`badge badge-${detailView.status}`}>
                       {DEVICE_STATUS_LABELS[detailView.status] || detailView.status}
                     </span>
@@ -736,7 +780,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                     <DetailRow
                       label="พิกัด"
                       value={
-                        detailView.gps_lat != null && detailView.gps_lng != null ? (
+                        detailIsDemo ? 'พิกัดตัวอย่าง — ไม่ใช่ตำแหน่งจริง' : detailView.gps_lat != null && detailView.gps_lng != null ? (
                           <a
                             href={`https://www.google.com/maps?q=${detailView.gps_lat},${detailView.gps_lng}`}
                             target="_blank"
@@ -853,7 +897,10 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                 </thead>
                 <tbody>
                   {visibleDevices.map((d) => (
-                    <tr key={d.device_id}>
+                    <tr key={d.device_id} className="clickable-data-row" tabIndex={0}
+                      aria-label={`ดูรายละเอียดอุปกรณ์ ${d.device_id}`}
+                      onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a, select, input')) void openDetail(d); }}
+                      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); void openDetail(d); } }}>
                       <td className="table-id">
                         <button
                           type="button"
@@ -864,7 +911,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                           {d.device_id}
                         </button>
                       </td>
-                      <td>{d.device_type}</td>
+                      <td>{d.device_type}{/mock|ตัวอย่าง|เดโม/i.test(`${d.notes || ''} ${d.serial_number || ''}`) && <span className="badge badge-pending" style={{ marginLeft: 6 }}>DEMO</span>}</td>
                       <td>{d.brand || '—'} {d.model || ''}</td>
                       <td style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.8rem' }}>
                         {d.serial_number || '—'}

@@ -92,8 +92,9 @@ def _gemini_text(prompt: str, system: str | None = None) -> str:
             system = "คุณคือผู้ช่วยบริการลูกค้า Smart Classroom ตอบจากข้อมูลอ้างอิงเท่านั้น"
     if not GEMINI_KEY:
         return ""
+    from app.prompt_extensions import with_extension
     return request_text(
-        [system, prompt],
+        [system, with_extension("line_reply", prompt)],
         generation_config={"temperature": 0.2, "maxOutputTokens": 500},
         timeout=15.0,
         retries=1,

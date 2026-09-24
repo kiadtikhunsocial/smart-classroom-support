@@ -199,6 +199,22 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
         <span>คำขอชำระเงินรอตรวจ <strong>{summary.payment_requests}</strong></span>
       </div>}
 
+      {summary && <section className="page-section" aria-label="สถิติการขาย" style={{ marginBottom: 18 }}>
+        <div className="section-header"><span className="section-title">สถิติที่ช่วยวางแผนติดตาม</span></div>
+        <div className="section-body sales-stats-grid">
+          <div><h3>สถานะดีล</h3><p>นับเฉพาะรายการจริง ไม่รวม DEMO</p>
+            {([['interested', 'สนใจ'], ['quoted', 'เสนอราคา'], ['won', 'ปิดการขาย'], ['lost', 'ไม่สำเร็จ']] as const).map(([key, label]) => {
+              const count = summary.deal_status_counts?.[key] || 0;
+              const max = Math.max(1, ...Object.values(summary.deal_status_counts || {}));
+              return <div className="sales-stat-row" key={key}><span>{label}</span><div><i style={{ width: `${count / max * 100}%` }} /></div><strong>{count}</strong></div>;
+            })}</div>
+          <div><h3>ลูกค้ามาจากช่องทางไหน</h3><p>ลูกค้าใหม่ 7 วันล่าสุด: <strong>{summary.new_leads_7d || 0} ราย</strong></p>
+            {Object.entries(summary.lead_by_source || {}).length ? Object.entries(summary.lead_by_source || {}).map(([source, count]) => <div className="sales-stat-row" key={source}><span>{LEAD_SOURCE_LABEL[source] || source}</span><div><i style={{ width: `${count / Math.max(1, ...Object.values(summary.lead_by_source || {})) * 100}%` }} /></div><strong>{count}</strong></div>) : <p>ยังไม่มีลูกค้าจริง</p>}
+            <p>อัตราปิดดีล: <strong>{Math.round(summary.won_deals * 100 / Math.max(1, Object.values(summary.deal_status_counts || {}).reduce((a, b) => a + b, 0)))}%</strong> ของดีลที่บันทึก</p>
+          </div>
+        </div>
+      </section>}
+
       <div className="sales-next-actions">
         <button type="button" onClick={() => { setLeadType('real'); setLeadStatus('new'); setView('leads'); }}>
           <strong>1 · ติดต่อผู้สนใจ</strong><span>ดูข้อมูลลูกค้าที่เพิ่งลงทะเบียนและบันทึกการติดต่อ</span><b>{newCount} ราย →</b>

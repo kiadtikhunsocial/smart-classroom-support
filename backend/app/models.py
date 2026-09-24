@@ -641,6 +641,18 @@ class ChatbotLog(Base):
     )
 
 
+class LineServiceRating(Base):
+    """Customer ratings from LINE, separate bot quality from completed ticket service."""
+    __tablename__ = "line_service_ratings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    line_user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    target: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # bot | staff
+    ticket_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class SalesLead(Base):
     __tablename__ = "sales_leads"
 

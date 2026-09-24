@@ -163,6 +163,7 @@ export default function CustomerSignupPage() {
   return (
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 560 }}>
+        <a href="/" className="btn btn-ghost" style={{ marginBottom: 16, textDecoration: 'none' }}>← กลับหน้าแรก</a>
         <h1 className="login-title">สมัครสมาชิกลูกค้า</h1>
         <p className="login-subtitle">
           กรอกข้อมูลติดต่อไว้ ทีมขายจะติดต่อกลับพร้อมรายละเอียดสินค้า ราคา และโปรโมชั่น

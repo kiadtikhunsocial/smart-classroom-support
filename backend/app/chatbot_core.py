@@ -463,17 +463,22 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                 session["phase"] = "done"
                 session["ticket_no"] = ticket_no
                 save_session(user_id, session)
+                from app.chatbot_helpers import save_profile
+                save_profile(user_id, {"last_ticket_id": ticket_no})
                 return duplicate_notice
             session["phase"] = "done"
             session["ticket_no"] = ticket_no
             save_session(user_id, session)
+            from app.chatbot_helpers import save_profile
+            save_profile(user_id, {"last_ticket_id": ticket_no})
             _notify_ticket_created(fields, ticket_no)
             # ใช้ template แน่นอน (ไม่ให้ Gemini ใส่ placeholder หลุดในข้อความยืนยันสำคัญ)
             name = (fields.get("name") or "").strip()
             who = f"คุณ{name} " if name else ""
             return (f"✅ แจ้งซ่อมเรียบร้อยแล้วนะคะ {who}เลขที่ใบงานของคุณคือ **{ticket_no}**\n"
                     "ทีมงานจะรีบตรวจสอบและดำเนินการให้เร็วที่สุดเลยค่ะ ขอบคุณที่ไว้วางใจให้เราดูแลนะคะ 🙏\n"
-                    "ติดตามสถานะได้โดยพิมพ์ 'ติดตาม' หรือส่งเลขใบงานมาได้ทุกเมื่อค่ะ")
+                    "ติดตามสถานะได้โดยพิมพ์ 'ติดตาม' หรือส่งเลขใบงานมาได้ทุกเมื่อค่ะ\n"
+                    f"เมื่อซ่อมเสร็จแล้ว ประเมินเจ้าหน้าที่ได้ด้วย 'ประเมินเจ้าหน้าที่ {ticket_no} 1–5' ค่ะ")
         if _is_negative(text):
             session["phase"] = "collecting"
             # reset ให้ถามใหม่
@@ -1110,6 +1115,38 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
         save_session(user_id, {"phase": "collecting", "fields": {"symptom": text, "urgency": "safety_critical"}})
         return _finish(SAFETY_REPLY, intent_used="safety_critical")
 
+    from app.chatbot_rating import is_rating_message, record_rating
+    if is_rating_message(text):
+        return _finish(record_rating(user_id, text, profile.get("phone"), profile.get("last_ticket_id")),
+                       intent_used="service_rating", faq_cacheable=False)
+
+    # Warranty facts are always read from the asset register after an exact ID/serial.
+    # Handle this before NLU/FAQ/AI so neither a cached nor generated reply can guess.
+    from app.chatbot_warranty import is_warranty_question, extract_code, warranty_answer
+    if phase == "warranty_pending" or is_warranty_question(text):
+        code = extract_code(text)
+        if not code:
+            save_session(user_id, {**session, "phase": "warranty_pending"})
+            return _finish("ขอรหัสอุปกรณ์หรือหมายเลข Serial บนสติกเกอร์ก่อนนะคะ เพื่อค้นข้อมูลประกันของเครื่องที่ถูกต้อง", intent_used="warranty_ask_id", faq_cacheable=False)
+        save_session(user_id, {**session, "phase": "new"})
+        return _finish(warranty_answer(code), intent_used="warranty_lookup", faq_cacheable=False)
+
+    # Customer may request payment review, but only staff can verify/complete it.
+    if phase == "payment_product_pending" or re.search(r"(?:ต้องการ|ขอ|อยาก)?\s*ชำระเงิน", text):
+        if phase == "payment_product_pending" and text.strip() in {"ยกเลิก", "ไม่เอาแล้ว", "ไม่ชำระแล้ว"}:
+            save_session(user_id, {**session, "phase": "new"})
+            return _finish("ยกเลิกคำขอแล้วค่ะ ยังไม่ได้สร้างรายการชำระเงิน", intent_used="payment_cancel", faq_cacheable=False)
+        from app.chatbot_sales import request_line_payment
+        from app.company_catalog import _fuzzy_product_names
+        product_hits = _fuzzy_product_names(text)
+        product = (next(iter(product_hits)) if len(product_hits) == 1 else
+                   text.strip() if phase == "payment_product_pending" else "")
+        if not product:
+            save_session(user_id, {**session, "phase": "payment_product_pending"})
+            return _finish("ต้องการชำระเงินสำหรับสินค้า/บริการใดคะ? กรุณาส่งเฉพาะชื่อสินค้า อย่าส่งข้อมูลบัตรหรือบัญชี", intent_used="payment_ask_product", faq_cacheable=False)
+        save_session(user_id, {**session, "phase": "new"})
+        return _finish(request_line_payment(user_id, product), intent_used="payment_request", faq_cacheable=False)
+
     # Contact/admin requests are a high-priority interrupt. Do this before
     # collecting fields so phrases such as "แอดมิน", "ติดต่อเรา", or a Rich
     # Menu contact action never get mistaken for a name/device/symptom.
@@ -1306,7 +1343,15 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                                lead.get("interest"), ", ".join(lead.get("products", [])),
                                human=bool(lead.get("human")))
             save_profile(user_id, {"name": lead.get("name"), "phone": lead.get("phone"),
-                                   "interested": lead.get("interest")})
+                                   "interested": lead.get("interest"), "lead_id": lid})
+            from app.chatbot_sales import record_line_interest
+            for product_name in lead.get("products", [])[:3]:
+                try:
+                    record_line_interest(lid, product_name)
+                except Exception:
+                    # Lead was committed already; a sales-record sync failure must
+                    # not tell the customer registration failed or create a duplicate.
+                    pass
             clear_session(user_id)
             return _finish("✅ ขอบคุณมากนะคะ! ทีมขายจะรีบติดต่อกลับภายในเวลาทำการเลย 🙏\n"
                            "ยังมีเรื่องอื่นให้ช่วยอีกไหมคะ? พิมพ์ 'สินค้า' 'แจ้งซ่อม' หรือ 'เมนู' ได้เลยนะคะ",
@@ -1362,7 +1407,8 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                        + purchase_note + ("\n" if purchase_note else "") +
                        "🛍️ อยากดูสินค้า/บริการ พิมพ์ 'สินค้า' หรือชื่อสินค้า เช่น 'Iwa AiBoard' 'หลักสูตรภาษาอังกฤษ'\n"
                        "🔧 เจอปัญหาอุปกรณ์ พิมพ์ 'แจ้งซ่อม' หรือบอกอาการ เช่น 'จอไม่ติด'\n"
-                       "📞 สนใจติดต่อทีมงาน พิมพ์ 'ติดต่อ' ได้เลยนะคะ",
+                       "📞 สนใจติดต่อทีมงาน พิมพ์ 'ติดต่อ' ได้เลยนะคะ\n"
+                       "⭐ ให้คะแนนบอต พิมพ์ 'ประเมินบอท 1–5' เช่น 'ประเมินบอท 5'",
                        intent_used="greeting",
                        qr=["ดูสินค้า", "บริการ", "แจ้งซ่อม", "ติดต่อ"])
 
@@ -1390,6 +1436,8 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                        "💬 พิมพ์ชื่อสินค้า เช่น 'Iwa AiBoard 86' 'Smart Quiz' 'Phonics Hero'\n"
                        "📦 'บริการ' — ดูบริการของบริษัท\n"
                        "🔧 'แจ้งซ่อม' — แจ้งปัญหาอุปกรณ์\n"
+                       "🛡️ 'ประกัน <รหัสอุปกรณ์หรือ Serial>' — ตรวจจากทะเบียน\n"
+                       "⭐ 'ประเมินบอท 1–5' — ให้คะแนนคำตอบ\n"
                        "📞 'ติดต่อ' — ช่องทางติดต่อทีมงาน\n\n"
                        "อยากทำเรื่องไหน พิมพ์บอกได้เลยนะคะ 😊", intent_used="menu")
 

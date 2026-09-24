@@ -514,3 +514,24 @@ def test_audit_log_can_hide_login_noise_without_losing_other_events(sandbox):
     shown = client.get("/api/audit-logs", params={"user_id": admin.id}, headers=sandbox.headers(admin))
     assert shown.status_code == 200, shown.text
     assert {row["action"] for row in shown.json()} == {"login", "device_update"}
+
+
+def test_kb_draft_is_not_public_and_publish_needs_content(sandbox):
+    admin = sandbox.user("admin")
+    created = client.post("/api/kb/articles", headers=sandbox.headers(admin),
+                          json={"title": f"AUDITTEST-{sandbox.suffix} draft"})
+    assert created.status_code == 201, created.text
+    kb_id = created.json()["kb_id"]
+    sandbox.kb_ids.append(kb_id)
+    assert created.json()["is_published"] is False
+    assert client.get(f"/api/kb/articles/{kb_id}").status_code == 404
+    assert all(row["kb_id"] != kb_id for row in client.get("/api/kb/articles").json())
+    invalid = client.patch(f"/api/kb/articles/{kb_id}", headers=sandbox.headers(admin),
+                           json={"is_published": True})
+    assert invalid.status_code == 422
+    valid = client.patch(f"/api/kb/articles/{kb_id}", headers=sandbox.headers(admin),
+                         json={"symptom_tags": ["no signal"],
+                               "steps": [{"order": 1, "text": "ตรวจสายสัญญาณ"}],
+                               "is_published": True})
+    assert valid.status_code == 200, valid.text
+    assert client.get(f"/api/kb/articles/{kb_id}").status_code == 200

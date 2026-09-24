@@ -14,6 +14,7 @@ from typing import Optional
 
 from app.ai_client import is_available as _ai_available
 from app.ai_client import request_json, request_text
+from app.prompt_extensions import with_extension
 
 
 def mask_pii(text: str) -> str:
@@ -87,7 +88,7 @@ def explain_steps(symptom_text: str, kb_steps: list, device_type: str = "") -> s
         "ห้ามประดิษฐ์ขั้นตอนที่ไม่ใช่ในรายการ ห้ามแนะนำการถอด/เปิดฝาอุปกรณ์ ห้ามใช้คำว่า 'ฉัน' ใช้ 'คะ/ค่ะ'"
     )
     answer = request_text(
-        [_BASE_POLICY, prompt],
+        [_BASE_POLICY, with_extension("kb_explanation", prompt)],
         generation_config={"temperature": 0.2, "maxOutputTokens": 500},
         timeout=12.0,
         retries=1,
@@ -119,7 +120,7 @@ def classify_intent(text: str) -> dict | None:
         '{"intent":"...","product":"ชื่อสินค้า(ถ้าเจอ ไม่มี=ว่าง)","service":"ชื่อบริการ(ถ้าเจอ ไม่มี=ว่าง)","confidence":0.0-1.0}'
     )
     parsed = request_json(
-        [_BASE_POLICY, prompt],
+        [_BASE_POLICY, with_extension("intent", prompt)],
         generation_config={"temperature": 0.0, "maxOutputTokens": 120},
         timeout=8.0,
         retries=1,
@@ -160,7 +161,7 @@ def extract_fields_ai(text: str, known: dict, missing_keys: list[str]) -> dict:
         '"device_id": "...หรือ null", "symptom": "...หรือ null"}'
     )
     parsed = request_json(
-        [prompt],
+        [_BASE_POLICY, with_extension("field_extraction", prompt)],
         generation_config={"temperature": 0.0, "maxOutputTokens": 200},
         timeout=5.0,
         retries=1,
@@ -192,7 +193,7 @@ def phrase_slot_question(known: dict, next_field: str, last_user_msg: str) -> st
         "ถ้าเหมาะสมให้ตอบรับสิ่งที่ลูกค้าเพิ่งพูดสั้นๆ ก่อนถามต่อ ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย"
     )
     return request_text(
-        [prompt],
+        [_BASE_POLICY, with_extension("slot_question", prompt)],
         generation_config={"temperature": 0.2, "maxOutputTokens": 100},
         timeout=5.0,
         retries=1,
@@ -258,7 +259,7 @@ def gemini_orchestrate(text: str, user_context: dict) -> dict | None:
         '"product":"ชื่อสินค้าถ้าเจอ หรือว่าง", "service":"ชื่อบริการถ้าเจอ หรือว่าง", "confidence":0.0-1.0}'
     )
     parsed = request_json(
-        [prompt],
+        [_BASE_POLICY, with_extension("orchestration", prompt)],
         generation_config={"temperature": 0.2, "maxOutputTokens": 250},
         timeout=7.0,
         retries=1,
@@ -303,7 +304,7 @@ def phrase_repair_reply(context: str, detail: str) -> str | None:
         "ไม่ใช้รูปแบบเดิมซ้ำทุกครั้ง ห้ามใช้คำว่า 'ฉัน' ใช้ 'ค่ะ' ลงท้าย ถ้าเป็น ticket_created ให้ระบุเลข ticket"
     )
     return request_text(
-        [prompt],
+        [_BASE_POLICY, with_extension("repair_reply", prompt)],
         generation_config={"temperature": 0.2, "maxOutputTokens": 120},
         timeout=6.0,
         retries=1,
@@ -334,7 +335,7 @@ def match_article(symptom_text: str, device_type: Optional[str], candidates: lis
         'ตอบเป็น JSON เท่านั้น รูปแบบ {"kb_id": "รหัสบทความที่เลือก หรือ ว่างถ้าไม่มีในประเภทที่เกี่ยวข้อง"}'
     )
     parsed = request_json(
-        [_SYSTEM_PROMPT, instruction],
+        [_SYSTEM_PROMPT, with_extension("kb_match", instruction)],
         generation_config={"temperature": 0.0, "maxOutputTokens": 300},
         timeout=5.0,
         retries=1,

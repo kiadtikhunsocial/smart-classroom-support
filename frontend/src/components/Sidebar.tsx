@@ -256,7 +256,7 @@ export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart 
       <aside className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-top">
           <div className="sidebar-brand">
-            <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 10 }}>
+            <a href="/?home=1" aria-label="ไปหน้าแรกแจ้งซ่อม" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 10 }}>
               <div className="sidebar-brand-icon">
                 <img src="/logo.jpg" alt="IWA" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
               </div>
