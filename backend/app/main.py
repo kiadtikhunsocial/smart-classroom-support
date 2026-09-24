@@ -36,7 +36,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.kb_loader import invalidate_kb_cache
 # Audit Log (§40) + Preventive Maintenance (§38) — โมเดลที่เพิ่มใหม่
 from app import google_sheets, pm_rules
-from app.models import AuditLog, DeviceHealthFlag, LineServiceRating, PMPlan, PMTask
+from app.models import (AuditLog, ChatbotKnowledgeEntry, ChatbotPromptSetting,
+                        DeviceHealthFlag, LineServiceRating, PMPlan, PMTask)
 from app.models import (
     Base,
     Building,
@@ -3911,6 +3912,138 @@ def download_upload(
     )
 
 
+# ─── Superadmin chatbot studio: reviewed Q&A, runtime guidance, ratings ──────
+
+_CHATBOT_MANAGER = require_roles("owner", "super_admin")
+
+
+class ChatbotKnowledgeInput(BaseModel):
+    question: str = Field(..., min_length=3, max_length=500)
+    answer: str = Field(..., min_length=3, max_length=3000)
+    aliases: list[str] = Field(default_factory=list, max_length=12)
+    is_published: bool = False
+
+
+def _knowledge_out(row: ChatbotKnowledgeEntry) -> dict:
+    return {"id": row.id, "question": row.question, "answer": row.answer,
+            "aliases": json.loads(row.aliases or "[]"), "is_published": row.is_published,
+            "updated_at": row.updated_at}
+
+
+def _validate_knowledge(payload: ChatbotKnowledgeInput, db: Session, exclude_id: int | None = None) -> list[str]:
+    from app.chatbot_helpers import normalize_question
+    import re
+    question = payload.question.strip()
+    aliases = [alias.strip() for alias in payload.aliases]
+    if len(question) < 3 or len(payload.answer.strip()) < 3:
+        raise HTTPException(status_code=422, detail="กรอกคำถามและคำตอบให้ครบอย่างน้อย 3 ตัวอักษร")
+    if any(not alias or len(alias) > 500 for alias in aliases):
+        raise HTTPException(status_code=422, detail="คำถามทางเลือกต้องไม่ว่างและยาวไม่เกิน 500 ตัวอักษร")
+    variants = [question, *aliases]
+    keys = [normalize_question(value) for value in variants]
+    if not all(keys):
+        raise HTTPException(status_code=422, detail="คำถามต้องมีข้อความที่ค้นหาได้")
+    if len(set(keys)) != len(keys):
+        raise HTTPException(status_code=422, detail="คำถามหลักและคำถามทางเลือกซ้ำกัน")
+    # These facts must be computed from their live workflow, never edited Q&A.
+    if payload.is_published and any(re.search(r"ราคา|ประกัน|ชำระ|จ่าย|ใบงาน|ticket|สถานะ|ซ่อม|ซื้อ|สินค้า", value, re.I) for value in variants):
+        raise HTTPException(status_code=422, detail="คำถามราคา ประกัน การชำระเงิน และงานซ่อมต้องใช้ข้อมูลจริงจากระบบ")
+    for row in db.execute(select(ChatbotKnowledgeEntry)).scalars():
+        if row.id == exclude_id:
+            continue
+        existing = [row.question, *json.loads(row.aliases or "[]")]
+        if set(keys) & {normalize_question(value) for value in existing}:
+            raise HTTPException(status_code=409, detail="มีคำถามนี้อยู่ในคลังแล้ว")
+    return aliases
+
+
+@app.get("/api/chatbot/manage/knowledge")
+def list_chatbot_knowledge(db: Session = Depends(get_db), user: User = Depends(_CHATBOT_MANAGER)):
+    rows = db.execute(select(ChatbotKnowledgeEntry).order_by(ChatbotKnowledgeEntry.updated_at.desc())).scalars().all()
+    return [_knowledge_out(row) for row in rows]
+
+
+@app.post("/api/chatbot/manage/knowledge", status_code=201)
+def create_chatbot_knowledge(payload: ChatbotKnowledgeInput, request: Request,
+                             db: Session = Depends(get_db), user: User = Depends(_CHATBOT_MANAGER)):
+    aliases = _validate_knowledge(payload, db)
+    row = ChatbotKnowledgeEntry(question=payload.question.strip(), answer=payload.answer.strip(),
+                                aliases=json.dumps(aliases, ensure_ascii=False),
+                                is_published=payload.is_published, updated_by=user.id)
+    db.add(row)
+    db.flush()
+    write_audit(db, action="chatbot_knowledge_create", user=user, entity_type="chatbot_knowledge",
+                entity_id=str(row.id), new_value={"question": row.question, "is_published": row.is_published}, request=request)
+    db.commit()
+    db.refresh(row)
+    return _knowledge_out(row)
+
+
+@app.put("/api/chatbot/manage/knowledge/{entry_id}")
+def update_chatbot_knowledge(entry_id: int, payload: ChatbotKnowledgeInput, request: Request,
+                             db: Session = Depends(get_db), user: User = Depends(_CHATBOT_MANAGER)):
+    row = db.get(ChatbotKnowledgeEntry, entry_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="ไม่พบคำตอบนี้")
+    aliases = _validate_knowledge(payload, db, entry_id)
+    old = {"question": row.question, "is_published": row.is_published}
+    row.question, row.answer = payload.question.strip(), payload.answer.strip()
+    row.aliases, row.is_published, row.updated_by = json.dumps(aliases, ensure_ascii=False), payload.is_published, user.id
+    write_audit(db, action="chatbot_knowledge_update", user=user, entity_type="chatbot_knowledge",
+                entity_id=str(row.id), old_value=old,
+                new_value={"question": row.question, "is_published": row.is_published}, request=request)
+    db.commit()
+    db.refresh(row)
+    return _knowledge_out(row)
+
+
+class ChatbotPromptInput(BaseModel):
+    guidance: str = Field(default="", max_length=2000)
+    enabled: bool = False
+
+
+@app.get("/api/chatbot/manage/prompts")
+def list_chatbot_prompts(db: Session = Depends(get_db), user: User = Depends(_CHATBOT_MANAGER)):
+    from app.prompt_extensions import ALLOWED_PROMPT_TASKS, guidance_for_task
+    rows = {row.task: row for row in db.execute(select(ChatbotPromptSetting)).scalars()}
+    return [{"task": task, "guidance": rows[task].guidance if task in rows else guidance_for_task(task),
+             "enabled": rows[task].enabled if task in rows else bool(guidance_for_task(task)),
+             "source": "database" if task in rows else "file"} for task in ALLOWED_PROMPT_TASKS]
+
+
+@app.put("/api/chatbot/manage/prompts/{task}")
+def update_chatbot_prompt(task: str, payload: ChatbotPromptInput, request: Request,
+                          db: Session = Depends(get_db), user: User = Depends(_CHATBOT_MANAGER)):
+    from app.prompt_extensions import ALLOWED_PROMPT_TASKS
+    if task not in ALLOWED_PROMPT_TASKS:
+        raise HTTPException(status_code=404, detail="ไม่พบงาน AI นี้")
+    row = db.get(ChatbotPromptSetting, task)
+    if row is None:
+        row = ChatbotPromptSetting(task=task)
+        db.add(row)
+    row.guidance, row.enabled, row.updated_by = payload.guidance.strip(), payload.enabled, user.id
+    write_audit(db, action="chatbot_prompt_update", user=user, entity_type="chatbot_prompt",
+                entity_id=task, new_value={"enabled": row.enabled, "length": len(row.guidance)}, request=request)
+    db.commit()
+    return {"task": task, "guidance": row.guidance, "enabled": row.enabled, "source": "database"}
+
+
+@app.get("/api/chatbot/manage/ratings")
+def list_line_ratings(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
+                      user: User = Depends(_CHATBOT_MANAGER)):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = db.execute(select(LineServiceRating).where(LineServiceRating.created_at >= cutoff)
+                      .order_by(LineServiceRating.created_at.desc()).limit(200)).scalars().all()
+    summary = {}
+    for target in ("bot", "staff"):
+        aggregate = db.execute(select(func.count(LineServiceRating.id), func.avg(LineServiceRating.score))
+                               .where(LineServiceRating.target == target, LineServiceRating.created_at >= cutoff)).one()
+        summary[target] = {"count": aggregate[0], "average": round(float(aggregate[1] or 0), 1)}
+    return {"days": days, "summary": summary,
+            "recent": [{"id": row.id, "target": row.target, "score": row.score,
+                        "ticket_id": row.ticket_id, "created_at": row.created_at} for row in rows]}
+
+
 # ─── Knowledge Base (KB — TOR 1.5.5 / 5.6) ────────────────────────────
 
 class KBArticleCreate(BaseModel):
@@ -5927,18 +6060,21 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
         "SELECT message FROM chatbot_logs WHERE (intent='other' OR ai_response='' OR ai_response IS NULL) "
         "AND created_at >= now() - make_interval(days => :days) ORDER BY created_at DESC LIMIT 100"), params).fetchall()
     from app.chatbot_quality import curate_review_questions
-    return {
+    result = {
         "total_conversations": total,
         "self_service_resolved": resolved,
         "self_service_rate": round(resolved * 100.0 / total, 1) if total else 0.0,
         "intent_distribution": intents,
         "missed_queries": curate_review_questions((r[0] for r in missed)),
-        "line_ratings": {
+    }
+    # Ratings are personnel feedback; only top-level administrators can see them.
+    if user.role in {"owner", "super_admin"}:
+        result["line_ratings"] = {
             target: {"count": db.execute(select(func.count(LineServiceRating.id)).where(LineServiceRating.target == target)).scalar_one(),
                      "average": round(float(db.execute(select(func.avg(LineServiceRating.score)).where(LineServiceRating.target == target)).scalar_one() or 0), 1)}
             for target in ("bot", "staff")
-        },
-    }
+        }
+    return result
 
 
 @app.get("/api/reports/avg-resolution")

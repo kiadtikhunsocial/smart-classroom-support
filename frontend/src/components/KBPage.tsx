@@ -170,7 +170,6 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
         <div className="bot-review-head"><h3>ทบทวนคำถามย้อนหลัง 30 วัน</h3><span>รายการนี้เป็นสัญญาณให้มนุษย์ตรวจ ไม่ใช่การตัดสินว่าบอตผิดทุกข้อ</span></div>
         {botReviewError && <p role="alert">{botReviewError}</p>}
         {botStats && <><p className="bot-review-summary">บทสนทนา {botStats.total_conversations.toLocaleString('th-TH')} ครั้ง · คำถามที่ควรทบทวน (ไม่ซ้ำ) {botStats.missed_queries.length} รายการ</p>
-          <p>คะแนนจาก LINE: แชทบอท {botStats.line_ratings?.bot?.average || '—'}/5 ({botStats.line_ratings?.bot?.count || 0} คน) · เจ้าหน้าที่ {botStats.line_ratings?.staff?.average || '—'}/5 ({botStats.line_ratings?.staff?.count || 0} งาน)</p>
           {botStats.missed_queries.length === 0 ? <p>ยังไม่มีคำถามที่ระบบจัดเป็น “ควรตรวจ” ในช่วงนี้</p>
             : <ol>{botStats.missed_queries.slice(0, 20).map((question, index) => <li key={`${index}-${question}`}>
                 <span>{question}</span>{canEditKB && <button className="btn btn-ghost" type="button" onClick={() => reviewQuestion(question)}>สร้างบทความฉบับร่าง</button>}

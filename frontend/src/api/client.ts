@@ -136,6 +136,14 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  listChatbotKnowledge: () => request<any[]>('/chatbot/manage/knowledge'),
+  createChatbotKnowledge: (data: any) => request<any>('/chatbot/manage/knowledge', { method: 'POST', body: JSON.stringify(data) }),
+  updateChatbotKnowledge: (id: number, data: any) => request<any>(`/chatbot/manage/knowledge/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  listChatbotPrompts: () => request<any[]>('/chatbot/manage/prompts'),
+  updateChatbotPrompt: (task: string, data: { guidance: string; enabled: boolean }) =>
+    request<any>(`/chatbot/manage/prompts/${encodeURIComponent(task)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getLineRatings: (days = 30) => request<any>(`/chatbot/manage/ratings?days=${days}`),
+
   importDevicesCsv: async (file: File, commit = false) => {
     const form = new FormData();
     form.append('file', file);

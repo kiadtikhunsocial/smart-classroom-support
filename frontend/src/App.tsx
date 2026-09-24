@@ -17,6 +17,7 @@ import ReportsPage from './components/ReportsPage';
 import SettingsPage from './components/SettingsPage';
 import ProfilePage from './components/ProfilePage';
 import KBPage from './components/KBPage';
+import ChatbotStudioPage from './components/ChatbotStudioPage';
 import QRBatchPage from './components/QRBatchPage';
 import SalesPage from './components/SalesPage';
 import PMPage from './components/PMPage';
@@ -2886,6 +2887,7 @@ function AppInner() {
       scan: 'สแกน QR',
       tickets: 'Tickets',
       kb: 'ฐานความรู้',
+      chatbot: 'จัดการ AI / LINE OA',
       qrbatch: 'พิมพ์ QR',
       pm: 'บำรุงรักษา (PM)',
       users: 'Users',
@@ -3057,6 +3059,9 @@ function AppInner() {
               )}
               {menu === 'kb' && (
                 <KBPage onBack={() => handleMenuChange('dashboard')} userRole={role} userOrgId={auth.user?.organization_id} />
+              )}
+              {menu === 'chatbot' && ['owner', 'super_admin'].includes(role) && (
+                <ChatbotStudioPage onBack={() => handleMenuChange('dashboard')} onNavigate={handleMenuChange} />
               )}
               {menu === 'qrbatch' && (
                 <QRBatchPage onBack={() => handleMenuChange('dashboard')} />

@@ -1,0 +1,31 @@
+.chatbot-studio { max-width: 1440px; margin: 0 auto; }
+.chatbot-studio h2 { font-size: 1.15rem; margin: 0 0 12px; }
+.chatbot-studio h3 { font-size: .95rem; margin: 20px 0 10px; }
+.studio-intro { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 22px; margin-bottom: 18px; }
+.studio-intro p, .studio-help { color: var(--color-text-secondary); font-size: .84rem; line-height: 1.6; margin: 6px 0 14px; }
+.studio-intro-actions, .studio-tabs, .studio-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.studio-tabs { margin-bottom: 18px; }
+.studio-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.studio-columns > .panel-card, .studio-prompt, .chatbot-studio > .panel-card { padding: 22px; }
+.studio-form { display: grid; gap: 14px; }
+.studio-form label:not(.studio-check) { display: grid; gap: 6px; font-size: .85rem; font-weight: 600; }
+.studio-form textarea { resize: vertical; width: 100%; }
+.studio-check { display: flex; gap: 8px; align-items: center; font-size: .85rem; }
+.studio-list { max-height: 660px; overflow: auto; display: grid; gap: 10px; }
+.studio-item { padding: 14px; border: 1px solid var(--color-border); border-radius: 12px; }
+.studio-item > div { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.studio-item p { margin: 8px 0; font-size: .83rem; white-space: pre-wrap; line-height: 1.55; }
+.studio-item small { color: var(--color-text-secondary); display: block; }
+.studio-item button { margin-top: 8px; }
+.studio-status { border-radius: 100px; background: #f4f4f5; color: #555; padding: 3px 8px; font-size: .7rem; white-space: nowrap; }
+.studio-status.live { background: #e5f7ee; color: #166534; }
+.studio-prompt { max-width: 850px; }
+.studio-rating-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.studio-rating-head label { display: grid; gap: 5px; font-size: .78rem; }
+.studio-rating-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.studio-rating-card { border: 1px solid var(--color-border); border-radius: 12px; padding: 18px; display: grid; gap: 6px; }
+.studio-rating-card strong { font-size: 1.6rem; }
+.studio-rating-card small { color: var(--color-text-secondary); }
+.studio-table-wrap { overflow-x: auto; }
+@media (max-width: 850px) { .studio-columns { grid-template-columns: 1fr; } .studio-intro { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 520px) { .studio-rating-head { flex-direction: column; } .studio-rating-cards { grid-template-columns: 1fr; } }

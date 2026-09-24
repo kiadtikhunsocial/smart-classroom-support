@@ -1162,6 +1162,15 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
         save_session(user_id, {"phase": "new", "fields": {}, **keep})
         return _finish(_answer_out_of_scope(), intent_used="out_of_scope")
 
+    # Only answer reviewed, exact general questions. Dynamic facts (warranty,
+    # prices, payment, tickets) must continue through their authoritative flows.
+    if (intent == "other" and phase in ("new", "done") and not session.get("resolving")
+            and not re.search(r"ราคา|ประกัน|ชำระ|จ่าย|ใบงาน|ticket|สถานะ|ซ่อม|ซื้อ|สินค้า", text, re.I)):
+        from app.chatbot_knowledge import answer_for_question
+        reviewed_answer = answer_for_question(text)
+        if reviewed_answer:
+            return _finish(reviewed_answer, intent_used="reviewed_knowledge", faq_cacheable=False)
+
     # ── ชั้น NLU: เข้าใจก่อนตอบ (แก้อาการ "ตอบกำกวม/ไม่ตรงประเด็น") ──
     # 1) ข้อความสั้นที่สะกดเพี้ยน เช่น "เเจ้วซ่อม" → คำสั่งมาตรฐาน "แจ้งซ่อม"
     # 2) ถ้ากำกวมจริง (สัญญาณสองเรื่องเท่ากัน) หรือสั้นจนไม่มีสัญญาณเลย
