@@ -3061,7 +3061,7 @@ function AppInner() {
                 <KBPage onBack={() => handleMenuChange('dashboard')} userRole={role} userOrgId={auth.user?.organization_id} />
               )}
               {menu === 'chatbot' && ['owner', 'super_admin'].includes(role) && (
-                <ChatbotStudioPage onBack={() => handleMenuChange('dashboard')} onNavigate={handleMenuChange} />
+                <ChatbotStudioPage onBack={() => handleMenuChange('dashboard')} onNavigate={handleMenuChange} canViewRatings={role === 'super_admin'} />
               )}
               {menu === 'qrbatch' && (
                 <QRBatchPage onBack={() => handleMenuChange('dashboard')} />

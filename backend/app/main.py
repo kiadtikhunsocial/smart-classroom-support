@@ -4030,7 +4030,7 @@ def update_chatbot_prompt(task: str, payload: ChatbotPromptInput, request: Reque
 
 @app.get("/api/chatbot/manage/ratings")
 def list_line_ratings(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
-                      user: User = Depends(_CHATBOT_MANAGER)):
+                      user: User = Depends(require_roles("super_admin"))):
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     rows = db.execute(select(LineServiceRating).where(LineServiceRating.created_at >= cutoff)
                       .order_by(LineServiceRating.created_at.desc()).limit(200)).scalars().all()
@@ -6068,7 +6068,7 @@ def report_chatbot_analytics(days: int = Query(30, ge=1, le=365), db: Session = 
         "missed_queries": curate_review_questions((r[0] for r in missed)),
     }
     # Ratings are personnel feedback; only top-level administrators can see them.
-    if user.role in {"owner", "super_admin"}:
+    if user.role == "super_admin":
         result["line_ratings"] = {
             target: {"count": db.execute(select(func.count(LineServiceRating.id)).where(LineServiceRating.target == target)).scalar_one(),
                      "average": round(float(db.execute(select(func.avg(LineServiceRating.score)).where(LineServiceRating.target == target)).scalar_one() or 0), 1)}
