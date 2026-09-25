@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import RatingsResults, { type Ratings } from './RatingsResults';
 import '../styles/chatbot-studio.css';
 
 type Knowledge = { id: number; question: string; answer: string; aliases: string[]; source_label: string | null; source_url: string | null; is_published: boolean; updated_at: string };
 type Prompt = { task: string; guidance: string; enabled: boolean; source: string };
-type Rating = { id: number; target: 'bot' | 'staff'; score: number; resolved: boolean | null; ticket_id: string | null; created_at: string };
-type RatingSummary = { count: number; average: number; scores: Record<string, number>; solved?: number; not_solved?: number };
-type Ratings = { days: number; summary: Record<'bot' | 'staff', RatingSummary>; recent: Rating[] };
 type Runtime = { provider: string; model: string; base_key_configured: boolean; tuned_endpoint_configured: boolean; classifier_enabled: boolean; orchestration_enabled: boolean; natural_replies_enabled: boolean };
 type Preview = { route: string; intent: string; reply: string | null; note: string };
 type Tab = 'knowledge' | 'prompts' | 'test' | 'guide' | 'ratings';
@@ -41,6 +39,7 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
 
   const refresh = async () => {
     setError('');
+    setRatings(null);
     try {
       if (ratingsOnly) {
         const access = await api.getChatbotManageAccess();
@@ -157,10 +156,6 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
       <p className="studio-help">ระบบไม่อ่าน URL หรือ Google Sheets อัตโนมัติ: ต้องตรวจความถูกต้องและนำเข้าข้อมูลเองก่อนเผยแพร่ หลีกเลี่ยงข้อมูลส่วนบุคคล รหัสผ่าน ราคา และสิทธิ์เคลมที่ยังไม่ยืนยัน</p>
     </section>}
 
-    {tab === 'ratings' && canViewRatings && <section className="panel-card"><div className="studio-rating-head"><div><h2>ผลประเมินจาก LINE</h2><p className="studio-help">แยกคะแนนแชตบอตกับงานเจ้าหน้าที่ เปิดเฉพาะ owner และ superadmin ที่กำหนด</p></div><label>ช่วงเวลา <select className="form-select" value={days} onChange={(e) => setDays(Number(e.target.value))}><option value={7}>7 วัน</option><option value={30}>30 วัน</option><option value={90}>90 วัน</option><option value={365}>365 วัน</option></select></label></div>
-      <div className="studio-rating-cards">{(['bot', 'staff'] as const).map((target) => <div className="studio-rating-card" key={target}><span>{target === 'bot' ? 'แชตบอตช่วยแก้เบื้องต้น' : 'เจ้าหน้าที่หลังปิดงาน'}</span><strong>{ratings?.summary[target]?.count ? `${ratings.summary[target].average}/5` : '—'}</strong><small>{ratings?.summary[target]?.count || 0} รายการ</small>{target === 'bot' && <small>แก้ได้ {ratings?.summary.bot.solved || 0} · ยังไม่หาย {ratings?.summary.bot.not_solved || 0} · ไม่ระบุผล {(ratings?.summary.bot.count || 0) - (ratings?.summary.bot.solved || 0) - (ratings?.summary.bot.not_solved || 0)}</small>}<div className="studio-score-bars">{[5,4,3,2,1].map((score) => <span key={score}>{score}★ {ratings?.summary[target]?.scores?.[score] || 0}</span>)}</div></div>)}</div>
-      <p className="studio-help">ลูกค้าพิมพ์ “ประเมินบอท 5 แก้ได้” หรือ “ประเมินบอท 2 ยังไม่หาย”; งานเจ้าหน้าที่ต้องปิดงานแล้วและใช้เลข Ticket ที่ผูกกับผู้แจ้ง</p>
-      <h3>รายการล่าสุด</h3>{!ratings?.recent.length ? <p className="studio-help">ยังไม่มีคะแนนในช่วงนี้</p> : <div className="studio-table-wrap"><table className="data-table"><thead><tr><th>วันที่</th><th>ประเมิน</th><th>คะแนน</th><th>ผลแก้เบื้องต้น</th><th>ใบงาน</th></tr></thead><tbody>{ratings.recent.map((r) => <tr key={r.id}><td>{new Date(r.created_at).toLocaleString('th-TH')}</td><td>{r.target === 'bot' ? 'แชตบอต' : 'เจ้าหน้าที่'}</td><td>{r.score}/5</td><td>{r.target === 'bot' ? r.resolved == null ? 'ไม่ระบุ' : r.resolved ? 'แก้ได้' : 'ยังไม่หาย' : '—'}</td><td>{r.ticket_id || '—'}</td></tr>)}</tbody></table></div>}
-    </section>}
+    {tab === 'ratings' && canViewRatings && !error && <RatingsResults ratings={ratings} days={days} onDaysChange={setDays} onRefresh={() => void refresh()} />}
   </div>;
 }
