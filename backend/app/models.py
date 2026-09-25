@@ -271,6 +271,8 @@ class RepairTicket(Base):
     symptom_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     ai_category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     ai_session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    line_user_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    rating_invited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     scan_gps_lat: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 6), nullable=True)
     scan_gps_lng: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 6), nullable=True)
     scan_timestamp: Mapped[Optional[datetime]] = mapped_column(

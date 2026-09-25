@@ -71,6 +71,21 @@ def test_line_ratings_are_scoped_and_updatable(customer_case):
     assert {r.target: r.score for r in rows} == {"bot": 5, "staff": 5}
 
 
+def test_completed_line_ticket_invites_original_customer_once(customer_case, monkeypatch):
+    db, uid, _device_id, ticket_id, _lead_id, _serial = customer_case
+    from app.ticket_rating_invite import invite_staff_rating
+    ticket = db.execute(select(RepairTicket).where(RepairTicket.ticket_id == ticket_id)).scalar_one()
+    ticket.line_user_id = uid
+    db.commit()
+    sent = []
+    monkeypatch.setattr("app.ticket_rating_invite.send_line_push", lambda to, message: sent.append((to, message)) or True)
+    assert invite_staff_rating(db, ticket) is True
+    assert len(sent) == 1 and sent[0][0] == uid and ticket_id in sent[0][1]
+    assert invite_staff_rating(db, ticket) is False
+    assert "5/5" in record_rating(uid, f"ประเมินเจ้าหน้าที่ {ticket_id} 5", None)
+    assert "ยังประเมินงานนี้ไม่ได้" in record_rating("another-line-user", f"ประเมินเจ้าหน้าที่ {ticket_id} 5", "0812345678", ticket_id)
+
+
 def test_line_interest_and_payment_stay_unverified(customer_case):
     db, uid, _device_id, _ticket_id, lead_id, _serial = customer_case
     assert record_line_interest(lead_id, "Camera") is True

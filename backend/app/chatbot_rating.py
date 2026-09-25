@@ -26,10 +26,13 @@ def record_rating(user_id: str, message: str, phone: str | None, allowed_ticket_
     try:
         if target == "staff":
             ticket = db.execute(select(RepairTicket).where(RepairTicket.ticket_id == ticket_no)).scalar_one_or_none()
-            # Require both the LINE ticket recorded by our repair flow and the
-            # reporter phone. A phone alone is not an identity proof.
-            if (allowed_ticket_id != ticket_no or not phone or not ticket
-                    or ticket.reporter_phone != phone or ticket.status not in {"resolved", "closed"}):
+            # Prefer the LINE user directly bound at ticket creation. Legacy
+            # tickets require both the remembered ticket and reporter phone.
+            linked_line = bool(ticket and ticket.line_user_id == user_id)
+            legacy_match = bool(ticket and not ticket.line_user_id and allowed_ticket_id == ticket_no
+                                and phone and ticket.reporter_phone == phone)
+            if (not (linked_line or legacy_match) or not ticket
+                    or ticket.status not in {"resolved", "closed"}):
                 return "ยังประเมินงานนี้ไม่ได้ค่ะ ตรวจเลข Ticket และเบอร์ที่ใช้แจ้งงาน หรือรอให้งานซ่อมเสร็จก่อนนะคะ"
         old = db.execute(select(LineServiceRating).where(
             LineServiceRating.line_user_id == user_id, LineServiceRating.target == target,

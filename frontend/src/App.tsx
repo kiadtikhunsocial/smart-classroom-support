@@ -1570,6 +1570,15 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
               ] as [string, any][]).map(([label, value]) => <div key={label}><small>{label}</small><div>{value || '—'}</div></div>)}
             </div>
             <h4>อาการ / รายละเอียด</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
+            <h4>ตำแหน่งขณะแจ้งผ่าน QR</h4>
+            {detailTicket.scan_gps_lat != null && detailTicket.scan_gps_lng != null ? (
+              <p>
+                พิกัดที่เบราว์เซอร์ผู้แจ้งอนุญาต: {Number(detailTicket.scan_gps_lat).toFixed(6)}, {Number(detailTicket.scan_gps_lng).toFixed(6)}
+                {detailTicket.scan_timestamp && <> · {new Date(detailTicket.scan_timestamp).toLocaleString('th-TH')}</>}
+                {' · '}<a href={`https://www.google.com/maps?q=${encodeURIComponent(`${detailTicket.scan_gps_lat},${detailTicket.scan_gps_lng}`)}`} target="_blank" rel="noopener noreferrer">เปิดแผนที่ ↗</a>
+              </p>
+            ) : <p>ไม่มีพิกัดจากการสแกนครั้งนี้ (ลูกค้าไม่ได้อนุญาตตำแหน่งหรือแจ้งจากช่องทางอื่น)</p>}
+            <small>พิกัดจากอุปกรณ์ผู้แจ้ง อาจคลาดเคลื่อนและไม่ใช่หลักฐานยืนยันตำแหน่งอุปกรณ์</small>
             {detailTicket.root_cause && <><h4>สาเหตุ</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.root_cause}</p></>}
             {detailTicket.solution && <><h4>วิธีแก้ไข</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.solution}</p></>}
             <h4>ประวัติสถานะ</h4>{detailHistory.length ? detailHistory.map((h, i) => <p key={h.id || i}>{h.created_at ? new Date(h.created_at).toLocaleString('th-TH') : ''} · {STATUS_LABELS_TICKET[h.to_status] || h.to_status || 'อัปเดต'}{h.note ? ` — ${h.note}` : ''}</p>) : <p>ไม่มีประวัติสถานะ</p>}
@@ -1911,6 +1920,25 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
   // งานล่าสุดของเครื่อง (ช่วยหาเลขคืนถ้าลืม — ตรงตามที่ต้องการ)
   const [recentTicket, setRecentTicket] = useState<any | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
+  const [scanLocation, setScanLocation] = useState<{ lat: number; lng: number; at: string; accuracy: number } | null>(null);
+  const [locationStatus, setLocationStatus] = useState('');
+  const [locationBusy, setLocationBusy] = useState(false);
+
+  const requestScanLocation = () => {
+    if (!navigator.geolocation) { setLocationStatus('เบราว์เซอร์นี้ไม่รองรับตำแหน่ง'); return; }
+    setLocationBusy(true);
+    setLocationStatus('กำลังขออนุญาตตำแหน่ง...');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setScanLocation({ lat: position.coords.latitude, lng: position.coords.longitude,
+          accuracy: position.coords.accuracy, at: new Date(position.timestamp).toISOString() });
+        setLocationStatus('บันทึกตำแหน่งแล้ว จะส่งไปพร้อมใบงาน');
+        setLocationBusy(false);
+      },
+      () => { setScanLocation(null); setLocationStatus('ไม่ได้รับตำแหน่ง ยังแจ้งซ่อมได้ตามปกติ'); setLocationBusy(false); },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+    );
+  };
 
   // โหลดข้อมูลอุปกรณ์จาก ?device= (ห้อง/ยี่ห้อ/รุ่น — ตาม TOR: QR มีแค่ URL+device token)
   useEffect(() => {
@@ -1967,9 +1995,9 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
         priority: form.priority,
         attachments: attachments.length > 0 ? attachments : undefined,
         ai_session_id: diag?.session_id,
-        scan_gps_lat: null,
-        scan_gps_lng: null,
-        scan_timestamp: new Date().toISOString(),
+        scan_gps_lat: scanLocation?.lat ?? null,
+        scan_gps_lng: scanLocation?.lng ?? null,
+        scan_timestamp: scanLocation?.at || new Date().toISOString(),
         scan_user_agent: navigator.userAgent,
       };
 
@@ -2299,6 +2327,12 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
             )}
 
             <form onSubmit={handleSubmit}>
+              <div className="form-group" style={{ padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: 10 }}>
+                <div className="form-label">ตำแหน่งขณะสแกน QR (ไม่บังคับ)</div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>กดอนุญาตเพื่อให้เจ้าหน้าที่เห็นพิกัดใน Ticket ถ้าไม่สะดวก สามารถแจ้งซ่อมโดยไม่ส่งตำแหน่งได้</p>
+                <button type="button" className="btn btn-secondary" onClick={requestScanLocation} disabled={locationBusy}>{locationBusy ? 'กำลังระบุตำแหน่ง...' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}</button>
+                {locationStatus && <div role="status" style={{ fontSize: '0.75rem', marginTop: 8 }}>{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</div>}
+              </div>
               <div className="form-group">
                 <label className="form-label">หัวข้อ<span className="required">*</span></label>
                 <input
@@ -2888,6 +2922,7 @@ function AppInner() {
       tickets: 'Tickets',
       kb: 'ฐานความรู้',
       chatbot: 'จัดการ AI / LINE OA',
+      ratings: 'ผลประเมินลูกค้า',
       qrbatch: 'พิมพ์ QR',
       pm: 'บำรุงรักษา (PM)',
       users: 'Users',
@@ -3062,6 +3097,9 @@ function AppInner() {
               )}
               {menu === 'chatbot' && ['owner', 'super_admin'].includes(role) && (
                 <ChatbotStudioPage onBack={() => handleMenuChange('dashboard')} onNavigate={handleMenuChange} />
+              )}
+              {menu === 'ratings' && ['owner', 'super_admin'].includes(role) && (
+                <ChatbotStudioPage ratingsOnly onBack={() => handleMenuChange('dashboard')} onNavigate={handleMenuChange} />
               )}
               {menu === 'qrbatch' && (
                 <QRBatchPage onBack={() => handleMenuChange('dashboard')} />

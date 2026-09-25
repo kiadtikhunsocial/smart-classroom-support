@@ -451,7 +451,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     if phase == "confirm":
         fields = session.get("fields", {})
         if _is_affirmative(text):
-            ticket_no, err = _create_ticket_from_fields(fields)
+            ticket_no, err = _create_ticket_from_fields(fields, None if group else user_id)
             if err:
                 # ไม่เปิดเผยรายละเอียด DB/exception ให้ผู้ใช้เห็น
                 print(f"[chatbot] ticket creation failed: {err}")
@@ -518,7 +518,8 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             from app.gemini_service import phrase_repair_reply
             natural = phrase_repair_reply("not_resolved", f"อาการเดิม: {original}")
             base = natural or "รับทราบค่ะ เสียใจด้วยนะคะที่ยังไม่หาย 😔 เดี๋ยวจะส่งลิงก์ฟอร์มแจ้งซ่อมให้ทีมช่างได้เลยค่ะ"
-            return base + "\n\n" + _form_fallback_text()
+            return (base + "\n\n" + _form_fallback_text() +
+                    "\n\nช่วยประเมินคำแนะนำบอตได้ด้วย 'ประเมินบอท 2 ยังไม่หาย' (เปลี่ยนคะแนน 1–5 ได้ค่ะ)")
         if resolved:
             # ── บันทึก self-service จริง (ตาราง self_service_cases) ──
             try:
@@ -689,7 +690,7 @@ def _ambiguous_device_error(matches) -> str:
     _set_duplicate_notice(None)
 
 
-def _create_ticket_from_fields(fields: dict):
+def _create_ticket_from_fields(fields: dict, line_user_id: str | None = None):
     """สร้าง ticket ผ่าน DB ตรง (ใช้ helper ของ main) — คืน (ticket_no, err)"""
     from app.models import Device, Organization, RepairTicket, TicketUpdate, TicketStatus, get_db
     from app.main import generate_ticket_id, calc_sla_due
@@ -780,6 +781,7 @@ def _create_ticket_from_fields(fields: dict):
             escalation_level=1 if _is_safety_critical else 0,
             status=TicketStatus.NEW,
             channel="line",
+            line_user_id=line_user_id[:128] if line_user_id else None,
             sla_due_at=calc_sla_due(now, _priority),
         )
         db.add(ticket)

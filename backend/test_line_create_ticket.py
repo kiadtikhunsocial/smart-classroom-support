@@ -170,7 +170,7 @@ def test_registered_device_creates_ticket(created_tickets):
 
     res = client.post(
         "/api/line/create-ticket",
-        json=_payload(deviceId=SEEDED_DEVICE_ID, problemDetail="จอไม่มีภาพ ไฟ Power ติดปกติ"),
+        json=_payload(deviceId=SEEDED_DEVICE_ID, problemDetail="จอไม่มีภาพ ไฟ Power ติดปกติ", userId="Ucustomer-test-01"),
         headers=HEADERS,
     )
     assert res.status_code == 201, res.text
@@ -181,6 +181,12 @@ def test_registered_device_creates_ticket(created_tickets):
 
     assert body["device_id"] == SEEDED_DEVICE_ID, "ห้ามผูกกับอุปกรณ์อื่น"
     assert body["status"] == "new"
+    db = SessionLocal()
+    try:
+        assert db.execute(sa_text("SELECT line_user_id FROM repair_tickets WHERE ticket_id = :tid"),
+                          {"tid": body["ticket_no"]}).scalar_one() == "Ucustomer-test-01"
+    finally:
+        db.close()
     # §13: ทุกการเปลี่ยนสถานะต้องมี History — แถวแรกคือ new
     assert _status_history_count(body["ticket_no"]) == 1
 

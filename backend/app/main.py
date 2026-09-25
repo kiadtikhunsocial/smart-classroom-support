@@ -369,8 +369,8 @@ class TicketCreate(BaseModel):
     symptom_code: Optional[str] = None
     ai_session_id: Optional[str] = None
     attachments: Optional[list[str]] = None
-    scan_gps_lat: Optional[float] = None
-    scan_gps_lng: Optional[float] = None
+    scan_gps_lat: Optional[float] = Field(None, ge=-90, le=90)
+    scan_gps_lng: Optional[float] = Field(None, ge=-180, le=180)
     scan_timestamp: Optional[datetime] = None
     scan_user_agent: Optional[str] = None
 
@@ -1622,6 +1622,8 @@ def create_ticket(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    if (payload.scan_gps_lat is None) != (payload.scan_gps_lng is None):
+        raise HTTPException(status_code=422, detail="ต้องส่งพิกัดละติจูดและลองจิจูดพร้อมกัน")
     device = db.execute(
         select(Device).where(Device.device_id == payload.device_id)
     ).scalar_one_or_none()
@@ -3549,8 +3551,8 @@ def get_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depen
         rating=ticket.rating,
         feedback=ticket.feedback,
         closed_at=ticket.closed_at,
-        scan_gps_lat=(float(ticket.scan_gps_lat) if ticket.scan_gps_lat else None),
-        scan_gps_lng=(float(ticket.scan_gps_lng) if ticket.scan_gps_lng else None),
+        scan_gps_lat=(float(ticket.scan_gps_lat) if ticket.scan_gps_lat is not None else None),
+        scan_gps_lng=(float(ticket.scan_gps_lng) if ticket.scan_gps_lng is not None else None),
         scan_timestamp=ticket.scan_timestamp,
         resolution_notes=ticket.resolution_notes,
         created_at=ticket.created_at,
@@ -3643,6 +3645,9 @@ def update_ticket_status(
     payload_data["from_status"] = current
     payload_data["to_status"] = target
     _notify_n8n("ticket.status_changed", payload_data)
+    if target in (TicketStatus.RESOLVED, TicketStatus.CLOSED):
+        from app.ticket_rating_invite import invite_staff_rating
+        invite_staff_rating(db, ticket)
 
     return {
         "ticket_id": ticket.ticket_id,
@@ -3928,8 +3933,9 @@ _CHATBOT_MANAGER = require_roles("owner", "super_admin")
 
 
 def _is_ratings_viewer(user: User) -> bool:
-    # Ratings contain staff feedback; restrict to the designated account, not
-    # merely every future account that may be granted the super_admin role.
+    # Owner oversees service quality; the super_admin seat remains designated.
+    if user.role == "owner":
+        return True
     allowed_id = os.environ.get("RATINGS_VIEWER_USERNAME", "iwasuperadmin").strip().casefold()
     return bool(allowed_id and user.role == "super_admin"
                 and (user.line_user_id or "").strip().casefold() == allowed_id)
@@ -3937,7 +3943,7 @@ def _is_ratings_viewer(user: User) -> bool:
 
 def require_ratings_viewer(user: User = Depends(get_current_user)) -> User:
     if not _is_ratings_viewer(user):
-        raise HTTPException(status_code=403, detail="ผลประเมินเปิดเฉพาะบัญชี superadmin ที่กำหนด")
+        raise HTTPException(status_code=403, detail="ผลประเมินเปิดเฉพาะ owner และบัญชี superadmin ที่กำหนด")
     return user
 
 
@@ -5892,6 +5898,8 @@ def ticket_resolve(ticket_id: str, payload: TicketResolveReq, request: Request, 
         request=request,
     )
     db.commit()
+    from app.ticket_rating_invite import invite_staff_rating
+    invite_staff_rating(db, t)
     return {"ticket_id": t.ticket_id, "status": t.status, "resolved_at": t.resolved_at, "sla_met": t.sla_met}
 
 @app.post("/api/tickets/{ticket_id}/close", status_code=200)
@@ -5919,6 +5927,8 @@ def ticket_close(ticket_id: str, payload: TicketCloseReq, request: Request, db: 
         request=request,
     )
     db.commit()
+    from app.ticket_rating_invite import invite_staff_rating
+    invite_staff_rating(db, t)
     return {"ticket_id": t.ticket_id, "status": t.status, "closed_at": t.closed_at, "rating": t.rating}
 
 @app.post("/api/tickets/{ticket_id}/reopen", status_code=200)
@@ -6598,6 +6608,7 @@ def line_create_ticket(payload: N8nTicketIn, db: Session = Depends(get_db), _: N
                 "บันทึกอาการที่แจ้งเพิ่มเข้าใบเดิมให้แล้ว ไม่ต้องแจ้งซ้ำ"
             ),
         }
+    line_customer_id = (payload.userId or "").strip()[:128] if payload.channel.lower() == "line" else None
     ticket = RepairTicket(
         ticket_id=generate_ticket_id(db, org_id),
         organization_id=org_id,
@@ -6609,6 +6620,7 @@ def line_create_ticket(payload: N8nTicketIn, db: Session = Depends(get_db), _: N
         priority=priority,
         status=TicketStatus.NEW,
         channel="line" if payload.channel.lower()=="line" else "web",
+        line_user_id=line_customer_id or None,
         symptom_code=payload.intent or None,
         ai_category=payload.intent or None,
         attachments=json.dumps([payload.imageUrl]) if payload.imageUrl else None,

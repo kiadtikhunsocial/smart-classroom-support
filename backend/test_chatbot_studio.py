@@ -90,9 +90,10 @@ def test_prompt_override_and_ratings_are_private(studio):
     finally:
         db.close()
     assert client.get("/api/chatbot/manage/ratings", headers=denied).status_code == 403
-    assert client.get("/api/chatbot/manage/ratings", headers=owner_headers).status_code == 403
+    assert client.get("/api/chatbot/manage/ratings", headers=owner_headers).status_code == 200
     assert client.get("/api/chatbot/manage/ratings", headers=other_headers).status_code == 403
     assert client.get("/api/chatbot/manage/access", headers=other_headers).json()["can_view_ratings"] is False
+    assert client.get("/api/chatbot/manage/access", headers=owner_headers).json()["can_view_ratings"] is True
     assert client.get("/api/chatbot/manage/access", headers=headers).json()["can_view_ratings"] is True
     ratings = client.get("/api/chatbot/manage/ratings", headers=headers)
     assert ratings.status_code == 200
