@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../api/client';
+import '../styles/devices-page.css';
 
 const DEVICE_TYPES = [
   'Interactive Display', 'Computer AIO', 'Computer Notebook', 'Computer Desktop',
@@ -410,7 +411,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
   const detailIsDemo = /mock|ตัวอย่าง|เดโม/i.test(`${detailView?.notes || ''} ${detailView?.serial_number || ''}`);
 
   return (
-    <div className="page-content">
+    <div className="devices-page">
       <div className="top-bar">
         <div className="top-bar-title-group">
           <button className="btn btn-ghost btn-icon" onClick={onBack}>

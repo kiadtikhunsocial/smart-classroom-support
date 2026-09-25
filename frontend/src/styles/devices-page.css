@@ -1,0 +1,41 @@
+/* The app already wraps every staff page in .page-content. Avoid a second
+   centered, padded page inside the device registry and use the available width. */
+.app-main > .page-content:has(> .devices-page) {
+  max-width: none;
+  padding-inline: clamp(16px, 2vw, 32px);
+}
+
+.devices-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.devices-page .top-bar {
+  margin-bottom: 0;
+}
+
+.devices-page .page-section {
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
+}
+
+.devices-page .section-body {
+  min-width: 0;
+  padding: 0;
+}
+
+.devices-page .table-wrap {
+  width: 100%;
+}
+
+.devices-page .data-table {
+  min-width: 1160px;
+}
+
+@media (max-width: 768px) {
+  .devices-page .page-section { padding: 10px; }
+}
