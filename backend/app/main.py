@@ -3400,32 +3400,25 @@ def create_room(org_id: int, payload: dict, db: Session = Depends(get_db), user:
 
 
 @app.delete("/api/organizations/{org_id}")
-def delete_organization(org_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin"))):
-    """ลบโรงเรียนทั้งหมด: tickets → updates → scanlogs → devices → rooms → org"""
+def delete_organization(org_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin"))):
+    """Delete only a truly empty school; never cascade away unrelated production history."""
     org = db.execute(select(Organization).where(Organization.id == org_id)).scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    db.execute(text("""
-        DELETE FROM ticket_updates WHERE ticket_id IN (
-            SELECT rt.id FROM repair_tickets rt
-            JOIN devices d ON d.device_id = rt.device_id
-            WHERE d.organization_id = :oid
-        )
-    """), {"oid": org_id})
-    db.execute(text("""
-        DELETE FROM repair_tickets WHERE device_id IN (
-            SELECT device_id FROM devices WHERE organization_id = :oid
-        )
-    """), {"oid": org_id})
-    db.execute(text("""
-        DELETE FROM scan_logs WHERE device_id IN (
-            SELECT device_id FROM devices WHERE organization_id = :oid
-        )
-    """), {"oid": org_id})
-    db.execute(text("DELETE FROM devices WHERE organization_id=:oid"), {"oid": org_id})
-    db.execute(text("DELETE FROM rooms WHERE organization_id=:oid"), {"oid": org_id})
-    db.delete(org)  # users ที่ผูก (organization_id FK CASCADE) จะถูกลบตาม
+    linked = []
+    for table in Base.metadata.tables.values():
+        for column in table.columns:
+            if any(fk.target_fullname == "organizations.id" for fk in column.foreign_keys):
+                if db.execute(select(func.count()).select_from(table).where(column == org_id)).scalar_one():
+                    linked.append(table.name)
+    if db.execute(select(func.count(DeletedRecord.id)).where(DeletedRecord.organization_id == org_id)).scalar_one():
+        linked.append("deleted_records")
+    if linked:
+        raise HTTPException(status_code=409, detail="โรงเรียนนี้ยังมีข้อมูลผูกอยู่ จึงลบไม่ได้: " + ", ".join(linked))
+    write_audit(db, action="organization_delete", user=user, entity_type="organization",
+                entity_id=org_id, old_value={"code": org.code, "name": org.name}, request=request)
+    db.delete(org)
     db.commit()
     return {"message": "Organization deleted", "organization_id": org_id, "code": org.code}
 

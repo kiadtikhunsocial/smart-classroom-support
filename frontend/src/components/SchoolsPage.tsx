@@ -58,20 +58,6 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
     }
   };
 
-  const handleDelete = async (org: any) => {
-    if (!window.confirm(`ลบโรงเรียน "${org.name}" พร้อมอุปกรณ์และ tickets ทั้งหมด? ไม่สามารถกู้คืนได้`)) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await api.deleteOrganization(org.id);
-      load();
-    } catch (err: any) {
-      setError(err.message || 'ลบโรงเรียนไม่สำเร็จ');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) return (
     <div className="loading-state" style={{ minHeight: 200, padding: '40px' }}>
       <div className="spinner" />
@@ -182,9 +168,6 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
                 <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); onSelectSchool(org.id); }}>
                   เข้าดูข้อมูล
                 </button>
-                <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); handleDelete(org); }} disabled={saving} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>
-                  ลบ
-                </button>
               </div>
             </div>
           </div>
@@ -201,15 +184,25 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
 }
 
 // ─── หน้า Admin รายโรงเรียน (ดู + จัดการ ticket เร็ว) ──────────────
-export function SchoolAdminView({ orgId, onBack }: {
+export function SchoolAdminView({ orgId, onBack, canDelete }: {
   orgId: number;
   onBack: () => void;
+  canDelete?: boolean;
 }) {
   const [org, setOrg] = useState<any | null>(null);
   const [tickets, setTickets] = useState<any[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const deleteSchool = async () => {
+    if (!window.confirm(`ลบโรงเรียน "${org?.name || orgId}"? ระบบจะยอมลบเฉพาะโรงเรียนที่ไม่มีข้อมูลผูกอยู่ และการลบนี้กู้คืนไม่ได้`)) return;
+    setDeleting(true); setDeleteError('');
+    try { await api.deleteOrganization(orgId); onBack(); }
+    catch (err: any) { setDeleteError(err?.message || 'ลบโรงเรียนไม่สำเร็จ'); }
+    finally { setDeleting(false); }
+  };
   const [statusFilter, setStatusFilter] = useState('');
   const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
   const [view, setView] = useState<'tickets' | 'devices'>('tickets');
@@ -280,6 +273,7 @@ export function SchoolAdminView({ orgId, onBack }: {
           </div>
         </div>
         <div className="top-bar-actions">
+          {canDelete && <button className="btn btn-danger" disabled={deleting} onClick={() => void deleteSchool()}>{deleting ? 'กำลังลบ…' : 'ลบโรงเรียนนี้'}</button>}
           {/* Tab: Tickets / อุปกรณ์ */}
           <div style={{ display: 'flex', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', padding: 3 }}>
             <button
@@ -329,6 +323,8 @@ export function SchoolAdminView({ orgId, onBack }: {
           )}
         </div>
       </div>
+
+      {deleteError && <div className="alert alert-error" role="alert">{deleteError}</div>}
 
       {/* สถิติสรุป */}
       <div className="stat-cards-grid">

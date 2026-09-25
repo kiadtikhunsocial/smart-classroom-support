@@ -110,6 +110,7 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
     setBusy(u.id);
     try {
       await api.deleteUser(u.id);
+      setShowForm(false);
       load();
     } catch (err: any) {
       alert(err.message || 'ลบไม่สำเร็จ');
@@ -210,7 +211,7 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
                 </div>
                 <div className="form-group">
                   <label className="form-label">รหัสผ่าน {editingId ? '(เว้นว่าง = ใช้รหัสเดิม)' : '*'}</label>
-                  <input className="form-input" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={editingId ? 'ปล่อยว่างถ้าไม่เปลี่ยน' : 'ตั้งรหัสผ่านให้ผู้ใช้'} />
+                  <input className="form-input" type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={editingId ? 'ปล่อยว่างถ้าไม่เปลี่ยน' : 'ตั้งรหัสผ่านให้ผู้ใช้'} />
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -233,6 +234,9 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
                 </div>
+                {editingId != null && editingId !== currentUserId && <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+                  <button type="button" className="btn btn-danger" disabled={busy === editingId} onClick={() => { const target = users.find((u) => u.id === editingId); if (target) void handleDelete(target); }}>{busy === editingId ? 'กำลังลบ…' : 'ลบบัญชีนี้'}</button>
+                </div>}
               </form>
             </div>
           </div>
@@ -301,14 +305,6 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
                       <td>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => openEdit(u)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>แก้ไข</button>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            disabled={busy === u.id || u.id === currentUserId}
-                            onClick={() => handleDelete(u)}
-                            style={{ padding: '4px 10px', fontSize: '0.78rem' }}
-                          >
-                            {busy === u.id ? '...' : 'ลบ'}
-                          </button>
                         </div>
                       </td>
                     </tr>

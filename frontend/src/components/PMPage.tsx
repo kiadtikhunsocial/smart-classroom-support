@@ -387,6 +387,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
     try {
       await api.deletePMPlan(plan.id);
       setNotice(`ลบแผน "${plan.name}" แล้ว`);
+      closePlanForm();
       loadPlans();
     } catch (err: any) {
       // 409 = ยังมีงานค้าง — backend ส่งข้อความไทยมาแล้ว (แนะนำให้ปิดใช้งานแผนแทนการลบ)
@@ -777,15 +778,6 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                               disabled={deletingPlanId === p.id}
                             >
                               แก้ไข
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              style={{ padding: '4px 10px', fontSize: '0.78rem', color: 'var(--color-danger)' }}
-                              onClick={() => handleDeletePlan(p)}
-                              disabled={deletingPlanId === p.id}
-                            >
-                              {deletingPlanId === p.id ? 'กำลังลบ...' : 'ลบ'}
                             </button>
                           </td>
                         )}
@@ -1191,6 +1183,9 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={closePlanForm}>ยกเลิก</button>
                 </div>
+                {editingPlanId != null && <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+                  <button type="button" className="btn btn-danger" disabled={deletingPlanId === editingPlanId} onClick={() => void handleDeletePlan({ id: editingPlanId, name: planForm.name })}>{deletingPlanId === editingPlanId ? 'กำลังลบ…' : 'ลบแผน PM นี้'}</button>
+                </div>}
               </form>
             </div>
           </div>

@@ -3190,6 +3190,7 @@ function AppInner() {
               {menu === 'schools' && selectedSchoolId && (
                 <SchoolAdminView
                   orgId={selectedSchoolId}
+                  canDelete={role === 'owner' || role === 'super_admin'}
                   onBack={() => setSelectedSchoolId(null)}
                 />
               )}

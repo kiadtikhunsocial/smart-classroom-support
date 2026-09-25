@@ -42,6 +42,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [selectedLead, setSelectedLead] = useState<SalesLead | null>(null);
 
   const loadLeads = async () => {
     const all: SalesLead[] = [];
@@ -77,7 +78,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
     if (!window.confirm(`ลบ lead "${name}" ทิ้ง? (ข้อมูลเทส/ซ้ำ)`)) return;
     setBusy(id);
     api.deleteSalesLead(id)
-      .then(() => loadLeads())
+      .then(() => { setSelectedLead(null); return loadLeads(); })
       .catch((e) => alert(e?.message || 'ลบไม่สำเร็จ'))
       .finally(() => setBusy(null));
   };
@@ -294,6 +295,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.78rem' }} onClick={() => setSelectedLead(l)}>รายละเอียด</button>
                             {l.source === 'DEMO' ? <span className="sales-demo-muted">ไม่ต้องติดต่อ</span> : l.status === 'new' ? (
                               <button
                                 className="btn btn-primary"
@@ -317,17 +319,6 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
                                 title="ส่งรายการนี้ไป Google Sheet อีกครั้ง"
                               >ชีต</button>
                             )}
-                            {canDelete && l.source !== 'DEMO' && (
-                              <button
-                                className="btn btn-danger"
-                                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
-                                disabled={busy === l.id}
-                                onClick={() => removeLead(l.id, l.name)}
-                                title="ลบ lead"
-                              >
-                                ลบ
-                              </button>
-                            )}
                           </div>
                         </td>
                       </tr>
@@ -339,6 +330,14 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
           )}
         </div>
       </div>}
+      {selectedLead && <div className="panel-overlay" onClick={() => setSelectedLead(null)}><div className="repair-panel detail-sheet" style={{ width: 620, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="รายละเอียดลูกค้า">
+        <div className="repair-panel-header"><h3 className="repair-panel-title">ข้อมูลลูกค้า #{selectedLead.id}</h3><button className="repair-panel-close" onClick={() => setSelectedLead(null)} aria-label="ปิด">×</button></div>
+        <div className="repair-panel-body"><div className="detail-sheet-identity"><h4 className="detail-sheet-name">{selectedLead.name || 'ไม่ระบุชื่อ'}</h4><p className="detail-sheet-subtitle">{selectedLead.source === 'DEMO' ? 'ข้อมูลตัวอย่าง' : LEAD_SOURCE_LABEL[selectedLead.source] || selectedLead.source}</p></div>
+          <dl className="detail-sheet-grid"><div><dt>เบอร์ติดต่อ</dt><dd>{selectedLead.phone || '—'}</dd></div><div><dt>สถานะ</dt><dd>{LEAD_STATUS[selectedLead.status]?.label || selectedLead.status}</dd></div><div><dt>สินค้าที่สนใจ</dt><dd>{selectedLead.products || '—'}</dd></div><div><dt>ความต้องการ</dt><dd>{selectedLead.interest || '—'}</dd></div><div><dt>รับข้อมูลเมื่อ</dt><dd>{fmtDate(selectedLead.created_at)}</dd></div><div><dt>หมายเหตุ</dt><dd>{selectedLead.note || '—'}</dd></div></dl>
+          <p className="studio-help">รายการที่มีประวัติการขายหรือคำขอชำระเงินจะลบไม่ได้ เพื่อรักษาประวัติธุรกรรม</p>
+        </div>
+        <div className="detail-sheet-footer"><button className="btn btn-secondary" onClick={() => setSelectedLead(null)}>ปิดรายละเอียด</button>{canDelete && selectedLead.source !== 'DEMO' && <button className="btn btn-danger" disabled={busy === selectedLead.id} onClick={() => removeLead(selectedLead.id, selectedLead.name)}>{busy === selectedLead.id ? 'กำลังลบ…' : 'ลบลูกค้ารายนี้'}</button>}</div>
+      </div></div>}
     </div>
   );
 }

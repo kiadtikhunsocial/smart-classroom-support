@@ -34,8 +34,11 @@ def test_ticket_and_device_deletion_can_be_restored():
 
         headers = {"Authorization": f"Bearer {create_token(user)}"}
         with TestClient(app) as client:
+            assert client.delete(f"/api/organizations/{org_id}", headers=headers).status_code == 409
             assert client.delete(f"/api/tickets/{ticket_id}", headers=headers).status_code == 200
             assert client.delete(f"/api/devices/{device_id}", headers=headers).status_code == 200
+            # Even an otherwise empty school must retain a place for recoverable records.
+            assert client.delete(f"/api/organizations/{org_id}", headers=headers).status_code == 409
             rows = client.get("/api/deleted-records", headers=headers).json()
             device_bin = next(row for row in rows if row["entity_id"] == device_id)
             ticket_bin = next(row for row in rows if row["entity_id"] == ticket_id)
@@ -74,3 +77,30 @@ def test_ticket_and_device_deletion_can_be_restored():
             if row: db.delete(row)
         db.commit()
         db.close()
+
+
+def test_only_empty_school_can_be_deleted():
+    tag = uuid.uuid4().hex[:10].upper()
+    db = SessionLocal()
+    org_id = user_id = None
+    try:
+        org = Organization(code=f"EMPTY{tag}", name=f"Empty school {tag}")
+        user = User(line_user_id=f"empty-school-{tag}", role="super_admin", is_active=True)
+        db.add_all([org, user]); db.commit()
+        org_id, user_id = org.id, user.id
+        headers = {"Authorization": f"Bearer {create_token(user)}"}
+        with TestClient(app) as client:
+            assert client.delete(f"/api/organizations/{org_id}", headers=headers).status_code == 200
+        db.expire_all()
+        assert db.get(Organization, org_id) is None
+    finally:
+        db.rollback()
+        for row in db.execute(select(AuditLog).where(AuditLog.entity_type == "organization", AuditLog.entity_id == str(org_id))).scalars():
+            db.delete(row)
+        if org_id:
+            row = db.get(Organization, org_id)
+            if row: db.delete(row)
+        if user_id:
+            row = db.get(User, user_id)
+            if row: db.delete(row)
+        db.commit(); db.close()
