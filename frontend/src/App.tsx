@@ -12,7 +12,6 @@ import PublicNoLoginReportView from './components/PublicNoLoginReportView';
 import PublicHomeView from './components/PublicHomeView';
 import DevicesPage from './components/DevicesPage';
 import DetailField from './components/DetailField';
-import AIChatWidget from './components/AIChatWidget';
 import UsersPage from './components/UsersPage';
 import ReportsPage from './components/ReportsPage';
 import SettingsPage from './components/SettingsPage';
@@ -3136,6 +3135,7 @@ function AppInner() {
               )}
               {menu === 'devices' && (
                 <DevicesPage
+                  onOpenTicket={(id) => { setFocusRecord({ kind: 'tickets', id }); handleMenuChange('tickets'); }}
                   focusId={focusRecord?.kind === 'devices' ? focusRecord.id : undefined}
                   onFocusHandled={() => setFocusRecord(null)}
                   onBack={() => handleMenuChange('dashboard')}
@@ -3237,7 +3237,6 @@ function AppInner() {
           />
         )}
 
-        <AIChatWidget user={auth.user} />
       </div>
     </>
   );

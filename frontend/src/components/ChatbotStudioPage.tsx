@@ -38,6 +38,8 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [newDeviceType, setNewDeviceType] = useState('');
+  const [showDeviceTypeForm, setShowDeviceTypeForm] = useState(false);
 
   const refresh = async () => {
     setError('');
@@ -100,9 +102,15 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
     {error && <div className="alert alert-error" role="alert">{error}</div>}
     {notice && <div className="alert alert-success" role="status">{notice}</div>}
     {!ratingsOnly && <div className="studio-intro panel-card">
-      <div><strong>เพิ่มข้อมูลโดยไม่ต้องแก้โค้ด</strong><p>คำถาม–คำตอบที่เผยแพร่จะตอบใน LINE เมื่อข้อความตรงกัน ส่วนบทความแก้ปัญหาอุปกรณ์อยู่ในฐานความรู้เดิม อุปกรณ์ที่ยังไม่มีให้เจ้าหน้าที่ตรวจข้อมูลโรงเรียนและเพิ่มจากทะเบียนอุปกรณ์ก่อน บอตจะไม่ลงทะเบียนเครื่องให้เอง</p><small>AI: {runtime?.provider || 'กำลังตรวจ'} {runtime?.model || ''} · คีย์ {runtime?.base_key_configured ? 'พร้อม' : 'ยังไม่ตั้ง'} · จำแนกเจตนา {runtime?.classifier_enabled ? 'เปิด' : 'ปิด'} · วางบทสนทนา {runtime?.orchestration_enabled ? 'เปิด' : 'ปิด'}</small></div>
-      <div className="studio-intro-actions"><button className="btn btn-secondary" onClick={() => onNavigate('kb')}>จัดการฐานความรู้</button><button className="btn btn-secondary" onClick={() => onNavigate('devices')}>+ เพิ่มอุปกรณ์ที่ยังไม่มี</button></div>
+      <div><strong>เพิ่มข้อมูลโดยไม่ต้องแก้โค้ด</strong><p>คำถาม–คำตอบที่เผยแพร่จะตอบใน LINE เมื่อข้อความตรงกัน ส่วนบทความแก้ปัญหาอุปกรณ์อยู่ในฐานความรู้เดิม หากชนิดอุปกรณ์ยังไม่มีในตัวเลือก ให้เพิ่ม “ประเภทอุปกรณ์” ก่อน แล้วจึงลงทะเบียนเครื่องจริงในหน้าอุปกรณ์</p><small>AI: {runtime?.provider || 'กำลังตรวจ'} {runtime?.model || ''} · คีย์ {runtime?.base_key_configured ? 'พร้อม' : 'ยังไม่ตั้ง'} · จำแนกเจตนา {runtime?.classifier_enabled ? 'เปิด' : 'ปิด'} · วางบทสนทนา {runtime?.orchestration_enabled ? 'เปิด' : 'ปิด'}</small></div>
+      <div className="studio-intro-actions"><button className="btn btn-secondary" onClick={() => onNavigate('kb')}>จัดการฐานความรู้</button><button className="btn btn-secondary" onClick={() => setShowDeviceTypeForm((value) => !value)}>+ เพิ่มประเภทอุปกรณ์</button></div>
     </div>}
+    {!ratingsOnly && showDeviceTypeForm && <form className="panel-card studio-device-type-form" onSubmit={async (event) => {
+      event.preventDefault(); setBusy(true); setError(''); setNotice('');
+      try { const created = await api.createDeviceType(newDeviceType.trim()); setNotice(`เพิ่มประเภท ${created.name} แล้ว — ใช้ในทะเบียนอุปกรณ์และหน้าแจ้งซ่อมได้ทันที`); setNewDeviceType(''); setShowDeviceTypeForm(false); }
+      catch (err: any) { setError(err?.message || 'เพิ่มประเภทไม่สำเร็จ'); }
+      finally { setBusy(false); }
+    }}><label>ชื่อประเภทอุปกรณ์ใหม่<input className="form-input" required minLength={2} maxLength={64} value={newDeviceType} onChange={(event) => setNewDeviceType(event.target.value)} placeholder="เช่น Document Camera" /></label><p className="studio-help">เป็นประเภท ไม่ใช่เครื่องรายตัว; ประเภทใหม่อยู่ในหมวด “อื่น ๆ” และยังไม่สร้างรายการอุปกรณ์หรือคำตอบ AI อัตโนมัติ</p><button className="btn btn-primary" disabled={busy || !newDeviceType.trim()}>บันทึกประเภท</button></form>}
     {!ratingsOnly && <div className="studio-tabs" role="tablist" aria-label="หมวดการจัดการแชตบอต">
       {([['knowledge', 'คำถาม–คำตอบ'], ['prompts', 'คำแนะนำ AI'], ['test', 'ทดลองถาม'], ['guide', 'คู่มือ'], ...(canViewRatings ? [['ratings', 'ผลประเมิน'] as const] : [])] as const).map(([key, label]) =>
         <button key={key} role="tab" aria-selected={tab === key} className={`btn ${tab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setTab(key); setError(''); setNotice(''); }}>{label}</button>)}
@@ -164,6 +172,7 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
 
     {tab === 'guide' && <section className="panel-card studio-guide"><h2>คู่มือปรับปรุงบอตอย่างปลอดภัย</h2>
       <ol><li><strong>ข้อมูลทั่วไป:</strong> เพิ่มคำถาม คำตอบ และคำถามทางเลือกในแท็บแรก ระบุแหล่งข้อมูล เก็บเป็นฉบับร่างก่อน เมื่อทดสอบแล้วค่อยเผยแพร่ ข้อความตรงกันจะใช้คำตอบใหม่ทันที</li>
+        <li><strong>ประเภทอุปกรณ์ใหม่:</strong> กด “เพิ่มประเภทอุปกรณ์” ด้านบน ใส่ชื่อประเภทที่ยังไม่มี จากนั้นเปิดทะเบียนอุปกรณ์เพื่อเพิ่มเครื่องจริง หรือผูกบทความแก้ปัญหาในฐานความรู้ ประเภทใหม่จะอยู่ในหมวด “อื่น ๆ” จนกว่าจะมีระบบจัดหมวดละเอียด</li>
         <li><strong>วิธีแก้ปัญหา:</strong> เข้า “ฐานความรู้” เพิ่มอาการและขั้นตอนที่ตรวจแล้ว แล้วเผยแพร่ บอตใช้บทความที่เผยแพร่จากฐานข้อมูล ไม่ควรใส่วิธีที่เสี่ยงอันตราย</li>
         <li><strong>ประกัน/สินค้า:</strong> เข้า “ทะเบียนอุปกรณ์” เพิ่มรหัสอุปกรณ์ Serial วันสิ้นสุดประกัน และ “รายละเอียดประกันที่ให้บอตตอบลูกค้า” หรืออัปโหลด CSV จาก Google Sheets แล้วตรวจตัวอย่างก่อนนำเข้า ลูกค้าต้องแจ้งรหัสหรือ Serial ก่อน บอตอ่านข้อมูลนี้จากทะเบียนทันที ไม่ควรใส่ข้อมูลประกันลงคำตอบทั่วไป</li>
         <li><strong>น้ำเสียง/ความกำกวม:</strong> ใช้แท็บ “คำแนะนำ AI” เพิ่มคำแนะนำสั้น ๆ พร้อมตัวอย่างคำถามกลับหนึ่งข้อ แล้วเปิดใช้ ค่านี้มีผลต่อคำขอ AI ใหม่ทันที เฉพาะขั้นตอนที่เปิด Gemini อยู่ ไม่ใช่การฝึกน้ำหนักโมเดล</li>

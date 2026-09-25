@@ -7,7 +7,7 @@
     รหัสอุปกรณ์ขึ้นต้นด้วยรหัสของโรงเรียนนั้นเสมอ —
     <รหัสโรงเรียน>-<อาคาร>-<ห้อง>-<ประเภท>-<ลำดับ> เช่น SCHM01-B1-R101-DISP-01
     (รูปแบบเดียวกับ generate_device_id ของ API → สองโรงเรียนไม่ได้รหัสซ้ำกัน)
-    ครอบคลุมทุก device_type ที่ enum รองรับ
+    ครอบคลุมประเภทอุปกรณ์ตัวอย่างที่ระบบรองรับ
   • 12 ใบแจ้งซ่อมต่อโรงเรียน + ชุด "ซ่อมซ้ำ" อีก 3 ใบใน 2 โรงเรียนแรก
     (ไว้ให้ PM Rule 1 REPEATED_FAILURE จับได้จริง)
   • ประวัติเปลี่ยนสถานะ (ticket_updates) ตามเส้นทางสถานะที่ถูกต้อง
@@ -64,7 +64,6 @@ from app.models import (
     TicketUpdate,
     User,
     UserRole,
-    device_type_enum,
     init_db,
     priority_enum,
     ticket_status_enum,
@@ -884,10 +883,6 @@ def seed(password: str) -> None:
                 ).scalar_one_or_none()
                 if device is not None:
                     devices.append(device)
-                    continue
-
-                if not allowed(db, device_type_enum, dev_type):
-                    print(f"⚠ ข้าม {device_id}: ฐานข้อมูลยังไม่รองรับชนิด '{dev_type}'")
                     continue
 
                 purchased = now - timedelta(days=rnd.randint(200, 1800))

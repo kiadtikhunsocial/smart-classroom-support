@@ -432,6 +432,9 @@ export const api = {
     request<{ categories: { category: string; device_types: string[] }[] }>(
       '/device-categories'
     ),
+  createDeviceType: (name: string) => request<{ name: string; category: string }>(
+    '/device-types', { method: 'POST', body: JSON.stringify({ name }) }
+  ),
 
   publicReport: (data: any) =>
     request<any>('/public/report', { method: 'POST', body: JSON.stringify(data) }),

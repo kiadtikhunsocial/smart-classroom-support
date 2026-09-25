@@ -21,6 +21,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
   const [botStats, setBotStats] = useState<{ total_conversations: number; self_service_rate: number; missed_queries: string[]; line_ratings?: Record<string, { count: number; average: number }> } | null>(null);
   const [botReviewError, setBotReviewError] = useState<string | null>(null);
   const [articles, setArticles] = useState<any[]>([]);
+  const [deviceTypes, setDeviceTypes] = useState<string[]>(DEVICE_TYPES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
@@ -46,6 +47,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
   };
 
   useEffect(load, []);
+  useEffect(() => { api.publicOptions().then((options) => setDeviceTypes(options.device_types)).catch(() => {}); }, []);
 
   const openEdit = (a: any) => {
     setEditing(a);
@@ -321,7 +323,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
                   <label className="form-label">ประเภท</label>
                   <select className="form-select" value={form.device_type} onChange={(e) => setForm({ ...form, device_type: e.target.value })}>
                     <option value="">ทุกประเภท</option>
-                    {DEVICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    {deviceTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>

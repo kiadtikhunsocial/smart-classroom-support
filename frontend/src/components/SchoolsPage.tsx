@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import '../styles/schools.css';
 
 const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'pending', 'waiting_parts', 'waiting_user', 'resolved', 'closed', 'cancelled'];
 
@@ -26,6 +27,10 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ code: '', name: '', short_name: '' });
+  const [query, setQuery] = useState('');
+  const visibleOrgs = orgs.filter((org) => `${org.name} ${org.short_name || ''} ${org.code}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const totalDevices = orgs.reduce((sum, org) => sum + Number(org.device_count || 0), 0);
+  const totalTickets = orgs.reduce((sum, org) => sum + Number(org.ticket_count || 0), 0);
 
   const load = () => {
     setLoading(true);
@@ -66,7 +71,7 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
   );
 
   return (
-    <div className="page-content">
+    <div className="page-content schools-page">
       <div className="top-bar">
         <div className="top-bar-title-group">
           <button className="btn btn-ghost btn-icon" onClick={onBack}>
@@ -142,37 +147,17 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
         </div>
       )}
 
-      <div className="device-grid">
-        {orgs.map((org) => (
-          <div
-            key={org.id}
-            className="device-card"
-            style={{ cursor: 'pointer' }}
-            onClick={() => onSelectSchool(org.id)}
-          >
-            <div className="device-card-top">
-              <div className="device-card-icon-box" style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/>
-                </svg>
-              </div>
-              <span className="role-badge">{org.code}</span>
-            </div>
-            <div className="device-card-id">{org.name}</div>
-            <div className="device-card-type">{org.short_name || '—'}</div>
-            <div className="device-card-room">
-              {org.device_count} อุปกรณ์ • {org.ticket_count} tickets
-            </div>
-            <div className="device-card-bottom">
-              <div className="device-card-actions">
-                <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); onSelectSchool(org.id); }}>
-                  เข้าดูข้อมูล
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="schools-summary" aria-label="ภาพรวมโรงเรียน"><div><span>โรงเรียนทั้งหมด</span><strong>{orgs.length}</strong><small>แห่งในระบบ</small></div><div><span>อุปกรณ์ที่ลงทะเบียน</span><strong>{totalDevices.toLocaleString('th-TH')}</strong><small>ทุกโรงเรียน</small></div><div><span>ใบงานทั้งหมด</span><strong>{totalTickets.toLocaleString('th-TH')}</strong><small>ทุกสถานะ</small></div></div>
+      <div className="schools-list-heading"><div><h2>รายชื่อโรงเรียน</h2><p>เลือกโรงเรียนเพื่อดูอุปกรณ์และใบงานของแต่ละแห่ง</p></div><input className="form-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ค้นหาชื่อหรือรหัสโรงเรียน" aria-label="ค้นหาโรงเรียน" /></div>
+      <div className="schools-grid">
+        {visibleOrgs.map((org) => <button type="button" key={org.id} className="school-card" onClick={() => onSelectSchool(org.id)}>
+          <div className="school-card-top"><span className="school-card-icon" aria-hidden="true">⌂</span><span className="school-card-code">{org.code}</span></div>
+          <strong>{org.name}</strong><small>{org.short_name || 'โรงเรียนในระบบ'}</small>
+          <div className="school-card-stats"><span><b>{Number(org.device_count || 0)}</b> อุปกรณ์</span><span><b>{Number(org.ticket_count || 0)}</b> ใบงาน</span></div>
+          <span className="school-card-link">ดูข้อมูลโรงเรียน <span aria-hidden="true">→</span></span>
+        </button>)}
       </div>
+      {orgs.length > 0 && visibleOrgs.length === 0 && <p className="schools-no-results">ไม่พบโรงเรียนที่ตรงกับคำค้น</p>}
 
       {orgs.length === 0 && !loading && (
         <div className="empty-state" style={{ padding: '40px' }}>

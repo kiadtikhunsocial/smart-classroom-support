@@ -9,6 +9,7 @@ import '../styles/public-warranty.css';
 import '../styles/public-premium.css';
 import '../styles/public-refresh.css';
 import PublicThemeToggle from './PublicThemeToggle';
+import AIChatWidget from './AIChatWidget';
 
 /** ป้ายสถานะภาษาไทย — ใช้ชุดเดียวกับหน้าอื่น เพื่อไม่ให้ผู้แจ้งเห็นคำเรียกต่างกัน */
 const STATUS_LABELS: Record<string, string> = {
@@ -811,6 +812,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           <a href="/?customer=1">ฝากข้อมูลลูกค้า</a>
         </nav>
       </footer>
+      <AIChatWidget />
     </div>
   );
 }

@@ -16,6 +16,10 @@
 .audit-event-main strong { display: block; font-size: .9rem; }
 .audit-event-main p { margin: 4px 0 0; color: var(--color-text-secondary); font-size: .79rem; overflow-wrap: anywhere; }
 .audit-empty { padding: 44px 20px; text-align: center; border: 1px dashed var(--color-border); border-radius: 13px; color: var(--color-text-secondary); }
+.audit-restore { padding: 20px; margin-bottom: 20px; }
+.audit-restore h2 { margin: 0 0 8px; font-size: 1.06rem; line-height: 1.5; }
+.audit-restore > p { margin: 0 0 16px; line-height: 1.65; }
+.audit-restore-event { grid-template-columns: minmax(0, 1fr) auto; }
 .audit-pagination { display: flex; justify-content: center; align-items: center; gap: 14px; margin: 18px 0; font-size: .8rem; }
 .audit-detail { width: 620px; max-width: 95vw; }
 .audit-detail-meta { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 0 0 16px; }

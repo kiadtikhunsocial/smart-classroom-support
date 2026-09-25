@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import type { SalesLead, SalesSummary } from '../types/sales';
+import type { SalesLead, SalesRecord, SalesSummary } from '../types/sales';
 import SalesRecordsPanel from './SalesRecordsPanel';
 import '../styles/sales.css';
 
@@ -38,6 +38,9 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
   const [leadType, setLeadType] = useState<'all' | 'real' | 'demo'>('all');
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [summary, setSummary] = useState<SalesSummary | null>(null);
+  const [records, setRecords] = useState<SalesRecord[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(true);
+  const [recordsError, setRecordsError] = useState(false);
   const [integrations, setIntegrations] = useState<{ google_sheet_configured: boolean; line_group_configured: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,20 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
     setLeads(all);
   };
 
+  const loadRecords = async () => {
+    setRecordsLoading(true); setRecordsError(false);
+    try {
+      const all: SalesRecord[] = [];
+      while (true) {
+        const page = await api.listSalesRecords(all.length);
+        all.push(...page);
+        if (page.length < 200) break;
+      }
+      setRecords(all);
+    } catch { setRecordsError(true); }
+    finally { setRecordsLoading(false); }
+  };
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -62,6 +79,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
       .finally(() => setLoading(false));
     api.getSalesIntegrations().then(setIntegrations).catch(() => setIntegrations(null));
     api.getSalesSummary().then(setSummary).catch(() => setSummary(null));
+    void loadRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -96,6 +114,18 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
     prods.forEach((p: string) => { productCount[p] = (productCount[p] || 0) + 1; });
   });
   const topProducts = Object.entries(productCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const realLeadIds = new Set(realLeads.map((lead) => lead.id));
+  const realRecords = records.filter((record) => realLeadIds.has(record.lead_id));
+  const latestDeals = realRecords.filter((record) => record.kind === 'deal').slice(0, 6);
+  const monthBuckets = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - (5 - index));
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const value = realRecords.filter((record) => record.kind === 'deal' && record.status === 'won'
+      && (record.updated_at || record.created_at).slice(0, 7) === key)
+      .reduce((sum, record) => sum + Number(record.amount_thb || 0), 0);
+    return { key, label: date.toLocaleDateString('th-TH', { month: 'short' }), value };
+  });
+  const maxMonthAmount = Math.max(1, ...monthBuckets.map((month) => month.value));
   const visibleLeads = leads.filter((lead) => {
     const needle = leadQuery.trim().toLocaleLowerCase();
     return (leadStatus === 'all' || lead.status === leadStatus)
@@ -133,7 +163,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
           </a>
           <button
             className="btn btn-ghost btn-icon"
-            onClick={() => { setLoading(true); loadLeads().catch((e) => setError(e.message)).finally(() => setLoading(false)); }}
+            onClick={() => { setLoading(true); loadLeads().catch((e) => setError(e.message)).finally(() => setLoading(false)); api.getSalesSummary().then(setSummary).catch(() => setSummary(null)); void loadRecords(); }}
             aria-label="โหลดใหม่"
             title="โหลดใหม่"
           >
@@ -200,6 +230,24 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
         <span>คำขอชำระเงินรอตรวจ <strong>{summary.payment_requests}</strong></span>
       </div>}
 
+      <div className="sales-analytics-grid">
+        <section className="sales-analytics-card sales-revenue-card" aria-label="มูลค่าดีลที่ปิดรายเดือน">
+          <div className="sales-card-heading"><div><span>มูลค่าดีลที่ปิด</span><h3>ย้อนหลัง 6 เดือน</h3></div><strong>{Number(summary?.won_amount_thb || 0).toLocaleString('th-TH')} ฿</strong></div>
+          <p>แสดงมูลค่าดีลที่บันทึกว่าปิดการขายแล้ว ไม่ใช่ยอดรับชำระ</p>
+          {recordsError ? <div className="sales-chart-empty">โหลดบันทึกการขายไม่สำเร็จ</div> : recordsLoading ? <div className="sales-chart-empty">กำลังโหลดกราฟ…</div>
+            : monthBuckets.every((month) => month.value === 0) ? <div className="sales-chart-empty">ยังไม่มีดีลที่ปิดในช่วง 6 เดือนนี้</div>
+            : <div className="sales-revenue-chart">{monthBuckets.map((month) => <div key={month.key} className="sales-revenue-month" title={`${month.label}: ${month.value.toLocaleString('th-TH')} บาท`}><span>{month.value ? `${Math.round(month.value / 1000)}k` : ''}</span><div className="sales-revenue-track"><i style={{ height: `${Math.max(4, month.value / maxMonthAmount * 100)}%` }} /></div><small>{month.label}</small></div>)}</div>}
+        </section>
+        <section className="sales-analytics-card sales-products-card" aria-label="สินค้าที่ลูกค้าสนใจ">
+          <div className="sales-card-heading"><div><span>ความสนใจของลูกค้า</span><h3>สินค้าที่ถูกสอบถามบ่อย</h3></div></div>
+          {topProducts.length ? topProducts.map(([name, count]) => <div className="sales-product-row" key={name}><div><span>{name}</span><b>{count} ราย</b></div><div className="sales-product-track"><i style={{ width: `${count / topProducts[0][1] * 100}%` }} /></div></div>) : <p className="sales-chart-empty">ยังไม่มีข้อมูลสินค้าที่สนใจ</p>}
+        </section>
+      </div>
+
+      <section className="sales-latest-card" aria-label="ดีลล่าสุด"><div className="sales-card-heading"><div><span>การซื้อขาย</span><h3>ดีลล่าสุด</h3></div><button type="button" className="btn btn-secondary btn-sm" onClick={() => setView('records')}>ดูดีลทั้งหมด →</button></div>
+        {recordsError ? <p>โหลดบันทึกการขายไม่สำเร็จ</p> : recordsLoading ? <p>กำลังโหลดรายการ…</p> : latestDeals.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>ลูกค้า</th><th>สินค้า</th><th>สถานะ</th><th>มูลค่า</th><th>อัปเดต</th></tr></thead><tbody>{latestDeals.map((record) => <tr key={record.id}><td>{record.lead_name}</td><td>{record.product}</td><td>{({ interested: 'สนใจ', quoted: 'เสนอราคา', won: 'ปิดการขาย', lost: 'ไม่สำเร็จ' } as Record<string, string>)[record.status] || record.status}</td><td>{record.amount_thb ? `${Number(record.amount_thb).toLocaleString('th-TH')} ฿` : 'ยังไม่ระบุ'}</td><td>{fmtDate(record.updated_at || record.created_at)}</td></tr>)}</tbody></table></div> : <p>ยังไม่มีดีลที่บันทึกไว้</p>}
+      </section>
+
       {summary && <section className="page-section" aria-label="สถิติการขาย" style={{ marginBottom: 18 }}>
         <div className="section-header"><span className="section-title">สถิติที่ช่วยวางแผนติดตาม</span></div>
         <div className="section-body sales-stats-grid">
@@ -225,21 +273,6 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
         </button>
       </div>
 
-      {/* สินค้าที่ถูกสนใจบ่อย */}
-      {topProducts.length > 0 && (
-        <div className="page-section">
-          <div className="section-header">
-            <span className="section-title">สินค้าที่ถูกสอบถามบ่อย</span>
-          </div>
-          <div className="section-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {topProducts.map(([name, cnt]) => (
-              <span key={name} className="badge" style={{ fontSize: '0.85rem', padding: '6px 14px' }}>
-                {name} <span style={{ fontWeight: 700, marginLeft: 6 }}>{cnt}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
       </>}
 
       {view === 'records' && <SalesRecordsPanel leads={leads} canSyncSheet={Boolean(integrations?.google_sheet_configured && canDelete)} />}

@@ -6,6 +6,7 @@ const PAGE_SIZE = 30;
 const ACTIONS: Record<string, string> = {
   login: 'เข้าสู่ระบบ', login_failed: 'เข้าสู่ระบบไม่สำเร็จ',
   device_create: 'เพิ่มอุปกรณ์', device_update: 'แก้ไขอุปกรณ์', device_delete: 'ลบอุปกรณ์',
+  device_type_create: 'เพิ่มประเภทอุปกรณ์',
   device_restore: 'กู้คืนอุปกรณ์', ticket_delete: 'ลบใบงาน', ticket_restore: 'กู้คืนใบงาน',
   user_create: 'เพิ่มผู้ใช้', user_update: 'แก้ไขผู้ใช้', user_delete: 'ลบผู้ใช้', user_role_change: 'เปลี่ยนสิทธิ์ผู้ใช้',
   membership_apply: 'สมัครสมาชิก', membership_approve: 'อนุมัติสมาชิก', membership_reject: 'ปฏิเสธสมาชิก',
@@ -19,7 +20,7 @@ const ACTIONS: Record<string, string> = {
   customer_signup: 'ลูกค้าลงทะเบียน',
 };
 const ENTITY: Record<string, string> = {
-  device: 'อุปกรณ์', user: 'ผู้ใช้', ticket: 'งานซ่อม', kb_article: 'บทความ',
+  device: 'อุปกรณ์', device_type: 'ประเภทอุปกรณ์', user: 'ผู้ใช้', ticket: 'งานซ่อม', kb_article: 'บทความ',
   pm_plan: 'แผน PM', pm_task: 'งาน PM', pm_rule: 'กฎ PM', device_health_flag: 'สุขภาพอุปกรณ์',
   setting: 'การตั้งค่า', sales_record: 'รายการขาย', sales_lead: 'ลูกค้า', membership_application: 'คำขอสมาชิก',
 };
@@ -117,11 +118,11 @@ export default function AuditLogPage({ onBack, userRole }: { onBack: () => void;
       <button className="btn" type="button" onClick={() => void load()} disabled={loading}>โหลดใหม่</button>
     </div>
 
-    {canRestore && <section className="panel-card" style={{ padding: 20, marginBottom: 20 }} aria-label="กู้คืนข้อมูลที่ลบ">
+    {canRestore && <section className="panel-card audit-restore" aria-label="กู้คืนข้อมูลที่ลบ">
       <h2 style={{ marginTop: 0 }}>กู้คืนข้อมูลที่ลบ</h2>
       <p className="audit-technical">กู้ได้เฉพาะอุปกรณ์และใบงานที่ลบหลังเปิดใช้ระบบกู้คืนนี้ ข้อมูลที่ลบก่อนหน้านั้นไม่มีสำเนาครบพอจะกู้โดยอัตโนมัติ</p>
       {deletedRecords.length === 0 ? <p>ไม่มีรายการที่รอกู้คืน</p> : <div className="audit-events">{deletedRecords.map((record) =>
-        <div className="audit-event" key={record.id}><div className="audit-event-main"><strong>{record.entity_type === 'device' ? 'อุปกรณ์' : 'ใบงาน'} {record.entity_id}</strong><p>ลบเมื่อ {dateTime(record.deleted_at)} · โรงเรียน #{record.organization_id}</p></div><button className="btn btn-secondary" disabled={restoring === record.id} onClick={() => void restore(record.id, record.entity_id)}>{restoring === record.id ? 'กำลังกู้คืน…' : 'กู้คืน'}</button></div>)}</div>}
+        <div className="audit-event audit-restore-event" key={record.id}><div className="audit-event-main"><strong>{record.entity_type === 'device' ? 'อุปกรณ์' : 'ใบงาน'} {record.entity_id}</strong><p>ลบเมื่อ {dateTime(record.deleted_at)} · โรงเรียน #{record.organization_id}</p></div><button className="btn btn-secondary" disabled={restoring === record.id} onClick={() => void restore(record.id, record.entity_id)}>{restoring === record.id ? 'กำลังกู้คืน…' : 'กู้คืน'}</button></div>)}</div>}
       <div className="audit-pagination"><button className="btn" disabled={deletedPage === 0} onClick={() => setDeletedPage((value) => value - 1)}>← ก่อนหน้า</button><span>หน้า {deletedPage + 1}</span><button className="btn" disabled={deletedRecords.length < 30} onClick={() => setDeletedPage((value) => value + 1)}>ถัดไป →</button></div>
     </section>}
 

@@ -51,6 +51,16 @@
 
 .devices-page .device-id-link:hover { text-decoration-thickness: 2px; }
 .devices-page .device-id-link:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.device-open-ticket-badge { display: table; margin-top: 5px; padding: 2px 8px; border-radius: 99px; background: #fff0e8; color: #9a3d00; font-size: .7rem; font-weight: 800; white-space: nowrap; }
+.device-active-repair { display: grid; gap: 8px; padding: 18px; border: 1px solid #f4b266; border-left: 5px solid #e77812; border-radius: 12px; background: #fff7ed; color: #562b0c; }
+.device-active-repair > div { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.device-active-repair-label { font-weight: 800; }
+.device-active-repair strong { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.device-active-repair p { margin: 0; font-weight: 650; }
+.device-active-repair small { color: #744119; }
+.device-active-repair .btn { justify-self: start; }
+[data-mode='dark'] .device-active-repair { background: #382719; color: #fff1d6; border-color: #b9692d; }
+[data-mode='dark'] .device-active-repair small { color: #f5caa6; }
 [data-mode='dark'] .devices-page .device-id-link,
 .theme-dark .devices-page .device-id-link { color: #f5f5f5; }
 

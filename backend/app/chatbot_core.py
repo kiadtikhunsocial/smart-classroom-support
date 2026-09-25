@@ -208,7 +208,7 @@ def _is_clear_business(text: str) -> bool:
 def _form_fallback_text(user_id: str | None = None) -> str:
     """Offer the QR form with a single-use LINE bridge when in a private chat."""
     from app.line_report_link import issue_report_link
-    linked_url = issue_report_link(user_id) if user_id else None
+    linked_url = issue_report_link(user_id) if user_id and not user_id.startswith("web-") else None
     public_url = REPORT_FORM_URL if (os.environ.get("ENVIRONMENT", "").lower() not in {"prod", "production"}
                                       or REPORT_FORM_URL.startswith("https://")) else ""
     link = linked_url or public_url
@@ -461,7 +461,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
     if phase == "confirm":
         fields = session.get("fields", {})
         if _is_affirmative(text):
-            ticket_no, err = _create_ticket_from_fields(fields, None if group else user_id)
+            ticket_no, err = _create_ticket_from_fields(fields, None if group or user_id.startswith("web-") else user_id)
             if err:
                 # ไม่เปิดเผยรายละเอียด DB/exception ให้ผู้ใช้เห็น
                 print(f"[chatbot] ticket creation failed: {err}")
@@ -1133,6 +1133,8 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
 
     from app.chatbot_rating import is_rating_message, record_rating
     if is_rating_message(text):
+        if user_id.startswith("web-"):
+            return _finish("การประเมินงานซ่อมและเจ้าหน้าที่ส่งผ่าน LINE OA หลังจบงานนะคะ เพื่อยืนยันว่าเป็นผู้แจ้งรายเดิม", intent_used="rating_line_only", faq_cacheable=False)
         return _finish(record_rating(user_id, text, profile.get("phone"), profile.get("last_ticket_id")),
                        intent_used="service_rating", faq_cacheable=False)
 
@@ -1169,6 +1171,8 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
 
     # Customer may request payment review, but only staff can verify/complete it.
     if phase == "payment_product_pending" or re.search(r"(?:ต้องการ|ขอ|อยาก)?\s*ชำระเงิน", text):
+        if user_id.startswith("web-"):
+            return _finish("หากสนใจชำระเงิน กรุณาใช้เมนู 'สนใจสินค้า / ฝากข้อมูลติดต่อ' บนหน้าแรก เจ้าหน้าที่จะติดต่อกลับและตรวจสอบคำขอค่ะ อย่าส่งข้อมูลบัตรหรือบัญชีในแชต", intent_used="payment_web_handoff", faq_cacheable=False)
         if phase == "payment_product_pending" and text.strip() in {"ยกเลิก", "ไม่เอาแล้ว", "ไม่ชำระแล้ว"}:
             save_session(user_id, {**session, "phase": "new"})
             return _finish("ยกเลิกคำขอแล้วค่ะ ยังไม่ได้สร้างรายการชำระเงิน", intent_used="payment_cancel", faq_cacheable=False)

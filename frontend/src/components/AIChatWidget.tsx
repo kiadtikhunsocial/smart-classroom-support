@@ -5,24 +5,28 @@ import { API_BASE as BASE } from '../api/client';
 
 type Msg = { role: 'user' | 'bot'; text: string };
 
-function resolveUserId(user: any): string {
-  // ใช้ user_id ที่ stable ต่อ session ถ้ามี auth (line_user_id / id / ชื่อ)
-  if (user?.line_user_id) return `web-${user.line_user_id}`;
-  if (user?.id) return `web-${user.id}`;
-  if (user?.line_display_name) return `web-${user.line_display_name}`;
-  // ยังไม่ login: สุ่ม id เก็บไว้ใน state (ต่อเนื่องภายในหน้า)
+function resolveSessionId(): string {
+  // Web chat must never reuse a LINE ID or staff identifier.
   try {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) return `web-anon-${crypto.randomUUID()}`;
+    const saved = sessionStorage.getItem('iwa_web_chat_session');
+    if (saved && /^[a-f\d-]{36}$/i.test(saved)) return saved;
+    const created = crypto.randomUUID();
+    sessionStorage.setItem('iwa_web_chat_session', created);
+    return created;
   } catch {}
-  return `web-anon-${Date.now()}`;
+  // Old/locked-down browsers: avoid assigning every visitor the same conversation.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const digit = Math.floor(Math.random() * 16);
+    return (ch === 'x' ? digit : (digit & 3) | 8).toString(16);
+  });
 }
 
-export default function AIChatWidget({ user }: { user?: any }) {
+export default function AIChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
-  const [userId] = useState<string>(() => resolveUserId(user));
+  const [sessionId] = useState<string>(resolveSessionId);
   const [greeted, setGreeted] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -58,19 +62,16 @@ export default function AIChatWidget({ user }: { user?: any }) {
     setTyping(true);
 
     try {
-      const res = await fetch(`${BASE}/line/bot`, {
+      const res = await fetch(`${BASE}/chatbot/web`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
+          session_id: sessionId,
           text,
-          reply_token: '',
-          is_group: false,
         }),
       });
       if (!res.ok) {
-        const t = await res.text().catch(() => '');
-        throw new Error(t || `HTTP ${res.status}`);
+        throw new Error(res.status === 429 ? 'ส่งข้อความเร็วเกินไป กรุณารอสักครู่' : 'ระบบผู้ช่วยยังไม่พร้อม กรุณาลองใหม่อีกครั้ง');
       }
       const data = await res.json();
       setMessages((m) => [
@@ -80,7 +81,7 @@ export default function AIChatWidget({ user }: { user?: any }) {
     } catch (e: any) {
       setMessages((m) => [
         ...m,
-        { role: 'bot', text: `เกิดข้อผิดพลาดในการติดต่อผู้ช่วย: ${e?.message || 'ไม่ทราบสาเหตุ'} โปรดลองอีกครั้งค่ะ` },
+          { role: 'bot', text: e?.message || 'ติดต่อผู้ช่วยไม่ได้ในขณะนี้ กรุณาลองใหม่ค่ะ' },
       ]);
     } finally {
       setTyping(false);
@@ -98,6 +99,7 @@ export default function AIChatWidget({ user }: { user?: any }) {
     <>
       {/* ปุ่มลอย มุมขวาล่าง */}
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
         title="คุยกับผู้ช่วย AI"
         style={{
@@ -125,6 +127,8 @@ export default function AIChatWidget({ user }: { user?: any }) {
       {/* Panel แชท */}
       {open && (
         <div
+          role="dialog"
+          aria-label="คุยกับผู้ช่วย AI"
           style={{
             position: 'fixed',
             bottom: 80,
@@ -172,6 +176,7 @@ export default function AIChatWidget({ user }: { user?: any }) {
           {/* ประวัติข้อความ */}
           <div
             ref={bodyRef}
+            aria-live="polite"
             style={{
               flex: 1,
               overflowY: 'auto',
@@ -291,6 +296,7 @@ export default function AIChatWidget({ user }: { user?: any }) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
               placeholder="พิมพ์ข้อความ..."
+              aria-label="พิมพ์ข้อความถึงผู้ช่วย AI"
               style={{
                 flex: 1,
                 padding: '9px 12px',

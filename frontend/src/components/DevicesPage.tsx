@@ -136,8 +136,9 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canManage, userRole, focusId, onFocusHandled }: {
+export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSuperAdmin, canManage, userRole, focusId, onFocusHandled }: {
   onBack: () => void;
+  onOpenTicket?: (id: string) => void;
   currentOrgId?: number | null;
   isSuperAdmin: boolean;
   canManage: boolean;
@@ -149,6 +150,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
   const lockedToOwnSchool = userRole === 'admin_school';
   const [devices, setDevices] = useState<any[]>([]);
   const [orgs, setOrgs] = useState<any[]>([]);
+  const [deviceTypes, setDeviceTypes] = useState<string[]>(DEVICE_TYPES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orgFilter, setOrgFilter] = useState<number | ''>(isSuperAdmin ? '' : (currentOrgId ?? ''));
@@ -238,8 +240,9 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
     Promise.all([
       api.listAllDevices(orgFilter === '' ? undefined : orgFilter),
       api.listOrganizations(),
+      api.publicOptions(),
     ])
-      .then(([d, o]) => { setDevices(d); setOrgs(o); })
+      .then(([d, o, options]) => { setDevices(d); setOrgs(o); setDeviceTypes(options.device_types); })
       .catch((e) => setError(e.message || 'โหลดไม่สำเร็จ'))
       .finally(() => setLoading(false));
   };
@@ -382,8 +385,8 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
     return acc;
   }, {});
   const typeOptions = Object.keys(typeCounts).sort((a, b) => {
-    const ia = DEVICE_TYPES.indexOf(a);
-    const ib = DEVICE_TYPES.indexOf(b);
+    const ia = deviceTypes.indexOf(a);
+    const ib = deviceTypes.indexOf(b);
     if (ia !== -1 && ib !== -1) return ia - ib;
     if (ia !== -1) return -1;
     if (ib !== -1) return 1;
@@ -564,7 +567,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                   <div className="form-group">
                     <label className="form-label">ประเภทอุปกรณ์</label>
                     <select className="form-select" value={form.device_type} onChange={(e) => setForm({ ...form, device_type: e.target.value })}>
-                      {DEVICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      {deviceTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
@@ -794,13 +797,11 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
 
                   <section className="detail-sheet-section"><h4>งานซ่อม</h4>
                   {detailView.has_open_ticket && detailOpenTicket ? (
-                    <div className="detail-sheet-warning">
-                      มีใบงานค้างอยู่ <strong>{detailOpenTicket.ticket_id || detailOpenTicket.ticket_no}</strong>
-                      {detailOpenTicket.status ? ` · ${TICKET_STATUS_LABELS[detailOpenTicket.status] || detailOpenTicket.status}` : ''}
-                      {detailOpenTicket.title ? ` — ${detailOpenTicket.title}` : ''}
-                      <div className="detail-sheet-help">
-                        แจ้งซ้ำไม่ได้ ให้ติดตามจากใบงานนี้
-                      </div>
+                    <div className="device-active-repair" role="status">
+                      <div><span className="device-active-repair-label">● มีงานซ่อมที่กำลังดำเนินการ</span><strong>{detailOpenTicket.ticket_id || detailOpenTicket.ticket_no}</strong></div>
+                      <p>{detailOpenTicket.title || 'ไม่ระบุอาการ'} · {TICKET_STATUS_LABELS[detailOpenTicket.status] || detailOpenTicket.status || 'รอตรวจสอบ'}</p>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { const id = detailOpenTicket.ticket_id || detailOpenTicket.ticket_no; closeDetail(); onOpenTicket?.(id); }} disabled={!onOpenTicket}>เปิดใบงานนี้ →</button>
+                      <small>อุปกรณ์นี้ยังมีงานค้างอยู่ โปรดติดตามใบเดิมก่อนแจ้งซ้ำ</small>
                     </div>
                   ) : (
                     <p className="detail-sheet-empty">
@@ -904,6 +905,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                         >
                           {d.device_id}
                         </button>
+                        {d.has_open_ticket && <span className="device-open-ticket-badge">มีงานซ่อม</span>}
                       </td>
                       <td>{d.device_type}{/mock|ตัวอย่าง|เดโม/i.test(`${d.notes || ''} ${d.serial_number || ''}`) && <span className="badge badge-pending" style={{ marginLeft: 6 }}>DEMO</span>}</td>
                       <td>{d.brand || '—'} {d.model || ''}</td>

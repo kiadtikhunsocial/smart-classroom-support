@@ -112,13 +112,22 @@ export default function ScanPage({ onScanDevice, onBack }: {
 
   const startScan = async () => {
     setError(null);
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setError('เบราว์เซอร์ไม่อนุญาตให้ใช้กล้องในหน้านี้ — ใช้ HTTPS หรือ localhost แล้วลองอีกครั้ง');
+      return;
+    }
     setScanning(true);
     try {
       const Html5Qrcode = (await import('html5-qrcode')).Html5Qrcode;
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras.length) throw new Error('NO_CAMERA');
+      // Desktop/laptop often has only a front camera; facingMode: environment
+      // fails there even though a usable camera exists.
+      const preferred = cameras.find((camera: { label: string }) => /back|rear|environment|หลัง/i.test(camera.label)) || cameras[0];
       const scanner = new Html5Qrcode('qr-reader');
       scannerRef.current = scanner;
       await scanner.start(
-        { facingMode: 'environment' },
+        preferred.id,
         { fps: 10, qrbox: { width: 220, height: 220 } },
         (decodedText: string) => {
           // สแกนเจอแล้ว — หยุดก่อน แล้วค่อยประมวลผล
@@ -132,7 +141,13 @@ export default function ScanPage({ onScanDevice, onBack }: {
       setStatus('กำลังสแกน — เล็ง QR ไปที่กล้อง');
     } catch (e: any) {
       setScanning(false);
-      setError('เปิดกล้องไม่สำเร็จ — ใช้ช่องกรอกรหัสอุปกรณ์แทนได้ (เช่น SCHDEMO-B3-301-DISP-01)');
+      scannerRef.current = null;
+      const message = String(e?.message || e || '');
+      setError(/NO_CAMERA|NotFound/i.test(message)
+        ? 'ไม่พบกล้องที่ใช้งานได้บนเครื่องนี้ — ต่อกล้องหรือกรอกรหัสอุปกรณ์แทน'
+        : /NotAllowed|Permission|denied/i.test(message)
+          ? 'ยังไม่ได้อนุญาตใช้กล้อง — กดไอคอนกล้อง/แม่กุญแจข้าง URL เพื่ออนุญาต แล้วลองอีกครั้ง'
+          : 'เปิดกล้องไม่สำเร็จ — ตรวจว่ากล้องไม่ได้ถูกแอปอื่นใช้อยู่ หรือกรอกรหัสอุปกรณ์แทน');
     }
   };
 

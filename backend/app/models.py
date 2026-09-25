@@ -17,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import (
@@ -56,6 +57,19 @@ def get_db():
 def init_db():
     """สร้างตารางทั้งหมด — เรียกตอนแอปสตาร์ท"""
     Base.metadata.create_all(bind=engine)
+    # The former PostgreSQL enum prevented staff from adding equipment types.
+    # Migrate existing rows losslessly; fresh databases already use VARCHAR.
+    with engine.begin() as connection:
+        column_type = connection.execute(
+            text(
+                "SELECT udt_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = 'devices' AND column_name = 'device_type'"
+            )
+        ).scalar_one_or_none()
+        if column_type == "device_type_enum":
+            connection.execute(text(
+                "ALTER TABLE devices ALTER COLUMN device_type TYPE VARCHAR(64) USING device_type::text"
+            ))
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +107,14 @@ class DeviceType(str):
     OTHER = "Other"
 
 
+class DeviceTypeOption(Base):
+    __tablename__ = "device_type_options"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class DeviceStatus(str):
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -119,15 +141,6 @@ class Priority(str):
 
 
 # SAEnum definitions — create_type=False สำหรับ SQLite compatibility
-device_type_enum = SAEnum(
-    "Interactive Display", "Computer AIO", "Computer Notebook", "Computer Tablet",
-    "Computer Desktop", "Router", "Access Point", "Switch", "Speaker", "Camera",
-    "Visualizer", "Microphone", "UPS", "Printer", "Projector",
-    "Software (Picaro)", "Software (Phonics Hero)", "Other",
-    name="device_type_enum",
-    create_type=False,
-)
-
 device_status_enum = SAEnum(
     "active", "inactive", "decommissioned",
     name="device_status_enum",
@@ -205,9 +218,7 @@ class Device(Base):
     room_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("rooms.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    device_type: Mapped[str] = mapped_column(
-        device_type_enum, nullable=False, default=DeviceType.OTHER
-    )
+    device_type: Mapped[str] = mapped_column(String(64), nullable=False, default=DeviceType.OTHER)
     brand: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     serial_number: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)

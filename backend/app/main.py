@@ -17,6 +17,7 @@ import io
 import logging
 import os
 import threading
+from uuid import UUID
 from typing import Literal, Optional
 from decimal import Decimal
 
@@ -44,6 +45,7 @@ from app.models import (
     CustomerSignupInvite,
     Device,
     DeviceType,
+    DeviceTypeOption,
     KBArticle,
     KBSuggestion,
     MEMBERSHIP_APPROVED,
@@ -1478,6 +1480,7 @@ def find_open_ticket(db: Session, device_id: str) -> Optional[RepairTicket]:
     """ticket ที่ยังไม่ปิดของอุปกรณ์นี้ (ล่าสุดก่อน) — None ถ้าไม่มี"""
     return db.execute(
         select(RepairTicket)
+        .options(selectinload(RepairTicket.device).selectinload(Device.room))
         .where(
             RepairTicket.device_id == device_id,
             RepairTicket.status.in_(OPEN_TICKET_STATUSES),
@@ -1588,6 +1591,7 @@ def open_tickets_by_device(db: Session, device_ids: list[str]) -> dict[str, dict
         return {}
     rows = db.execute(
         select(RepairTicket)
+        .options(selectinload(RepairTicket.device).selectinload(Device.room))
         .where(
             RepairTicket.device_id.in_(ids),
             RepairTicket.status.in_(OPEN_TICKET_STATUSES),
@@ -1768,7 +1772,7 @@ def device_category_of(device_type: Optional[str]) -> Optional[str]:
     return DEVICE_TYPE_TO_CATEGORY.get(device_type, "อื่น ๆ")
 
 
-def device_categories_out(devices: Optional[list] = None) -> list[DeviceCategoryOut]:
+def device_categories_out(devices: Optional[list] = None, db: Optional[Session] = None) -> list[DeviceCategoryOut]:
     """รายการหมวดหมู่อุปกรณ์ทั้งหมด + จำนวนอุปกรณ์ที่พบในแต่ละหมวด
 
     ส่งทุกหมวดเสมอ (ลำดับตาม DEVICE_CATEGORY_TYPES) เพื่อให้หน้าเว็บมีตัวเลือกคงที่
@@ -1788,8 +1792,21 @@ def device_categories_out(devices: Optional[list] = None) -> list[DeviceCategory
             device_types=list(types),
             device_count=counts.get(category, 0),
         )
-        for category, types in DEVICE_CATEGORY_TYPES.items()
+        for category, types in _device_category_types(db).items()
     ]
+
+
+def _device_type_labels(db: Session) -> list[str]:
+    custom = db.execute(select(DeviceTypeOption.name).order_by(DeviceTypeOption.name)).scalars().all()
+    return [*DEVICE_TYPE_LABELS, *(name for name in custom if name not in DEVICE_TYPE_LABELS)]
+
+
+def _device_category_types(db: Optional[Session]) -> dict[str, tuple[str, ...]]:
+    categories = dict(DEVICE_CATEGORY_TYPES)
+    if db is not None:
+        custom = db.execute(select(DeviceTypeOption.name).order_by(DeviceTypeOption.name)).scalars().all()
+        categories["อื่น ๆ"] = (*categories["อื่น ๆ"], *(name for name in custom if name not in DEVICE_TYPE_LABELS))
+    return categories
 
 
 def _resolve_device_by_code(db: Session, raw: str) -> Optional[Device]:
@@ -1810,12 +1827,12 @@ def _resolve_device_by_code(db: Session, raw: str) -> Optional[Device]:
 
 
 @app.get("/api/device-categories")
-def list_device_categories():
+def list_device_categories(db: Session = Depends(get_db)):
     """หมวดหมู่อุปกรณ์ + ประเภทในแต่ละหมวด — หน้าเว็บใช้ทำตัวกรองหมวดหมู่"""
     return {
         "categories": [
             {"category": category, "device_types": list(types)}
-            for category, types in DEVICE_CATEGORY_TYPES.items()
+            for category, types in _device_category_types(db).items()
         ]
     }
 
@@ -1826,6 +1843,26 @@ DEVICE_TYPE_LABELS = [
     "Visualizer", "Microphone", "UPS", "Printer", "Projector",
     "Software (Picaro)", "Software (Phonics Hero)", "Other",
 ]
+
+
+class DeviceTypeOptionIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=64)
+
+
+@app.post("/api/device-types", status_code=201)
+def create_device_type(payload: DeviceTypeOptionIn, request: Request, db: Session = Depends(get_db),
+                       user: User = Depends(require_roles("owner", "super_admin"))):
+    name = " ".join(payload.name.strip().split())
+    if not name or any(ord(char) < 32 for char in name):
+        raise HTTPException(status_code=422, detail="ชื่อประเภทอุปกรณ์ไม่ถูกต้อง")
+    if any(item.casefold() == name.casefold() for item in _device_type_labels(db)):
+        raise HTTPException(status_code=409, detail="ประเภทอุปกรณ์นี้มีอยู่แล้ว")
+    option = DeviceTypeOption(name=name)
+    db.add(option)
+    write_audit(db, action="device_type_create", user=user, entity_type="device_type",
+                entity_id=name, new_value={"name": name}, request=request)
+    db.commit()
+    return {"name": name, "category": "อื่น ๆ"}
 
 
 @app.get("/api/public/options", response_model=PublicOptionsOut)
@@ -1844,8 +1881,8 @@ def public_options(
     if not code:
         # ไม่ระบุรหัสหน่วยงาน = ไม่เปิดรายการอุปกรณ์ให้ไล่ดู ให้ผู้แจ้งกรอกห้อง/อุปกรณ์เอง
         return PublicOptionsOut(
-            device_types=DEVICE_TYPE_LABELS,
-            device_categories=device_categories_out(),
+            device_types=_device_type_labels(db),
+            device_categories=device_categories_out(db=db),
             devices=[],
             requires_organization=True,
         )
@@ -1894,8 +1931,8 @@ def public_options(
             organization_id=device.organization_id,
         ))
     return PublicOptionsOut(
-        device_types=DEVICE_TYPE_LABELS,
-        device_categories=device_categories_out(devices),
+        device_types=_device_type_labels(db),
+        device_categories=device_categories_out(devices, db),
         devices=devices,
         organization_code=org.code,
         organization_name=org.name,
@@ -2012,7 +2049,7 @@ def public_report(
 
             device_type = payload.device_type or "Other"
             # กัน device_type ไม่อยู่ใน enum
-            if device_type not in DEVICE_TYPE_LABELS:
+            if device_type not in _device_type_labels(db):
                 device_type = "Other"
             detail = (payload.device_detail or "").strip() or room_text
             # ── Reuse อุปกรณ์เดิม ถ้าข้อมูล (ห้อง+ประเภท+รายละเอียด) ตรงกัน → กันแจ้งซ้ำได้จริง ──
@@ -2348,6 +2385,7 @@ def list_devices(
     stmt = stmt.offset(offset).limit(limit)
 
     rows = db.execute(stmt).all()
+    open_by_device = open_tickets_by_device(db, [device.device_id for device, _, _ in rows])
     result: list[DeviceInfo] = []
     for device, room, org in rows:
         result.append(DeviceInfo(
@@ -2371,6 +2409,8 @@ def list_devices(
             warranty_until=device.warranty_until,
             warranty_details=device.warranty_details,
             notes=device.notes,
+            has_open_ticket=device.device_id in open_by_device,
+            open_ticket=open_by_device.get(device.device_id),
         ))
     return result
 
@@ -2445,7 +2485,7 @@ async def import_devices_csv(
         if row["device_id"] in existing or row["device_id"] in seen:
             errors.append("รหัสอุปกรณ์ซ้ำ")
         seen.add(row["device_id"])
-        valid_types = {value for name, value in vars(DeviceType).items() if name.isupper()}
+        valid_types = set(_device_type_labels(db))
         if row["device_type"] not in valid_types:
             errors.append("ประเภทอุปกรณ์ไม่อยู่ในรายการที่รองรับ")
         if row["status"] and row["status"] not in {"active", "inactive", "decommissioned"}:
@@ -2496,6 +2536,8 @@ async def import_devices_csv(
 def create_device(payload: DeviceCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """เพิ่มอุปกรณ์ใหม่ — บังคับ org ตาม scope ของบทบาท"""
     check_org_access(user, payload.organization_id)
+    if payload.device_type not in _device_type_labels(db):
+        raise HTTPException(status_code=422, detail="ประเภทอุปกรณ์ไม่อยู่ในรายการ กรุณาให้ผู้ดูแลเพิ่มประเภทก่อน")
     org = db.execute(select(Organization).where(Organization.id == payload.organization_id)).scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -2596,6 +2638,8 @@ def update_device(device_id: str, payload: DeviceUpdate, request: Request, db: S
     check_org_access(user, device.organization_id)
 
     data = payload.model_dump(exclude_unset=True)
+    if "device_type" in data and data["device_type"] not in _device_type_labels(db):
+        raise HTTPException(status_code=422, detail="ประเภทอุปกรณ์ไม่อยู่ในรายการ")
     # จัดการ room_code -> room_id
     if "room_code" in data and data["room_code"]:
         room = db.execute(
@@ -3493,7 +3537,7 @@ def list_tickets(
     if device_type:
         stmt = stmt.where(Device.device_type == device_type)
     if device_category:
-        types = DEVICE_CATEGORY_TYPES.get(device_category)
+        types = _device_category_types(db).get(device_category)
         if not types:
             return []  # หมวดที่ไม่รู้จัก → ไม่เดา คืนว่าง
         stmt = stmt.where(Device.device_type.in_(types))
@@ -6598,6 +6642,24 @@ class LineBotIn(BaseModel):
     reply_token: str = ""
     group_id: str = ""
     is_group: bool = False
+
+
+class WebChatIn(BaseModel):
+    session_id: UUID
+    text: str = Field(..., min_length=1, max_length=1000)
+
+
+@app.post("/api/chatbot/web")
+@limiter.limit("10/minute")
+def web_chat_handle(request: Request, payload: WebChatIn):
+    """Public website chat. Keep its namespace separate from verified LINE IDs.
+
+    Never expose the n8n credential to the browser or call the automation endpoint.
+    """
+    from app.chatbot_core import handle_message
+    session_id = str(payload.session_id)
+    reply = handle_message(user_id=f"web-{session_id}", text=payload.text.strip(), reply_token="")
+    return {"reply": reply}
 
 @app.post("/api/line/bot", status_code=200)
 def line_bot_handle(payload: LineBotIn, _: None = Depends(require_n8n_secret)):
