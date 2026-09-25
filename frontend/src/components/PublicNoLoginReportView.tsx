@@ -115,6 +115,9 @@ const SearchIcon = () => (
 const STEPS = ['สแกน QR อุปกรณ์', 'กรอกอาการเสีย', 'ส่งคำร้อง'];
 
 export default function PublicNoLoginReportView() {
+  const [lineReportToken] = useState(() =>
+    new URLSearchParams(window.location.hash.slice(1)).get('line_link') ||
+    new URLSearchParams(window.location.search).get('line_link') || '');
   // อุปกรณ์ที่ได้จากการสแกน QR — ต้องมีก่อนจึงจะกรอกอาการและส่งคำร้องได้
   const [scanned, setScanned] = useState<ScannedDevice | null>(null);
 
@@ -144,6 +147,10 @@ export default function PublicNoLoginReportView() {
   const [submitted, setSubmitted] = useState(false);
   const [ticketId, setTicketId] = useState('');
   const [resultDevice, setResultDevice] = useState<any>(null);
+  const [lineReceiptSent, setLineReceiptSent] = useState(false);
+  const [scanLocation, setScanLocation] = useState<{ lat: number; lng: number; at: string; accuracy: number } | null>(null);
+  const [locationStatus, setLocationStatus] = useState('');
+  const [locationBusy, setLocationBusy] = useState(false);
   const [dupAlert, setDupAlert] = useState<{
     existing_ticket_no?: string;
     existing_status?: string;
@@ -291,6 +298,12 @@ export default function PublicNoLoginReportView() {
   // สแกน QR ด้วยแอปกล้องของเครื่อง แล้วเปิดลิงก์ ?publicreport=1&t=TOKEN → ล็อกอุปกรณ์ให้ทันที
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.has('line_link') || window.location.hash.includes('line_link=')) {
+      // Keep the bearer token in memory only; avoid leaking it through copied
+      // URLs, browser history, or referrers after this page has opened.
+      params.delete('line_link');
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
     const token = (
       params.get('t') || params.get('token') || params.get('qr') ||
       params.get('device') || params.get('device_id') || ''
@@ -310,6 +323,22 @@ export default function PublicNoLoginReportView() {
 
   const setField = (field: string, value: string) => {
     setForm((f) => ({ ...f, [field]: value }));
+  };
+
+  const requestScanLocation = () => {
+    if (!navigator.geolocation) { setLocationStatus('เบราว์เซอร์นี้ไม่รองรับตำแหน่ง'); return; }
+    setLocationBusy(true);
+    setLocationStatus('กำลังขออนุญาตตำแหน่ง...');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setScanLocation({ lat: position.coords.latitude, lng: position.coords.longitude,
+          at: new Date(position.timestamp).toISOString(), accuracy: position.coords.accuracy });
+        setLocationStatus('บันทึกตำแหน่งแล้ว จะส่งไปพร้อมใบงาน');
+        setLocationBusy(false);
+      },
+      () => { setScanLocation(null); setLocationStatus('ไม่ได้รับตำแหน่ง ยังแจ้งซ่อมได้ตามปกติ'); setLocationBusy(false); },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -363,12 +392,18 @@ export default function PublicNoLoginReportView() {
       reporter_type: form.reporter_type,
       priority: form.priority,
       attachments: photos,
+      line_report_token: lineReportToken || undefined,
+      scan_gps_lat: scanLocation?.lat ?? null,
+      scan_gps_lng: scanLocation?.lng ?? null,
+      scan_timestamp: scanLocation?.at || new Date().toISOString(),
+      scan_user_agent: navigator.userAgent,
     };
 
     try {
       const result = await api.publicReport(payload);
       setTicketId(result.ticket_id || '-');
       setResultDevice(result);
+      setLineReceiptSent(Boolean(result.line_receipt_sent));
       setSubmitted(true);
     } catch (err: any) {
       if (err?.status === 409 && err?.code === 'DUPLICATE_OPEN_TICKET') {
@@ -538,6 +573,11 @@ export default function PublicNoLoginReportView() {
               <p className="pr-success-meta">
                 เจ้าหน้าที่จะดำเนินการตรวจสอบและซ่อมแซมโดยเร็วที่สุด — จดเลขใบงานไว้เพื่อติดตามสถานะ
               </p>
+              {lineReportToken && <p className="pr-success-meta">
+                {lineReceiptSent
+                  ? 'ส่งเลขใบงานไปยังแชต LINE ที่เปิดลิงก์นี้แล้ว พิมพ์ “ติดตาม” หรือ “รายละเอียดใบงาน” ในแชตได้เลย'
+                  : 'ใบงานเชื่อมกับ LINE แล้ว แต่ส่งข้อความกลับไม่สำเร็จ โปรดเก็บเลขนี้ไว้และพิมพ์ “ติดตาม” ในแชต LINE'}
+              </p>}
               <div className="pr-success-actions">
                 <a className="ph-btn ph-btn-primary" href={`/?ticket=${encodeURIComponent(ticketId)}`}>
                   <SearchIcon />
@@ -553,6 +593,9 @@ export default function PublicNoLoginReportView() {
         ) : !scanned ? (
           /* ─── ขั้นที่ 1: สแกน QR ที่ตัวอุปกรณ์ (ทางเดียวในการระบุอุปกรณ์) ─── */
           <section className="ph-card pr-card">
+            {lineReportToken && <div className="ph-alert ph-alert-info" role="status">
+              เปิดจากแชต LINE แล้ว — กรุณาใช้ปุ่มสแกน QR ในหน้านี้ เพื่อให้เลขใบงานส่งกลับไปยังแชตเดิมอัตโนมัติ
+            </div>}
             <div className="ph-card-head">
               <h2 className="ph-card-title">สแกน QR ที่ตัวอุปกรณ์</h2>
               <span className="ph-card-tag">STEP 1</span>
@@ -744,6 +787,14 @@ export default function PublicNoLoginReportView() {
             )}
 
             <form className="pr-form" onSubmit={handleSubmit}>
+              <div className="pr-field">
+                <span className="pr-label">ตำแหน่งขณะสแกน QR (ไม่บังคับ)</span>
+                <p className="pr-note-hint">อนุญาตเฉพาะเมื่อต้องการให้เจ้าหน้าที่เห็นพิกัดขณะกรอกฟอร์ม ไม่ใช่หลักฐานยืนยันที่ตั้งอุปกรณ์</p>
+                <button type="button" className="ph-btn" onClick={requestScanLocation} disabled={locationBusy}>
+                  {locationBusy ? 'กำลังระบุตำแหน่ง...' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}
+                </button>
+                {locationStatus && <p className="pr-note-hint" role="status">{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</p>}
+              </div>
               <div className="pr-field">
                 <label className="pr-label" htmlFor="pr-title">
                   หัวข้อ/อาการ <span className="pr-req">*</span>

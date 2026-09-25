@@ -483,6 +483,11 @@ class PublicReportIn(BaseModel):
     reporter_type: Optional[str] = None
     priority: str = "normal"
     attachments: Optional[list[str]] = None
+    line_report_token: Optional[str] = Field(None, min_length=20, max_length=128)
+    scan_gps_lat: Optional[float] = Field(None, ge=-90, le=90)
+    scan_gps_lng: Optional[float] = Field(None, ge=-180, le=180)
+    scan_timestamp: Optional[datetime] = None
+    scan_user_agent: Optional[str] = Field(None, max_length=512)
 
 
 class PublicTicketNoteIn(BaseModel):
@@ -1926,6 +1931,8 @@ def public_report(
         )
     if not payload.title.strip():
         raise HTTPException(status_code=422, detail="กรุณาระบุหัวข้อ/อาการ (จำเป็น)")
+    if (payload.scan_gps_lat is None) != (payload.scan_gps_lng is None):
+        raise HTTPException(status_code=422, detail="ต้องส่งพิกัดละติจูดและลองจิจูดพร้อมกัน")
 
     priority = payload.priority if payload.priority in ("low", "normal", "high", "critical") else "normal"
 
@@ -1943,6 +1950,16 @@ def public_report(
         raise HTTPException(status_code=404, detail="Organization not found")
 
     try:
+        # LINE identity comes only from a one-time token issued inside the
+        # verified conversation, never from a browser-supplied user ID/phone.
+        from app.line_report_link import bind_report_link, lock_report_link
+        try:
+            report_link = lock_report_link(db, payload.line_report_token) if payload.line_report_token else None
+        except ValueError:
+            raise HTTPException(status_code=422, detail={
+                "code": "LINE_REPORT_LINK_EXPIRED",
+                "message": "ลิงก์เชื่อม LINE หมดอายุหรือใช้ไปแล้ว กรุณาขอลิงก์ใหม่ในแชต LINE",
+            })
         # ── Resolve/สร้าง device ──
         device = None
         room_text = ""
@@ -2048,9 +2065,14 @@ def public_report(
             channel="public",
             attachments=json.dumps(payload.attachments or [], ensure_ascii=False),
             sla_due_at=sla_due,
+            scan_gps_lat=payload.scan_gps_lat,
+            scan_gps_lng=payload.scan_gps_lng,
+            scan_timestamp=payload.scan_timestamp or now,
         )
         db.add(ticket)
         db.flush()
+        if report_link:
+            bind_report_link(report_link, ticket)
 
         update = TicketUpdate(
             ticket=ticket,
@@ -2061,9 +2083,25 @@ def public_report(
             author_role="reporter",
         )
         db.add(update)
+        db.add(ScanLog(
+            device_id=device.device_id,
+            scan_gps_lat=payload.scan_gps_lat,
+            scan_gps_lng=payload.scan_gps_lng,
+            scan_timestamp=ticket.scan_timestamp,
+            user_agent=payload.scan_user_agent,
+            ip_address=request.client.host if request.client else None,
+            ticket_id=ticket.ticket_id,
+        ))
 
         db.commit()
         db.refresh(ticket)
+
+        # The ticket is durable even if LINE is unavailable. The browser also
+        # shows the number, so a delivery failure cannot hide the result.
+        line_receipt_sent = False
+        if report_link:
+            from app.line_report_link import send_ticket_receipt
+            line_receipt_sent = send_ticket_receipt(report_link.line_user_id, ticket.ticket_id)
 
         # แจ้ง n8n (fire-and-forget)
         _notify_n8n("ticket.created", _ticket_event_payload(ticket))
@@ -2075,6 +2113,7 @@ def public_report(
             "room_name": room_text,
             "status": ticket.status,
             "organization_code": org.code,
+            "line_receipt_sent": line_receipt_sent,
             "message": "ส่งคำร้องแจ้งซ่อมเรียบร้อยแล้ว",
         }
     except HTTPException:

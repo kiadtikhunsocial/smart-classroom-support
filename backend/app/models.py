@@ -630,6 +630,20 @@ class LineSession(Base):
     )
 
 
+class LineReportLink(Base):
+    """Short-lived, single-use bridge from a verified LINE chat to the public QR form."""
+    __tablename__ = "line_report_links"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    line_user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ticket_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ChatbotLog(Base):
     __tablename__ = "chatbot_logs"
 

@@ -26,7 +26,7 @@ from app.line_bot import _gemini_text, send_line_push
 from app.chat_session import get_session, save_session, clear_session
 from app.gemini_service import match_article
 from app.models import SessionLocal
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 # ── ภาพสินค้าที่จะส่งพร้อมคำตอบ (thread-local ปลอดภัยต่อ concurrent LINE) ──
 _tls = threading.local()
@@ -205,15 +205,25 @@ def _is_clear_business(text: str) -> bool:
     return any(w in t for w in _CLEAR_BUSINESS_WORDS)
 
 
-def _form_fallback_text() -> str:
-    """ข้อความส่งต่อเมื่อแก้เบื้องต้นไม่ได้ — ให้แจ้งผ่านบอทตรงนี้ หรือสแกน QR บนตัวอุปกรณ์
-    (ไม่มีลิงก์ฟอร์มสาธารณะอีกต่อไป — ลูกค้าไม่ต้องออกจาก LINE ไปกรอกที่อื่น)"""
+def _form_fallback_text(user_id: str | None = None) -> str:
+    """Offer the QR form with a single-use LINE bridge when in a private chat."""
+    from app.line_report_link import issue_report_link
+    linked_url = issue_report_link(user_id) if user_id else None
+    public_url = REPORT_FORM_URL if (os.environ.get("ENVIRONMENT", "").lower() not in {"prod", "production"}
+                                      or REPORT_FORM_URL.startswith("https://")) else ""
+    link = linked_url or public_url
+    link_line = f"\n🔗 ฟอร์มสแกนแจ้งซ่อม: {link}\n" if link else "\n"
+    receipt_note = ("หลังส่งฟอร์ม บอทจะส่งเลข Ticket กลับมาที่แชตนี้ค่ะ" if linked_url
+                    else "หลังส่งฟอร์ม โปรดเก็บเลข Ticket ที่แสดงบนหน้าเว็บไว้ค่ะ")
+    expiry_note = ("ลิงก์เชื่อม LINE ใช้ได้ครั้งเดียวภายใน 30 นาที; ถ้าหมดอายุให้พิมพ์ 'ขอลิงก์แจ้งซ่อม' ใหม่ค่ะ"
+                   if linked_url else "หากต้องการแจ้งผ่านแชตแทน พิมพ์ 'แจ้งซ่อม' ได้ค่ะ")
     return (
         "เสียใจด้วยนะคะที่ยังหาวิธีแก้เบื้องต้นไม่เจอ 😔\n\n"
-        "แจ้งซ่อมได้ง่าย ๆ โดยไม่ต้องไปไหนไกลค่ะ:\n"
-        "📱 **สแกน QR Code ที่ติดอยู่บนตัวอุปกรณ์** แล้วกรอกข้อมูลตามฟอร์ม จะส่งงานให้ทีมช่างทันที\n"
+        "เปิดฟอร์มด้านล่าง แล้วใช้ปุ่มสแกน QR บนหน้าเว็บสแกนสติกเกอร์ที่อุปกรณ์ค่ะ:"
+        + link_line +
+        "กรอกข้อมูลและส่งคำร้องได้เลย " + receipt_note + "\n"
         "หรือจะแจ้งผ่านบอทตรงนี้เลยก็ได้ — พิมพ์ **'แจ้งซ่อม'** แล้วกรอกชื่อ/เบอร์/อาการ ให้เราสร้างงานให้ค่ะ\n\n"
-        "สแกน QR ที่ตัวเครื่อง → กรอกครบ → ทีมช่างรับเรื่องและไปดูแลถึงที่ให้ค่ะ"
+        + expiry_note
     )
 
 
@@ -388,7 +398,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
         if dv:
             session["saved_device"] = dv
         save_session(user_id, session)
-        return _form_fallback_text()
+        return _form_fallback_text(None if group else user_id)
 
     # ── ถ้าอยู่ระหว่างเก็บข้อมูล (collecting) → ถาม field ถัดไป ──
     if phase == "collecting":
@@ -427,7 +437,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
                     session.pop("_ask_field", None)
                     session.pop("_ask_tries", None)
                     save_session(user_id, session)
-                    return _form_fallback_text()
+                    return _form_fallback_text(None if group else user_id)
                 session["fields"] = fields
                 session["_ask_field"] = key
                 session["_ask_tries"] = tries
@@ -518,7 +528,7 @@ def _dispatch(user_id: str, text: str, reply_token: str, group: bool = False) ->
             from app.gemini_service import phrase_repair_reply
             natural = phrase_repair_reply("not_resolved", f"อาการเดิม: {original}")
             base = natural or "รับทราบค่ะ เสียใจด้วยนะคะที่ยังไม่หาย 😔 เดี๋ยวจะส่งลิงก์ฟอร์มแจ้งซ่อมให้ทีมช่างได้เลยค่ะ"
-            return (base + "\n\n" + _form_fallback_text() +
+            return (base + "\n\n" + _form_fallback_text(None if group else user_id) +
                     "\n\nช่วยประเมินคำแนะนำบอตได้ด้วย 'ประเมินบอท 2 ยังไม่หาย' (เปลี่ยนคะแนน 1–5 ได้ค่ะ)")
         if resolved:
             # ── บันทึก self-service จริง (ตาราง self_service_cases) ──
@@ -1083,12 +1093,15 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     def _finish(reply: str, resolved: bool = None, intent_used: str = intent,
                 qr: list | None = None, faq_cacheable: bool | None = None):
         reply = format_chatbot_reply(reply)
+        # The one-time bearer URL is meant only for the LINE reply. Conversation
+        # logs/history/FAQ data must not retain a usable copy of its token.
+        stored_reply = re.sub(r"([?&#]line_link=)[A-Za-z0-9_-]+", r"\1REDACTED", reply)
         # A: จดจำประวัติสนทนา (ย้อนหลัง ~6 รอบ) — ให้ตอบต่อเนื่องเมื่อลูกค้าเปลี่ยนหัวข้อ
         # กระทันหันหรือถามย้อนกลับสิ่งที่เพิ่งคุย (คล้าย AI ที่จดจำ sessions ได้ดี)
         try:
             s = get_session(user_id)
             hist = list(s.get("history") or [])
-            hist.append({"u": text, "b": reply})
+            hist.append({"u": text, "b": stored_reply})
             save_session(user_id, {**s, "history": hist[-6:]})
         except Exception:
             pass
@@ -1101,11 +1114,11 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
                 pass
         # B: log ทุกสนทนา
         try:
-            log_conversation(user_id, text, reply, intent_used, resolved)
+            log_conversation(user_id, text, stored_reply, intent_used, resolved)
         except Exception:
             pass
         try:
-            record_faq_interaction(text, reply, intent, cacheable=faq_cacheable)
+            record_faq_interaction(text, stored_reply, intent, cacheable=faq_cacheable)
         except Exception:
             pass
         return reply
@@ -1122,6 +1135,20 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
     if is_rating_message(text):
         return _finish(record_rating(user_id, text, profile.get("phone"), profile.get("last_ticket_id")),
                        intent_used="service_rating", faq_cacheable=False)
+
+    # Deterministic customer-service routes: never let Gemini infer ownership
+    # or invent a ticket's progress. A new form link is only issued in a 1:1 chat.
+    if re.fullmatch(r"(?:ขอ)?(?:ลิงก์|ลิ้ง|link)(?:หน้า)?แจ้งซ่อม(?:ใหม่)?", text.strip(), re.I):
+        return _finish(_form_fallback_text(None if group else user_id),
+                       intent_used="repair_form_link", faq_cacheable=False)
+    if (not group and (_TICKET_NO_IN_TEXT.search(text) or
+                       re.search(r"(?:รายละเอียด|สถานะ|คืบหน้า|ติดตาม|เลข).*(?:ใบงาน|ticket|งานซ่อม)|"
+                                 r"(?:ใบงาน|ticket|งานซ่อม).*(?:รายละเอียด|สถานะ|คืบหน้า|ติดตาม)|"
+                                 r"^(?:งานของฉัน|ใบงานของฉัน|ติดตาม)$", text, re.I))):
+        return _finish(_answer_track(user_id, text), intent_used="track", faq_cacheable=False)
+    if (not group and phase in {"new", "done", "track_pending"} and not session.get("resolving")
+            and re.search(r"(?:ซ่อม|ช่าง|งาน).*(?:ถึงไหน|คืบหน้า|เมื่อไหร่เสร็จ|เสร็จหรือยัง)", text)):
+        return _finish(_answer_track(user_id, text), intent_used="track", faq_cacheable=False)
 
     # Warranty facts are always read from the asset register after an exact ID/serial.
     # Handle this before NLU/FAQ/AI so neither a cached nor generated reply can guess.
@@ -1525,15 +1552,16 @@ _TICKET_NO_IN_TEXT = re.compile(
 
 
 def _answer_track(user_id: str, user_msg: str) -> str:
-    """ติดตามสถานะจาก ticket_id หรือ device_id โดยอ่านจาก DB จริง"""
+    """Show current DB facts only for tickets bound to this verified LINE ID."""
     sess = get_session(user_id)
     # app.main import ไฟล์นี้ จึงต้อง import ย้อนกลับในฟังก์ชัน (เหมือน _create_ticket_from_fields)
     from app.main import TICKET_NO_EXAMPLE, _ticket_no_candidates
     ticket_match = _TICKET_NO_IN_TEXT.search(user_msg)
     device_match = re.search(r"\b(?:TEST|DEV|SCH|ROOM)[A-Z0-9_-]*\d+\b", user_msg, re.IGNORECASE)
+    from app.models import Device, RepairTicket, Room
     db = SessionLocal()
     try:
-        row = None
+        ticket = None
         lookup_label = ""
         if ticket_match:
             lookup_label = ticket_match.group(0)
@@ -1551,42 +1579,42 @@ def _answer_track(user_id: str, user_msg: str) -> str:
                         "(ตัวตรวจสอบตัวท้ายไม่ตรงกับตัวเลขข้างหน้า) "
                         f"รูปแบบที่ถูกต้องเป็นแบบนี้ค่ะ {TICKET_NO_EXAMPLE} — "
                         "หรือพิมพ์รหัสอุปกรณ์บนสติกเกอร์มาก็ได้ค่ะ")
-            # ค้นด้วยการเทียบค่าตรงตัวหลายค่า ไม่ใช้ ILIKE เพราะจุด/ขีดในเลขไม่ใช่ wildcard
-            # แต่ _ ใน ILIKE จะกลายเป็น wildcard ตัวอักษรเดียวโดยไม่ตั้งใจ
-            params = {f"t{i}": c for i, c in enumerate(candidates or [lookup_label])}
-            placeholders = ", ".join(f":{key}" for key in params)
-            row = db.execute(text(
-                "SELECT ticket_id, title, status, device_id, reporter_name, created_at, assigned_to "
-                f"FROM repair_tickets WHERE ticket_id IN ({placeholders})"), params).mappings().first()
-            if not row:
-                save_session(user_id, {**sess, "phase": "new", "track_pending": False})
-                return f"ไม่พบ Ticket **{lookup_label}** ในระบบนะคะ ลองเช็คเลขให้ถูกต้อง หรือพิมพ์ 'แจ้งซ่อม' เพื่อสร้างใหม่ค่ะ"
+            ticket = db.execute(select(RepairTicket).where(
+                RepairTicket.ticket_id.in_(candidates or [lookup_label]),
+                RepairTicket.line_user_id == user_id,
+            ).limit(1)).scalars().first()
         elif device_match:
             lookup_label = device_match.group(0)
-            row = db.execute(text(
-                "SELECT ticket_id, title, status, device_id, reporter_name, created_at, assigned_to "
-                "FROM repair_tickets WHERE device_id ILIKE :d ORDER BY created_at DESC LIMIT 1"),
-                {"d": lookup_label}).mappings().first()
-            if not row:
-                save_session(user_id, {**sess, "phase": "new", "track_pending": False})
-                return f"ยังไม่พบงานซ่อมของอุปกรณ์ **{lookup_label}** ในระบบนะคะ"
+            ticket = db.execute(select(RepairTicket).where(
+                RepairTicket.device_id == lookup_label.upper(),
+                RepairTicket.line_user_id == user_id,
+            ).order_by(RepairTicket.created_at.desc()).limit(1)).scalar_one_or_none()
         else:
-            if sess.get("track_pending"):
-                return ("กรุณาพิมพ์ **เลข Ticket** หรือรหัสอุปกรณ์ เช่น "
-                        f"{TICKET_NO_EXAMPLE} / TEST1-B1-R101-DISP-01 ค่ะ")
-            save_session(user_id, {**sess, "phase": "track_pending", "track_pending": True})
-            return "📋 อยากเช็คสถานะงานใช่ไหมคะ? กรุณาพิมพ์ **เลข Ticket** หรือ **รหัสอุปกรณ์** แล้วส่งมาได้เลยค่ะ"
+            ticket = db.execute(select(RepairTicket).where(
+                RepairTicket.line_user_id == user_id,
+            ).order_by(RepairTicket.created_at.desc()).limit(1)).scalar_one_or_none()
 
         save_session(user_id, {**sess, "phase": "new", "track_pending": False})
-        status = row["status"]
+        if not ticket:
+            return ("ยังไม่พบใบงานที่ผูกกับ LINE นี้ค่ะ หากแจ้งผ่านเว็บโดยไม่ได้เปิดจากลิงก์ในแชต "
+                    "ระบบจะไม่เดาว่าใบงานเป็นของคุณจากชื่อหรือเบอร์โทรนะคะ "
+                    "พิมพ์ 'ขอลิงก์แจ้งซ่อม' เพื่อเริ่มใบงานที่เชื่อม LINE ได้ค่ะ")
+        status = ticket.status
         label = _TICKET_STATUS_TH.get(status, status)
-        if status == "assigned" and row["assigned_to"]:
-            label = f"👷 รับงานแล้ว โดย {row['assigned_to']}"
-        return (f"📋 **{row['ticket_id']}**\n"
-                f"เรื่อง: {row['title']}\n"
-                f"อุปกรณ์: {row['device_id'] or '-'}\n"
-                f"สถานะ: {label}\n"
-                f"แจ้งเมื่อ: {str(row['created_at'])[:16]}\n\n"
-                "มีเรื่องอื่นให้ช่วยไหมคะ? พิมพ์ 'สินค้า' หรือ 'แจ้งซ่อม' ได้เลย")
+        device = db.execute(select(Device).where(Device.device_id == ticket.device_id)).scalar_one_or_none()
+        room = db.get(Room, device.room_id) if device and device.room_id else None
+        details = [f"📋 **{ticket.ticket_id}**", f"เรื่อง: {ticket.title}",
+                   f"อุปกรณ์: {ticket.device_id or '-'}"]
+        if room:
+            details.append(f"ห้อง: {room.name or room.code}")
+        details.extend([f"สถานะ: {label}", f"แจ้งเมื่อ: {str(ticket.created_at)[:16]}"])
+        if ticket.assigned_to:
+            details.append(f"ผู้รับผิดชอบ: {ticket.assigned_to}")
+        if ticket.updated_at:
+            details.append(f"อัปเดตล่าสุด: {str(ticket.updated_at)[:16]}")
+        if status in {"resolved", "closed"} and ticket.solution:
+            details.append(f"วิธีแก้ไข: {ticket.solution[:500]}")
+        details.append("\nถาม 'รายละเอียดใบงาน' ได้ทุกเมื่อ ข้อมูลดึงจากระบบล่าสุดค่ะ")
+        return "\n".join(details)
     finally:
         db.close()
