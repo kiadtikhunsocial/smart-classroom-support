@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../api/client';
+import DetailField from './DetailField';
 import '../styles/devices-page.css';
 
 const DEVICE_TYPES = [
@@ -87,22 +88,8 @@ const deviceAgeText = (v: any): string => {
 };
 
 /** แถวข้อมูล label/value ในแผงรายละเอียด */
-function DetailRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)' }}>{label}</span>
-      <span
-        style={{
-          fontSize: '0.85rem',
-          fontWeight: 600,
-          overflowWrap: 'anywhere',
-          fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined,
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
+function DetailRow({ label, value, mono, wide }: { label: string; value: React.ReactNode; mono?: boolean; wide?: boolean }) {
+  return <DetailField label={label} value={value} mono={mono} wide={wide} />;
 }
 
 // รหัสอุปกรณ์ต้องขึ้นต้นด้วยรหัสโรงเรียน — logic ต้องให้ผลตรงกับ _org_code_token
@@ -714,9 +701,9 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
       {/* แผงรายละเอียดอุปกรณ์ */}
       {detailDevice && (
         <div className="panel-overlay" onClick={closeDetail}>
-          <div className="repair-panel" style={{ width: 640, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()}>
+          <div className="repair-panel detail-sheet" style={{ width: 740, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="device-detail-title">
             <div className="repair-panel-header">
-              <h3 className="repair-panel-title">รายละเอียดอุปกรณ์ — {detailDevice.device_id}</h3>
+              <h3 className="repair-panel-title" id="device-detail-title">รายละเอียดอุปกรณ์</h3>
               <button className="repair-panel-close" onClick={closeDetail} aria-label="ปิด" title="ปิด">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -732,48 +719,37 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
               )}
 
               {detailError && (
-                <div style={{ padding: '8px 12px', background: 'var(--color-warning-light, rgba(180,83,9,0.12))', color: 'var(--color-warning, #b45309)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', marginBottom: 12 }}>
+                <div className="detail-sheet-warning" role="alert">
                   {detailError}
                 </div>
               )}
 
-              {detailView && (
+              {!detailLoading && detailView && (
                 <>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
-                    {detailIsDemo && <span className="badge badge-pending">ข้อมูลตัวอย่าง · ต้องตรวจสอบก่อนใช้งานจริง</span>}
-                    <span className={`badge badge-${detailView.status}`}>
-                      {DEVICE_STATUS_LABELS[detailView.status] || detailView.status}
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: WARRANTY_COLOR[detailWarranty.status] }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} aria-hidden="true" />
-                      {detailWarranty.label}
-                    </span>
+                  <div className="detail-sheet-identity">
+                    <p className="detail-sheet-kicker">{detailView.device_id}</p>
+                    <h4 className="detail-sheet-name">{detailView.device_type}</h4>
+                    <p className="detail-sheet-subtitle">{[detailView.brand, detailView.model].filter(Boolean).join(' ') || 'ไม่ระบุยี่ห้อ/รุ่น'}</p>
+                    <div className="detail-sheet-statuses">
+                      {detailIsDemo && <span>ข้อมูลตัวอย่าง · ตรวจสอบก่อนใช้งานจริง</span>}
+                      <span>{DEVICE_STATUS_LABELS[detailView.status] || detailView.status}</span>
+                      <span>{detailWarranty.label}</span>
+                    </div>
                   </div>
 
-                  <div style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 2 }}>
-                    {detailView.device_type}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginBottom: 16 }}>
-                    {[detailView.brand, detailView.model].filter(Boolean).join(' ') || 'ไม่ระบุยี่ห้อ/รุ่น'}
-                  </div>
-
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>
-                    ข้อมูลทะเบียนทรัพย์สิน
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
+                  <section className="detail-sheet-section"><h4>ข้อมูลเครื่องและประกัน</h4>
+                  <dl className="detail-sheet-grid">
                     <DetailRow label="รหัสอุปกรณ์" value={detailView.device_id} mono />
                     <DetailRow label="หมายเลขสินค้า (Serial)" value={detailView.serial_number || 'ไม่ระบุ'} mono />
                     <DetailRow label="เฟิร์มแวร์" value={detailView.firmware_version || '—'} />
                     <DetailRow label="วันที่จัดซื้อ" value={fmtDateTh(detailView.purchase_date)} />
                     <DetailRow label="อายุใช้งาน" value={deviceAgeText(detailView.purchase_date)} />
                     <DetailRow label="ประกันสิ้นสุด" value={fmtDateTh(detailView.warranty_until)} />
-                    <DetailRow label="รายละเอียดประกันสำหรับลูกค้า" value={detailView.warranty_details || 'ยังไม่ระบุ'} />
-                  </div>
+                    <DetailRow label="รายละเอียดประกันสำหรับลูกค้า" value={detailView.warranty_details || 'ยังไม่ระบุ'} wide />
+                  </dl></section>
 
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>
-                    ตำแหน่งติดตั้ง
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
+                  <section className="detail-sheet-section"><h4>ตำแหน่งติดตั้ง</h4>
+                  <dl className="detail-sheet-grid">
                     <DetailRow label="โรงเรียน" value={detailView.organization_name || '—'} />
                     <DetailRow label="รหัสโรงเรียน" value={detailView.organization_code || '—'} mono />
                     <DetailRow
@@ -805,48 +781,48 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                       }
                     />
                     <DetailRow label="QR ผูกกับเครื่อง" value={detailView.qr_token ? 'มีแล้ว' : 'ยังไม่มี'} />
-                  </div>
+                  </dl></section>
 
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>
-                    งานซ่อม
-                  </div>
+                  <section className="detail-sheet-section"><h4>งานซ่อม</h4>
                   {detailView.has_open_ticket && detailOpenTicket ? (
-                    <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--color-danger-light, rgba(185,28,28,0.10))', color: 'var(--color-danger, #b91c1c)', fontSize: '0.82rem', marginBottom: 10 }}>
+                    <div className="detail-sheet-warning">
                       มีใบงานค้างอยู่ <strong>{detailOpenTicket.ticket_id || detailOpenTicket.ticket_no}</strong>
                       {detailOpenTicket.status ? ` · ${TICKET_STATUS_LABELS[detailOpenTicket.status] || detailOpenTicket.status}` : ''}
                       {detailOpenTicket.title ? ` — ${detailOpenTicket.title}` : ''}
-                      <div style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: 2 }}>
+                      <div className="detail-sheet-help">
                         แจ้งซ้ำไม่ได้ ให้ติดตามจากใบงานนี้
                       </div>
                     </div>
                   ) : (
-                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginBottom: 10 }}>
+                    <p className="detail-sheet-empty">
                       ไม่มีใบงานค้างในขณะนี้
-                    </div>
+                    </p>
                   )}
 
                   {detailRecent ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
+                    <dl className="detail-sheet-grid" style={{ marginTop: 15 }}>
                       <DetailRow label="ใบงานล่าสุด" value={detailRecent.ticket_id} mono />
                       <DetailRow label="สถานะ" value={TICKET_STATUS_LABELS[detailRecent.status] || detailRecent.status} />
                       <DetailRow label="อาการที่แจ้ง" value={detailRecent.title || '—'} />
                       <DetailRow label="แจ้งเมื่อ" value={fmtDateTimeTh(detailRecent.created_at)} />
                       <DetailRow label="ปิดงานเมื่อ" value={fmtDateTimeTh(detailRecent.closed_at)} />
-                    </div>
+                    </dl>
                   ) : (
-                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-tertiary)', marginBottom: 18 }}>
+                    <p className="detail-sheet-empty" style={{ marginTop: 12 }}>
                       ยังไม่เคยมีประวัติแจ้งซ่อมของเครื่องนี้
-                    </div>
+                    </p>
                   )}
+                  </section>
 
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>
-                    หมายเหตุ / ข้อมูลจัดซื้อ
-                  </div>
-                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.82rem', lineHeight: 1.6, color: 'var(--color-text-secondary)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                  <section className="detail-sheet-section"><h4>หมายเหตุ / ข้อมูลจัดซื้อ</h4>
+                  <div className="detail-sheet-note">
                     {detailView.notes || 'ไม่มีหมายเหตุ'}
                   </div>
-
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
+                  </section>
+                </>
+              )}
+            </div>
+            {!detailLoading && detailView && <div className="detail-sheet-footer">
                     <button
                       className="btn btn-secondary"
                       onClick={() => { const d = detailView; closeDetail(); showQr(d); }}
@@ -862,10 +838,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                       </button>
                     )}
                     <button className="btn btn-ghost" onClick={closeDetail}>ปิด</button>
-                  </div>
-                </>
-              )}
-            </div>
+                  </div>}
           </div>
         </div>
       )}
@@ -917,7 +890,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                           type="button"
                           onClick={() => openDetail(d)}
                           title="ดูรายละเอียดอุปกรณ์"
-                          style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--color-primary, #2563eb)', cursor: 'pointer', textDecoration: 'underline' }}
+                          className="device-id-link"
                         >
                           {d.device_id}
                         </button>

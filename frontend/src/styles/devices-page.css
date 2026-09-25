@@ -36,6 +36,24 @@
   min-width: 1160px;
 }
 
+.devices-page .device-id-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #171717;
+  font: inherit;
+  font-weight: 650;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.devices-page .device-id-link:hover { text-decoration-thickness: 2px; }
+.devices-page .device-id-link:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+[data-mode='dark'] .devices-page .device-id-link,
+.theme-dark .devices-page .device-id-link { color: #f5f5f5; }
+
 @media (max-width: 768px) {
   .devices-page .page-section { padding: 10px; }
 }

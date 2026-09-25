@@ -11,6 +11,7 @@ import ScanPage from './components/ScanPage';
 import PublicNoLoginReportView from './components/PublicNoLoginReportView';
 import PublicHomeView from './components/PublicHomeView';
 import DevicesPage from './components/DevicesPage';
+import DetailField from './components/DetailField';
 import AIChatWidget from './components/AIChatWidget';
 import UsersPage from './components/UsersPage';
 import ReportsPage from './components/ReportsPage';
@@ -1232,6 +1233,15 @@ const STATUS_LABELS_TICKET: Record<string, string> = {
   resolved: 'ซ่อมเสร็จ รอยืนยัน (Resolved)',
   closed: 'ปิดงาน (Closed)', cancelled: 'ยกเลิก (Cancelled)',
 };
+const ticketDetailStatus = (value: string | null | undefined) =>
+  value ? (STATUS_LABELS_TICKET[value] || value).split(' (')[0] : '—';
+const ticketDetailPriority: Record<string, string> = { low: 'ต่ำ', normal: 'ปกติ', high: 'สูง', critical: 'เร่งด่วนมาก' };
+const ticketDetailChannel: Record<string, string> = { qr: 'สแกน QR', line: 'LINE OA', web: 'เว็บไซต์', manual: 'เจ้าหน้าที่', phone: 'โทรศัพท์' };
+const ticketDetailDate = (value: string | null | undefined) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+};
 const ALL_STATUSES = Object.keys(STATUS_LABELS_TICKET);
 
 function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
@@ -1551,40 +1561,84 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
         </div>
       </div>
       {detailTicket && <div className="panel-overlay" onClick={closeTicketDetail}>
-        <div className="repair-panel" style={{ width: 680, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`รายละเอียด Ticket ${detailTicket.ticket_id}`}>
-          <div className="repair-panel-header"><h3 className="repair-panel-title">Ticket {detailTicket.ticket_id}</h3><button className="repair-panel-close" onClick={closeTicketDetail} aria-label="ปิด">×</button></div>
-          <div className="repair-panel-body" style={{ overflowY: 'auto' }}>
-            {detailLoading && <p>กำลังโหลดรายละเอียด...</p>}
-            {detailError && <p role="alert">{detailError}</p>}
-            <h3>{detailTicket.title}</h3>
-            <div className="ticket-detail-grid">
-              {([
-                ['สถานะ', STATUS_LABELS_TICKET[detailTicket.status] || detailTicket.status],
-                ['ความเร่งด่วน', detailTicket.priority], ['อุปกรณ์', detailTicket.device_label || detailTicket.device_id],
-                ['รหัสอุปกรณ์', detailTicket.device_id], ['โรงเรียน', detailTicket.organization_name],
-                ['ผู้แจ้ง', detailTicket.reporter_name], ['เบอร์ติดต่อ', detailTicket.reporter_phone],
-                ['ผู้รับผิดชอบ', detailTicket.assigned_to], ['ช่องทาง', detailTicket.channel],
-                ['สร้างเมื่อ', detailTicket.created_at && new Date(detailTicket.created_at).toLocaleString('th-TH')],
-                ['อัปเดตล่าสุด', detailTicket.updated_at && new Date(detailTicket.updated_at).toLocaleString('th-TH')],
-                ['กำหนด SLA', detailTicket.sla_due_at && new Date(detailTicket.sla_due_at).toLocaleString('th-TH')],
-              ] as [string, any][]).map(([label, value]) => <div key={label}><small>{label}</small><div>{value || '—'}</div></div>)}
+        <div className="repair-panel detail-sheet" style={{ width: 760, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="ticket-detail-title">
+          <div className="repair-panel-header"><h3 className="repair-panel-title" id="ticket-detail-title">รายละเอียดใบงาน</h3><button className="repair-panel-close" onClick={closeTicketDetail} aria-label="ปิด">×</button></div>
+          <div className="repair-panel-body">
+            {detailLoading && <p className="detail-sheet-help" role="status">กำลังโหลดข้อมูลล่าสุด…</p>}
+            {detailError && <p className="detail-sheet-warning" role="alert">{detailError}</p>}
+            {!detailLoading && <>
+            <div className="detail-sheet-identity">
+              <p className="detail-sheet-kicker">TICKET {detailTicket.ticket_id}</p>
+              <h4 className="detail-sheet-name">{detailTicket.title || 'ไม่ได้ระบุหัวข้อ'}</h4>
+              <div className="detail-sheet-statuses">
+                <span>{ticketDetailStatus(detailTicket.status)}</span>
+                <span>ความเร่งด่วน {ticketDetailPriority[detailTicket.priority] || detailTicket.priority || '—'}</span>
+              </div>
             </div>
-            <h4>อาการ / รายละเอียด</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
-            <h4>ตำแหน่งขณะแจ้งผ่าน QR</h4>
-            {detailTicket.scan_gps_lat != null && detailTicket.scan_gps_lng != null ? (
-              <p>
-                พิกัดที่เบราว์เซอร์ผู้แจ้งอนุญาต: {Number(detailTicket.scan_gps_lat).toFixed(6)}, {Number(detailTicket.scan_gps_lng).toFixed(6)}
-                {detailTicket.scan_timestamp && <> · {new Date(detailTicket.scan_timestamp).toLocaleString('th-TH')}</>}
-                {' · '}<a href={`https://www.google.com/maps?q=${encodeURIComponent(`${detailTicket.scan_gps_lat},${detailTicket.scan_gps_lng}`)}`} target="_blank" rel="noopener noreferrer">เปิดแผนที่ ↗</a>
-              </p>
-            ) : <p>ไม่มีพิกัดจากการสแกนครั้งนี้ (ลูกค้าไม่ได้อนุญาตตำแหน่งหรือแจ้งจากช่องทางอื่น)</p>}
-            <small>พิกัดจากอุปกรณ์ผู้แจ้ง อาจคลาดเคลื่อนและไม่ใช่หลักฐานยืนยันตำแหน่งอุปกรณ์</small>
-            {detailTicket.root_cause && <><h4>สาเหตุ</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.root_cause}</p></>}
-            {detailTicket.solution && <><h4>วิธีแก้ไข</h4><p style={{ whiteSpace: 'pre-wrap' }}>{detailTicket.solution}</p></>}
-            <h4>ประวัติสถานะ</h4>{detailHistory.length ? detailHistory.map((h, i) => <p key={h.id || i}>{h.created_at ? new Date(h.created_at).toLocaleString('th-TH') : ''} · {STATUS_LABELS_TICKET[h.to_status] || h.to_status || 'อัปเดต'}{h.note ? ` — ${h.note}` : ''}</p>) : <p>ไม่มีประวัติสถานะ</p>}
-            <h4>ความเห็น</h4>{detailComments.length ? detailComments.map((c, i) => <p key={c.id || i}>{c.author_name || 'เจ้าหน้าที่'}{c.is_internal ? ' (ภายใน)' : ''}: {c.note || '—'}</p>) : <p>ไม่มีความเห็น</p>}
-            <h4>ไฟล์แนบ</h4>{detailAttachments.length ? detailAttachments.map((a, i) => <p key={a.id || i}><a href={a.file_url || a.url} target="_blank" rel="noreferrer">{a.file_name || a.filename || `ไฟล์ ${i + 1}`}</a></p>) : <p>ไม่มีไฟล์แนบ</p>}
+
+            <section className="detail-sheet-section"><h4>สถานะและเวลา</h4>
+              <dl className="detail-sheet-grid">
+                <DetailField label="สถานะ" value={ticketDetailStatus(detailTicket.status)} />
+                <DetailField label="ความเร่งด่วน" value={ticketDetailPriority[detailTicket.priority] || detailTicket.priority} />
+                <DetailField label="แจ้งเมื่อ" value={ticketDetailDate(detailTicket.created_at)} />
+                <DetailField label="อัปเดตล่าสุด" value={ticketDetailDate(detailTicket.updated_at)} />
+                <DetailField label="กำหนด SLA" value={ticketDetailDate(detailTicket.sla_due_at)} />
+                <DetailField label="ช่องทาง" value={ticketDetailChannel[detailTicket.channel] || detailTicket.channel} />
+              </dl>
+            </section>
+
+            <section className="detail-sheet-section"><h4>อุปกรณ์และผู้เกี่ยวข้อง</h4>
+              <dl className="detail-sheet-grid">
+                <DetailField label="อุปกรณ์" value={detailTicket.device_label || detailTicket.device_id} wide />
+                <DetailField label="รหัสอุปกรณ์" value={detailTicket.device_id} mono />
+                <DetailField label="โรงเรียน" value={detailTicket.organization_name} />
+                <DetailField label="ผู้แจ้ง" value={detailTicket.reporter_name} />
+                <DetailField label="เบอร์ติดต่อ" value={detailTicket.reporter_phone} />
+                <DetailField label="ผู้รับผิดชอบ" value={detailTicket.assigned_to} />
+              </dl>
+            </section>
+
+            <section className="detail-sheet-section"><h4>อาการ / รายละเอียดที่แจ้ง</h4>
+              <p className="detail-sheet-note">{detailTicket.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
+            </section>
+
+            <section className="detail-sheet-section"><h4>ตำแหน่งขณะแจ้งผ่าน QR</h4>
+              {detailTicket.scan_gps_lat != null && detailTicket.scan_gps_lng != null ? (
+                <p className="detail-sheet-note">
+                  {Number(detailTicket.scan_gps_lat).toFixed(6)}, {Number(detailTicket.scan_gps_lng).toFixed(6)}
+                  {detailTicket.scan_timestamp && <> · {ticketDetailDate(detailTicket.scan_timestamp)}</>}
+                  {' · '}<a href={`https://www.google.com/maps?q=${encodeURIComponent(`${detailTicket.scan_gps_lat},${detailTicket.scan_gps_lng}`)}`} target="_blank" rel="noopener noreferrer">เปิดแผนที่ ↗</a>
+                </p>
+              ) : <p className="detail-sheet-empty">ไม่มีพิกัดจากการสแกนครั้งนี้ หรือแจ้งจากช่องทางอื่น</p>}
+              <p className="detail-sheet-help">พิกัดจากอุปกรณ์ผู้แจ้งอาจคลาดเคลื่อน ไม่ใช่หลักฐานยืนยันตำแหน่งอุปกรณ์</p>
+            </section>
+
+            {(detailTicket.root_cause || detailTicket.solution) && <section className="detail-sheet-section"><h4>ผลการดำเนินงาน</h4>
+              <dl className="detail-sheet-grid">
+                {detailTicket.root_cause && <DetailField label="สาเหตุ" value={detailTicket.root_cause} wide />}
+                {detailTicket.solution && <DetailField label="วิธีแก้ไข" value={detailTicket.solution} wide />}
+              </dl>
+            </section>}
+
+            <section className="detail-sheet-section"><h4>ประวัติสถานะ</h4>
+              {detailHistory.length ? <ul className="detail-sheet-list">{detailHistory.map((h, i) => <li key={h.id || i}>
+                {h.created_at && <time>{ticketDetailDate(h.created_at)}</time>}
+                <strong>{ticketDetailStatus(h.to_status)}</strong>{h.note ? ` — ${h.note}` : ''}
+              </li>)}</ul> : <p className="detail-sheet-empty">ไม่มีประวัติสถานะ</p>}
+            </section>
+            <section className="detail-sheet-section"><h4>ความเห็น</h4>
+              {detailComments.length ? <ul className="detail-sheet-list">{detailComments.map((c, i) => <li key={c.id || i}>
+                <strong>{c.author_name || 'เจ้าหน้าที่'}{c.is_internal ? ' (ภายใน)' : ''}</strong>: {c.note || '—'}
+              </li>)}</ul> : <p className="detail-sheet-empty">ไม่มีความเห็น</p>}
+            </section>
+            <section className="detail-sheet-section"><h4>ไฟล์แนบ</h4>
+              {detailAttachments.length ? <ul className="detail-sheet-list">{detailAttachments.map((a, i) => <li key={a.id || i}>
+                <a href={a.file_url || a.url} target="_blank" rel="noreferrer">{a.file_name || a.filename || `ไฟล์ ${i + 1}`}</a>
+              </li>)}</ul> : <p className="detail-sheet-empty">ไม่มีไฟล์แนบ</p>}
+            </section>
+            </>}
           </div>
+          <div className="detail-sheet-footer"><button className="btn btn-secondary" onClick={closeTicketDetail}>ปิดรายละเอียด</button></div>
         </div>
       </div>}
     </div>
