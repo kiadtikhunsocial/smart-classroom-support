@@ -10,6 +10,16 @@ from app import pm_rules
 _INTENT = re.compile(r"ประกัน|warranty|เคลม", re.IGNORECASE)
 _CODE = re.compile(r"(?<![A-Za-z0-9_-])[A-Za-z0-9][A-Za-z0-9_-]{4,63}(?![A-Za-z0-9_-])")
 _IGNORED = {"warranty", "device", "serial", "สินค้า", "ประกัน"}
+_CLAIM = re.compile(r"เคลม|\bclaim\b", re.IGNORECASE)
+_SYMPTOM = re.compile(r"เสีย|พัง|ไม่ติด|ไม่ทำงาน|ไม่มีภาพ|ไม่มีเสียง|ค้าง|ดับ|ชำรุด|แตก|ร้าว|ร้อน|ไหม้|เชื่อมต่อไม่ได้|สัญญาณหาย", re.IGNORECASE)
+
+
+def is_claim_request(message: str) -> bool:
+    return bool(_CLAIM.search(message or ""))
+
+
+def has_claim_symptom(message: str) -> bool:
+    return bool(_SYMPTOM.search(message or ""))
 
 
 def is_warranty_question(message: str) -> bool:

@@ -32,6 +32,8 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
   const [form, setForm] = useState(EMPTY);
   const [selectedTask, setSelectedTask] = useState('global_style');
   const [guidance, setGuidance] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -131,6 +133,19 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
 
     {tab === 'prompts' && <section className="panel-card studio-prompt"><h2>คำแนะนำเพิ่มเติมสำหรับ AI</h2>
       <p className="studio-help">เลือกงานที่ต้องการปรับ คำแนะนำนี้ใช้ทันทีหลังบันทึกโดยไม่ต้อง deploy ใหม่ แต่ไม่สามารถเปลี่ยนกฎความปลอดภัยหรือข้อมูลจริงจากฐานข้อมูลได้</p>
+      <button type="button" className="btn btn-secondary" onClick={() => setShowImport((open) => !open)} aria-expanded={showImport}>นำเข้า prompt จาก AI อื่น</button>
+      {showImport && <div className="studio-form" style={{ margin: '12px 0', padding: 16, border: '1px solid var(--color-border)', borderRadius: 12 }}>
+        <p className="studio-help">วางข้อความหรือเลือกไฟล์ .txt ที่ได้จาก AI อื่น ตรวจและปรับก่อนนำเข้า ระบบจะใส่ในช่องคำแนะนำเท่านั้น ยังไม่เผยแพร่จนกว่าจะกดบันทึกเอง อย่าใส่รหัสผ่านหรือข้อมูลส่วนบุคคล</p>
+        <label>ข้อความจาก AI อื่น<textarea className="form-input" rows={7} maxLength={10000} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="วาง prompt ที่ต้องการนำมาปรับใช้" /></label>
+        <input type="file" accept=".txt,text/plain" aria-label="เลือกไฟล์ prompt แบบข้อความ" onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          if (file.size > 20_000) { setError('ไฟล์ต้องไม่เกิน 20 KB'); return; }
+          setImportText((await file.text()).slice(0, 10000)); setError('');
+        }} />
+        <button type="button" className="btn btn-secondary" disabled={!importText.trim() || importText.trim().length > 2000} onClick={() => { setGuidance(importText.trim()); setShowImport(false); setNotice('นำเข้าช่องแก้ไขแล้ว โปรดตรวจข้อความ เลือกประเภทงาน และกดบันทึกเมื่อต้องการเปิดใช้'); }}>ใส่ในช่องคำแนะนำ</button>
+        {importText.trim().length > 2000 && <p className="studio-help" role="alert">ย่อข้อความให้เหลือไม่เกิน 2,000 ตัวอักษรก่อนนำเข้า</p>}
+      </div>}
       <form onSubmit={savePrompt} className="studio-form">
         <label>ประเภทงาน<select className="form-select" value={selectedTask} onChange={(e) => setSelectedTask(e.target.value)}>{prompts.map((p) => <option key={p.task} value={p.task}>{PROMPT_LABELS[p.task] || p.task}</option>)}</select></label>
         <label>คำแนะนำเพิ่มเติม<textarea className="form-input" rows={10} maxLength={2000} value={guidance} onChange={(e) => setGuidance(e.target.value)} placeholder="เช่น ตอบอย่างกระชับ ใช้ภาษาไทยสุภาพ และถามทีละประเด็น" /></label>
@@ -142,7 +157,7 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
 
     {tab === 'test' && <section className="panel-card studio-prompt"><h2>ทดลองถามก่อนเผยแพร่</h2>
       <p className="studio-help">พรีวิวนี้ตรวจชั้นกฎ คำตอบที่เผยแพร่ และประกันตามรหัสจริงเท่านั้น ไม่ส่งข้อความไป LINE ไม่สร้างใบงาน ไม่บันทึกบทสนทนาลูกค้า และไม่เรียก Gemini คำตอบจริงอาจต่างเมื่อมีบริบทแชต</p>
-      <div className="studio-examples">{['ช่วยด้วย', 'จอเสียอยากซื้อใหม่', 'รอเจ้าหน้าที่ติดต่อกลับอยู่', 'ตรวจประกันได้ไหม'].map((example) => <button type="button" className="btn btn-secondary" key={example} onClick={() => { setTestMessage(example); setPreview(null); }}>{example}</button>)}</div>
+      <div className="studio-examples">{['ช่วยด้วย', 'ขอเคลมอุปกรณ์', 'จอเสียอยากซื้อใหม่', 'รอเจ้าหน้าที่ติดต่อกลับอยู่', 'ตรวจประกันได้ไหม'].map((example) => <button type="button" className="btn btn-secondary" key={example} onClick={() => { setTestMessage(example); setPreview(null); }}>{example}</button>)}</div>
       <form onSubmit={runPreview} className="studio-form"><label>ข้อความตัวอย่าง<input className="form-input" required maxLength={1000} value={testMessage} onChange={(e) => setTestMessage(e.target.value)} placeholder="เช่น จอเสียอยากซื้อใหม่ หรือ ประกัน SCH01-..." /></label><button className="btn btn-primary" disabled={busy || !testMessage.trim()}>{busy ? 'กำลังตรวจ...' : 'ตรวจเส้นทางคำตอบ'}</button></form>
       {preview && <div className="studio-preview" role="status"><strong>เส้นทาง: {preview.route} · เจตนา: {preview.intent}</strong><p>{preview.reply || 'ข้อความนี้จะเข้าสู่บทสนทนาจริง จึงไม่มีคำตอบจำลองในพรีวิว'}</p><small>{preview.note}</small></div>}
     </section>}

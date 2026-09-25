@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { api } from '../api/client';
 import { roleLabel } from '../roleLabels';
 import {
   ACCENTS,
@@ -30,6 +31,15 @@ export default function SettingsPage({ onBack, user }: { onBack: () => void; use
   // ธีมที่ "ใช้อยู่จริง" ทั้งแอป + ตัวร่างที่ยังไม่กดใช้ (โชว์ในการ์ดพรีวิว)
   const [applied, updateTheme] = useTheme();
   const [draft, setDraft] = useState<ThemePrefs>(applied);
+  const [systemStatus, setSystemStatus] = useState<Awaited<ReturnType<typeof api.getSystemStatus>> | null>(null);
+  const [systemError, setSystemError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api.getSystemStatus().then((value) => { if (active) setSystemStatus(value); })
+      .catch(() => { if (active) setSystemError(true); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     setDraft(applied);
@@ -245,16 +255,15 @@ export default function SettingsPage({ onBack, user }: { onBack: () => void; use
           </div>
           <div>
             <div className="theme-section-title" id="system-heading">ข้อมูลระบบ</div>
-            <div className="theme-section-sub">เวอร์ชันและรายละเอียดการใช้งาน</div>
+            <div className="theme-section-sub">ข้อมูลล่าสุดจากเซิร์ฟเวอร์ · ไม่มีการแสดงรหัสลับ</div>
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           {[
-            ['เวอร์ชันระบบ', 'Smart Classroom Support v1.0'],
-            ['ฐานความรู้', '31 บทความ · อัปเดตอัตโนมัติ'],
-            ['รูปแบบ Ticket', 'TK.<รหัสโรงเรียน>.YY.NNNN-C'],
-            ['เวลาทำการ', 'จ–ศ 08:00–16:30 น.'],
-            ['แจ้งเตือน LINE', 'กำลังพัฒนา (รอเชื่อมต่อ OA)'],
+            ['ฐานความรู้ที่มองเห็น', systemStatus ? `${systemStatus.knowledge_articles} บทความ` : systemError ? 'โหลดข้อมูลไม่สำเร็จ' : 'กำลังโหลด…'],
+            ['เวลาทำการ', systemStatus ? `${(systemStatus.working_hours.days || []).map((day) => ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'][day] || day).join(', ')} ${systemStatus.working_hours.start}–${systemStatus.working_hours.end} น.` : 'กำลังโหลด…'],
+            ['LINE OA', systemStatus ? systemStatus.line_oa_configured ? 'ตั้งค่าแล้ว' : 'ยังไม่ได้ตั้งค่า' : 'กำลังโหลด…'],
+            ['แจ้งกลุ่มเจ้าหน้าที่', systemStatus ? systemStatus.staff_group_configured ? 'ตั้งค่าแล้ว' : 'ยังไม่ได้ตั้งค่า' : 'กำลังโหลด…'],
           ].map(([k, v]) => (
             <div key={k} style={{ padding: '12px 14px', background: 'var(--color-surface-sunken)', borderRadius: 'var(--radius-sm)' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>{k}</div>

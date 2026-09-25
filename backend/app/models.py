@@ -813,6 +813,20 @@ class AuditLog(Base):
     )
 
 
+class DeletedRecord(Base):
+    """Recoverable snapshot for explicitly deleted devices and tickets."""
+    __tablename__ = "deleted_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    organization_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    deleted_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    restored_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 # ─── Preventive Maintenance (Blueprint §32 / §38) ─────────────────────
 class PMPlan(Base):
     """แผนบำรุงรักษาเชิงป้องกัน — ประเภทอุปกรณ์ + รอบ (วัน) + checklist"""

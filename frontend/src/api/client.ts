@@ -188,6 +188,7 @@ export const api = {
 
   // ─── Auth / Profile ────────────────────────────────────────────────
   authMe: () => request<{ user: User }>('/auth/me'),
+  getSystemStatus: () => request<{ knowledge_articles: number; working_hours: { start: string; end: string; days: number[] }; line_oa_configured: boolean; staff_group_configured: boolean }>('/system/status'),
 
   updateProfile: (data: { line_display_name?: string; username?: string; line_email?: string; line_picture_url?: string; password?: string }) =>
     request<{ token: string; user: User }>('/auth/profile', {
@@ -349,6 +350,8 @@ export const api = {
     const q = qs.toString();
     return request<any[]>(`/audit-logs${q ? '?' + q : ''}`);
   },
+  listDeletedRecords: (offset = 0) => request<Array<{ id: number; entity_type: string; entity_id: string; organization_id: number; deleted_at: string }>>(`/deleted-records?limit=30&offset=${offset}`),
+  restoreDeletedRecord: (id: number) => request<any>(`/deleted-records/${id}/restore`, { method: 'POST' }),
 
   // ─── QR ────────────────────────────────────────────────────────────
   qrResolve: (token: string) => request<any>(`/qr/resolve/${token}`),

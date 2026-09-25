@@ -6,6 +6,7 @@ const PAGE_SIZE = 30;
 const ACTIONS: Record<string, string> = {
   login: 'เข้าสู่ระบบ', login_failed: 'เข้าสู่ระบบไม่สำเร็จ',
   device_create: 'เพิ่มอุปกรณ์', device_update: 'แก้ไขอุปกรณ์', device_delete: 'ลบอุปกรณ์',
+  device_restore: 'กู้คืนอุปกรณ์', ticket_delete: 'ลบใบงาน', ticket_restore: 'กู้คืนใบงาน',
   user_create: 'เพิ่มผู้ใช้', user_update: 'แก้ไขผู้ใช้', user_delete: 'ลบผู้ใช้', user_role_change: 'เปลี่ยนสิทธิ์ผู้ใช้',
   membership_apply: 'สมัครสมาชิก', membership_approve: 'อนุมัติสมาชิก', membership_reject: 'ปฏิเสธสมาชิก',
   ticket_assign: 'มอบหมายงานซ่อม', ticket_accept: 'รับงานซ่อม', ticket_resolve: 'ซ่อมเสร็จ',
@@ -49,7 +50,7 @@ function valueText(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export default function AuditLogPage({ onBack }: { onBack: () => void }) {
+export default function AuditLogPage({ onBack, userRole }: { onBack: () => void; userRole?: string }) {
   const [logs, setLogs] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +59,23 @@ export default function AuditLogPage({ onBack }: { onBack: () => void }) {
   const [draft, setDraft] = useState<Filters>(emptyFilters);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [advanced, setAdvanced] = useState(false);
+  const [deletedRecords, setDeletedRecords] = useState<Awaited<ReturnType<typeof api.listDeletedRecords>>>([]);
+  const [deletedPage, setDeletedPage] = useState(0);
+  const [restoring, setRestoring] = useState<number | null>(null);
+  const canRestore = userRole === 'owner' || userRole === 'super_admin';
+  const loadDeleted = useCallback(async () => {
+    if (!canRestore) return;
+    try { setDeletedRecords(await api.listDeletedRecords(deletedPage * 30)); }
+    catch (err: any) { setError(err?.message || 'โหลดรายการที่กู้คืนได้ไม่สำเร็จ'); }
+  }, [canRestore, deletedPage]);
+  useEffect(() => { void loadDeleted(); }, [loadDeleted]);
+  const restore = async (id: number, label: string) => {
+    if (!window.confirm(`กู้คืน ${label} จากข้อมูลที่ลบไว้?`)) return;
+    setRestoring(id); setError(null);
+    try { await api.restoreDeletedRecord(id); await Promise.all([loadDeleted(), load()]); }
+    catch (err: any) { setError(err?.message || 'กู้คืนไม่สำเร็จ'); }
+    finally { setRestoring(null); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -98,6 +116,14 @@ export default function AuditLogPage({ onBack }: { onBack: () => void }) {
         <div><h1 className="top-bar-title">ประวัติการใช้งาน</h1><span className="top-bar-subtitle">ดูว่าใครทำอะไรกับข้อมูล เมื่อไร · เรียงล่าสุดก่อน</span></div></div>
       <button className="btn" type="button" onClick={() => void load()} disabled={loading}>โหลดใหม่</button>
     </div>
+
+    {canRestore && <section className="panel-card" style={{ padding: 20, marginBottom: 20 }} aria-label="กู้คืนข้อมูลที่ลบ">
+      <h2 style={{ marginTop: 0 }}>กู้คืนข้อมูลที่ลบ</h2>
+      <p className="audit-technical">กู้ได้เฉพาะอุปกรณ์และใบงานที่ลบหลังเปิดใช้ระบบกู้คืนนี้ ข้อมูลที่ลบก่อนหน้านั้นไม่มีสำเนาครบพอจะกู้โดยอัตโนมัติ</p>
+      {deletedRecords.length === 0 ? <p>ไม่มีรายการที่รอกู้คืน</p> : <div className="audit-events">{deletedRecords.map((record) =>
+        <div className="audit-event" key={record.id}><div className="audit-event-main"><strong>{record.entity_type === 'device' ? 'อุปกรณ์' : 'ใบงาน'} {record.entity_id}</strong><p>ลบเมื่อ {dateTime(record.deleted_at)} · โรงเรียน #{record.organization_id}</p></div><button className="btn btn-secondary" disabled={restoring === record.id} onClick={() => void restore(record.id, record.entity_id)}>{restoring === record.id ? 'กำลังกู้คืน…' : 'กู้คืน'}</button></div>)}</div>}
+      <div className="audit-pagination"><button className="btn" disabled={deletedPage === 0} onClick={() => setDeletedPage((value) => value - 1)}>← ก่อนหน้า</button><span>หน้า {deletedPage + 1}</span><button className="btn" disabled={deletedRecords.length < 30} onClick={() => setDeletedPage((value) => value + 1)}>ถัดไป →</button></div>
+    </section>}
 
     <form className="audit-filters" onSubmit={submit}>
       <div className="audit-filter-row">

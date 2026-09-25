@@ -136,12 +136,14 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canManage, userRole }: {
+export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canManage, userRole, focusId, onFocusHandled }: {
   onBack: () => void;
   currentOrgId?: number | null;
   isSuperAdmin: boolean;
   canManage: boolean;
   userRole?: string;
+  focusId?: string;
+  onFocusHandled?: () => void;
 }) {
   // admin_school จัดการได้เฉพาะรรตัวเอง — ไม่ต้องมี dropdown เลือกโรงเรียน และล็อกฟอร์มที่รรตัวเอง
   const lockedToOwnSchool = userRole === 'admin_school';
@@ -224,6 +226,12 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
     setDetailError(null);
     setDetailLoading(false);
   };
+  useEffect(() => {
+    if (!focusId) return;
+    const found = devices.find((device) => device.device_id === focusId);
+    if (found) { void openDetail(found); onFocusHandled?.(); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, devices]);
 
   const load = () => {
     setLoading(true);
@@ -323,6 +331,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
     setBusy(d.device_id);
     try {
       await api.deleteDevice(d.device_id);
+      closeDetail();
       load();
     } catch (err: any) {
       alert(err.message || 'ลบไม่สำเร็จ');
@@ -837,6 +846,7 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                         แก้ไขข้อมูล
                       </button>
                     )}
+                    {canManage && <button className="btn btn-danger" disabled={busy === detailView.device_id} onClick={() => void handleDelete(detailView)}>{busy === detailView.device_id ? 'กำลังลบ…' : 'ลบอุปกรณ์'}</button>}
                     <button className="btn btn-ghost" onClick={closeDetail}>ปิด</button>
                   </div>}
           </div>
@@ -933,9 +943,6 @@ export default function DevicesPage({ onBack, currentOrgId, isSuperAdmin, canMan
                             <>
                               <button className="btn btn-secondary btn-sm" onClick={() => showQr(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>QR</button>
                               <button className="btn btn-secondary btn-sm" onClick={() => openEdit(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>แก้ไข</button>
-                              <button className="btn btn-danger btn-sm" disabled={busy === d.device_id} onClick={() => handleDelete(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>
-                                {busy === d.device_id ? '...' : 'ลบ'}
-                              </button>
                             </>
                           )}
                         </div>

@@ -1152,7 +1152,13 @@ def handle_message(user_id: str, text: str, reply_token: str, group: bool = Fals
 
     # Warranty facts are always read from the asset register after an exact ID/serial.
     # Handle this before NLU/FAQ/AI so neither a cached nor generated reply can guess.
-    from app.chatbot_warranty import is_warranty_question, extract_code, warranty_answer
+    from app.chatbot_warranty import is_warranty_question, is_claim_request, has_claim_symptom, extract_code, warranty_answer
+    if phase == "claim_symptom_pending" or is_claim_request(text):
+        if not has_claim_symptom(text):
+            save_session(user_id, {**session, "phase": "claim_symptom_pending"})
+            return _finish("อุปกรณ์มีอาการอะไรคะ เช่น เปิดไม่ติด ไม่มีภาพ หรือเสียงหาย? ขอทราบอาการก่อนเพื่อช่วยตรวจวิธีแก้เบื้องต้นอย่างปลอดภัย แล้วค่อยตรวจข้อมูลประกัน/การเคลมต่อค่ะ", intent_used="claim_ask_symptom", faq_cacheable=False)
+        save_session(user_id, {**session, "phase": "new", "claim_symptom": text[:500]})
+        return _finish(_dispatch(user_id, text, reply_token, group), intent_used="claim_troubleshoot", faq_cacheable=False)
     if phase == "warranty_pending" or is_warranty_question(text):
         code = extract_code(text)
         if not code:

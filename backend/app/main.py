@@ -30,7 +30,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import bindparam, func, select, text
+from sqlalchemy import DateTime as SQLDateTime, Numeric as SQLNumeric, bindparam, func, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.kb_loader import invalidate_kb_cache
@@ -50,6 +50,7 @@ from app.models import (
     MEMBERSHIP_PENDING,
     MEMBERSHIP_REJECTED,
     MembershipApplication,
+    DeletedRecord,
     NotificationLog,
     Organization,
     Priority,
@@ -2644,6 +2645,26 @@ def update_device(device_id: str, payload: DeviceUpdate, request: Request, db: S
     )
 
 
+def _recovery_snapshot(row) -> dict:
+    """Store every scalar column except the surrogate PK; do not rely on partial audit metadata."""
+    return {column.name: getattr(row, column.name) for column in row.__table__.columns if column.name != "id"}
+
+
+def _recovery_model(model, values: dict, **overrides):
+    """Rehydrate a snapshot, preserving timestamps/coordinates after JSON serialization."""
+    columns = {column.name: column for column in model.__table__.columns}
+    data = {}
+    for name, value in {**values, **overrides}.items():
+        if name == "id" or name not in columns:
+            continue
+        if value is not None and isinstance(columns[name].type, SQLDateTime):
+            value = datetime.fromisoformat(value) if isinstance(value, str) else value
+        elif value is not None and isinstance(columns[name].type, SQLNumeric):
+            value = Decimal(str(value))
+        data[name] = value
+    return model(**data)
+
+
 @app.delete("/api/devices/{device_id}")
 def delete_device(device_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ลบอุปกรณ์ (ต้องไม่มี ticket ผูกอยู่) — ตรวจว่า device อยู่ใน scope"""
@@ -2657,6 +2678,18 @@ def delete_device(device_id: str, request: Request, db: Session = Depends(get_db
     ).scalar_one()
     if ticket_count > 0:
         raise HTTPException(status_code=400, detail=f"ไม่สามารถลบได้ — อุปกรณ์มี {ticket_count} ticket ผูกอยู่")
+
+    linked_pm = db.execute(select(func.count(PMTask.id)).where(PMTask.device_id == device_id)).scalar_one()
+    linked_flags = db.execute(select(func.count(DeviceHealthFlag.id)).where(DeviceHealthFlag.device_id == device_id)).scalar_one()
+    if linked_pm or linked_flags:
+        raise HTTPException(status_code=400, detail="อุปกรณ์มีประวัติ PM/สถานะสุขภาพที่ผูกอยู่ กรุณาเก็บไว้เพื่อไม่ให้ประวัติสูญหาย")
+    scans = db.execute(select(ScanLog).where(ScanLog.device_id == device_id)).scalars().all()
+    db.add(DeletedRecord(
+        entity_type="device", entity_id=device_id, organization_id=device.organization_id,
+        payload=json.dumps({"device": _recovery_snapshot(device), "scans": [_recovery_snapshot(row) for row in scans]}, ensure_ascii=False, default=str),
+        deleted_by=user.id,
+    ))
+
 
     db.execute(text("DELETE FROM scan_logs WHERE device_id=:d"), {"d": device_id})
     # §40: ลบ Asset — ต้องเก็บค่าเดิมก่อนลบ เพราะหลังลบอ่านย้อนไม่ได้
@@ -2674,7 +2707,7 @@ def delete_device(device_id: str, request: Request, db: Session = Depends(get_db
     )
     db.delete(device)
     db.commit()
-    return {"message": "Device deleted", "device_id": device_id}
+    return {"message": "Device moved to recoverable history", "device_id": device_id}
 
 
 # ─── Users ─────────────────────────────────────────────────────────
@@ -3697,7 +3730,7 @@ def update_ticket_status(
 
 
 @app.delete("/api/tickets/{ticket_id}")
-def delete_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
+def delete_ticket(ticket_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ลบ ticket + ประวัติทั้งหมด (admin / admin_school / IT support)"""
     ticket = db.execute(
         select(RepairTicket).where(RepairTicket.ticket_id == ticket_id)
@@ -3706,14 +3739,29 @@ def delete_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = De
         raise HTTPException(status_code=404, detail="Ticket not found")
     check_ticket_access(db, user, ticket)
 
+    updates = db.execute(select(TicketUpdate).where(TicketUpdate.ticket_id == ticket.id)).scalars().all()
+    comments = db.execute(select(TicketComment).where(TicketComment.ticket_id == ticket_id)).scalars().all()
+    attachments = db.execute(select(TicketAttachment).where(TicketAttachment.ticket_id == ticket_id)).scalars().all()
+    db.add(DeletedRecord(
+        entity_type="ticket", entity_id=ticket_id, organization_id=ticket.organization_id,
+        payload=json.dumps({"ticket": _recovery_snapshot(ticket),
+                            "updates": [_recovery_snapshot(row) for row in updates],
+                            "comments": [_recovery_snapshot(row) for row in comments],
+                            "attachments": [_recovery_snapshot(row) for row in attachments]}, ensure_ascii=False, default=str),
+        deleted_by=user.id,
+    ))
+    write_audit(db, action="ticket_delete", user=user, entity_type="ticket", entity_id=ticket_id,
+                old_value={"ticket_id": ticket_id, "status": ticket.status}, request=request)
     # ลบ updates ก่อน (กัน FK constraint)
     db.execute(
         text("DELETE FROM ticket_updates WHERE ticket_id = :tid"),
         {"tid": ticket.id},
     )
+    db.execute(text("DELETE FROM ticket_comments WHERE ticket_id = :tid"), {"tid": ticket_id})
+    db.execute(text("DELETE FROM ticket_attachments WHERE ticket_id = :tid"), {"tid": ticket_id})
     db.delete(ticket)
     db.commit()
-    return {"message": "Ticket deleted", "ticket_id": ticket_id}
+    return {"message": "Ticket moved to recoverable history", "ticket_id": ticket_id}
 
 
 @app.get("/api/tickets/{ticket_id}/history", response_model=list[TicketUpdateOut])
@@ -4162,13 +4210,19 @@ def chatbot_preview(payload: ChatbotPreviewInput, user: User = Depends(_CHATBOT_
     from app import chatbot_nlu
     from app.chatbot_helpers import detect_intent
     from app.chatbot_knowledge import answer_for_question
-    from app.chatbot_warranty import extract_code, is_warranty_question, warranty_answer
+    from app.chatbot_warranty import extract_code, is_warranty_question, is_claim_request, has_claim_symptom, warranty_answer
     from app.assistant_policy import contains_prompt_injection, classify_urgency, INJECTION_REPLY, SAFETY_REPLY
     message = payload.message.strip()
     if contains_prompt_injection(message):
         return {"route": "security", "intent": "security", "reply": INJECTION_REPLY, "note": "กฎความปลอดภัย"}
     if classify_urgency(message) == "safety_critical":
         return {"route": "safety", "intent": "repair", "reply": SAFETY_REPLY, "note": "เหตุฉุกเฉิน"}
+    if is_claim_request(message):
+        return {"route": "claim", "intent": "repair",
+                "reply": ("อุปกรณ์มีอาการอะไรคะ เช่น เปิดไม่ติด ไม่มีภาพ หรือเสียงหาย? ขอทราบอาการก่อนเพื่อช่วยตรวจวิธีแก้เบื้องต้น แล้วค่อยตรวจประกัน/การเคลมต่อค่ะ"
+                          if not has_claim_symptom(message) else
+                          "รับทราบอาการค่ะ ข้อความจริงจะค้นขั้นตอนที่ตรวจแล้วในฐานความรู้ก่อน หากแก้ไม่ได้จึงพาแจ้งซ่อมและให้เจ้าหน้าที่ตรวจสิทธิ์เคลม"),
+                "note": "พรีวิวไม่สร้างบทสนทนา; LINE จริงจะถามอาการและตรวจฐานความรู้"}
     if is_warranty_question(message):
         code = extract_code(message)
         return {"route": "warranty", "intent": "warranty",
@@ -5498,6 +5552,73 @@ def _parse_audit_date(raw: Optional[str], field: str) -> Optional[datetime]:
             detail=f"{field} ต้องเป็นวันที่รูปแบบ YYYY-MM-DD",
         )
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+@app.get("/api/deleted-records")
+def list_deleted_records(
+    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin")),
+):
+    """Only owners may inspect recoverable deletion metadata; payload stays server-side."""
+    rows = db.execute(select(DeletedRecord).where(DeletedRecord.restored_at.is_(None))
+                      .order_by(DeletedRecord.deleted_at.desc(), DeletedRecord.id.desc()).offset(offset).limit(limit)).scalars().all()
+    return [{"id": row.id, "entity_type": row.entity_type, "entity_id": row.entity_id,
+             "organization_id": row.organization_id, "deleted_at": row.deleted_at} for row in rows]
+
+
+@app.post("/api/deleted-records/{record_id}/restore")
+def restore_deleted_record(
+    record_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_roles("owner", "super_admin")),
+):
+    row = db.execute(select(DeletedRecord).where(DeletedRecord.id == record_id).with_for_update()).scalar_one_or_none()
+    if row is None or row.restored_at is not None:
+        raise HTTPException(status_code=404, detail="ไม่พบรายการที่กู้คืนได้")
+    if db.get(Organization, row.organization_id) is None:
+        raise HTTPException(status_code=409, detail="ต้องกู้คืนโรงเรียนต้นสังกัดก่อน")
+    payload = json.loads(row.payload)
+    if row.entity_type == "device":
+        if db.execute(select(Device).where(Device.device_id == row.entity_id)).scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="มีรหัสอุปกรณ์นี้อยู่แล้ว")
+        data = dict(payload["device"])
+        if data.get("room_id"):
+            room = db.get(Room, data["room_id"])
+            if room is None:
+                data["room_id"] = None
+            elif room.organization_id != row.organization_id:
+                raise HTTPException(status_code=409, detail="ห้องของอุปกรณ์เปลี่ยนโรงเรียนแล้ว")
+        if data.get("qr_token") and db.execute(select(Device).where(Device.qr_token == data["qr_token"])).scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="QR token นี้ถูกใช้งานโดยอุปกรณ์อื่นแล้ว")
+        db.add(_recovery_model(Device, data))
+        db.flush()
+        for scan in payload.get("scans", []):
+            db.add(_recovery_model(ScanLog, scan))
+    elif row.entity_type == "ticket":
+        if db.execute(select(RepairTicket).where(RepairTicket.ticket_id == row.entity_id)).scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="มีเลขใบงานนี้อยู่แล้ว")
+        data = payload["ticket"]
+        device = db.execute(select(Device).where(Device.device_id == data["device_id"])).scalar_one_or_none()
+        if device is None:
+            raise HTTPException(status_code=409, detail="ต้องกู้คืนอุปกรณ์ของใบงานก่อน")
+        if device.organization_id != row.organization_id:
+            raise HTTPException(status_code=409, detail="อุปกรณ์นี้ย้ายไปโรงเรียนอื่นแล้ว")
+        ticket = _recovery_model(RepairTicket, data)
+        db.add(ticket)
+        db.flush()
+        for update in payload.get("updates", []):
+            db.add(_recovery_model(TicketUpdate, update, ticket_id=ticket.id))
+        for comment in payload.get("comments", []):
+            db.add(_recovery_model(TicketComment, comment))
+        for attachment in payload.get("attachments", []):
+            db.add(_recovery_model(TicketAttachment, attachment))
+    else:
+        raise HTTPException(status_code=409, detail="ข้อมูลชนิดนี้ยังไม่รองรับการกู้คืน")
+    row.restored_at = datetime.now(timezone.utc)
+    write_audit(db, action=f"{row.entity_type}_restore", user=user, entity_type=row.entity_type,
+                entity_id=row.entity_id, new_value={"deleted_record_id": row.id}, request=request)
+    db.commit()
+    return {"message": "restored", "entity_type": row.entity_type, "entity_id": row.entity_id}
 
 
 @app.get("/api/audit-logs")
@@ -7137,6 +7258,24 @@ def public_customer_signup(
         "id": lead_id,
         "duplicate": False,
         "message": "สมัครสมาชิกเรียบร้อย ทีมงานจะติดต่อกลับภายในเวลาทำการ",
+    }
+
+
+@app.get("/api/system/status")
+def system_status(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Live, scoped settings summary without exposing integration credentials."""
+    scope = visible_org_ids(user)
+    article_count = select(func.count(KBArticle.id))
+    if scope is not None:
+        article_count = article_count.where(
+            (KBArticle.organization_id.is_(None)) | (KBArticle.organization_id.in_(scope))
+        )
+    from app import line_bot
+    return {
+        "knowledge_articles": db.execute(article_count).scalar_one(),
+        "working_hours": _read_setting(db, "working_hours", {"start": "08:00", "end": "16:30", "days": [1, 2, 3, 4, 5]}),
+        "line_oa_configured": bool(line_bot.LINE_TOKEN),
+        "staff_group_configured": bool(line_bot.LINE_TOKEN and os.environ.get("LINE_GROUP_ID")),
     }
 
 

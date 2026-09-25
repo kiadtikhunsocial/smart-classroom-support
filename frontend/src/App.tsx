@@ -448,13 +448,14 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
-function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate, onLogout }: {
+function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate, onOpenRecord, onLogout }: {
   pageTitle: string;
   user?: User | null;
   onMenuToggle?: () => void;
   devices?: DeviceInfo[];
   tickets?: Ticket[];
   onNavigate?: (menu: string) => void;
+  onOpenRecord?: (kind: 'devices' | 'tickets', id: string) => void;
   onLogout?: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -529,7 +530,7 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
                     <button
                       key={d.device_id}
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--color-text)' }}
-                      onMouseDown={() => { onNavigate?.('devices'); setShowResults(false); setQ(''); }}
+                      onClick={() => { onOpenRecord?.('devices', d.device_id); setShowResults(false); setQ(''); }}
                     >
                       <span style={{ fontWeight: 600 }}>{d.device_id}</span>
                       <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 6 }}>{d.device_type}{d.room_name ? ` · ${d.room_name}` : ''}</span>
@@ -544,7 +545,7 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
                     <button
                       key={t.ticket_id}
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--color-text)' }}
-                      onMouseDown={() => { onNavigate?.('tickets'); setShowResults(false); setQ(''); }}
+                      onClick={() => { onOpenRecord?.('tickets', t.ticket_id); setShowResults(false); setQ(''); }}
                     >
                       <span style={{ fontWeight: 600 }}>{t.ticket_id}</span>
                       <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 6 }}>{t.title}</span>
@@ -584,7 +585,7 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
                   <button
                     key={t.ticket_id}
                     style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer' }}
-                    onMouseDown={() => { onNavigate?.('tickets'); setShowNotif(false); }}
+                    onClick={() => { onOpenRecord?.('tickets', t.ticket_id); setShowNotif(false); }}
                   >
                     <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{t.ticket_id}</div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 2 }}>{t.title}</div>
@@ -1244,11 +1245,13 @@ const ticketDetailDate = (value: string | null | undefined) => {
 };
 const ALL_STATUSES = Object.keys(STATUS_LABELS_TICKET);
 
-function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
+function TicketsPage({ tickets, onBack, onTicketsChanged, canManage, focusId, onFocusHandled }: {
   tickets: Ticket[];
   onBack: () => void;
   onTicketsChanged: () => void;
   canManage: boolean;
+  focusId?: string;
+  onFocusHandled?: () => void;
 }) {
   const [updating, setUpdating] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -1276,6 +1279,13 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
     setDetailLoading(false);
   };
   const closeTicketDetail = () => { detailRequest.current += 1; setDetailTicket(null); };
+  useEffect(() => {
+    if (!focusId) return;
+    const found = tickets.find((ticket) => ticket.ticket_id === focusId);
+    if (found) { void openTicketDetail(found); onFocusHandled?.(); }
+  // A new focus request or refreshed ticket list is enough to reopen the exact record.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, tickets]);
   // ── ตัวกรองรายการ Ticket: คำค้น / สถานะ / ความเร่งด่วน / ประเภทอุปกรณ์ ──
   const [q, setQ] = useState('');
   const [fStatus, setFStatus] = useState('');
@@ -1341,10 +1351,11 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
   };
 
   const handleDelete = async (ticketId: string) => {
-    if (!window.confirm(`ลบ Ticket ${ticketId}? การลบไม่สามารถกู้คืนได้`)) return;
+    if (!window.confirm(`ย้าย Ticket ${ticketId} ไปถังข้อมูลที่กู้คืนได้?`)) return;
     setDeleting(ticketId);
     try {
       await api.deleteTicket(ticketId);
+      closeTicketDetail();
       onTicketsChanged();
     } catch (e: any) {
       alert('ลบไม่สำเร็จ: ' + (e.message || ''));
@@ -1542,14 +1553,6 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
                       {canManage && (
                         <td style={{ display: 'flex', gap: 6 }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => void openTicketDetail(ticket)}>รายละเอียด</button>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            disabled={deleting === ticket.ticket_id}
-                            onClick={() => handleDelete(ticket.ticket_id)}
-                            style={{ padding: '4px 10px', fontSize: '0.78rem' }}
-                          >
-                            {deleting === ticket.ticket_id ? 'ลบ...' : 'ลบ'}
-                          </button>
                         </td>
                       )}
                     </tr>
@@ -1638,7 +1641,7 @@ function TicketsPage({ tickets, onBack, onTicketsChanged, canManage }: {
             </section>
             </>}
           </div>
-          <div className="detail-sheet-footer"><button className="btn btn-secondary" onClick={closeTicketDetail}>ปิดรายละเอียด</button></div>
+          <div className="detail-sheet-footer"><button className="btn btn-secondary" onClick={closeTicketDetail}>ปิดรายละเอียด</button>{canManage && <button className="btn btn-danger" disabled={deleting === detailTicket.ticket_id || detailLoading} onClick={() => void handleDelete(detailTicket.ticket_id)}>{deleting === detailTicket.ticket_id ? 'กำลังลบ…' : 'ลบใบงาน'}</button>}</div>
         </div>
       </div>}
     </div>
@@ -2886,6 +2889,7 @@ function AppInner() {
   const [pageTitle, setPageTitle] = useState('Dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null);
+  const [focusRecord, setFocusRecord] = useState<{ kind: 'devices' | 'tickets'; id: string } | null>(null);
   const [showRepairPanel, setShowRepairPanel] = useState(false);
   const [repairDeviceId, setRepairDeviceId] = useState<string | undefined>();
   const [ticketSubmitResult, setTicketSubmitResult] = useState<{ success: boolean; ticket_id?: string } | null>(null);
@@ -3106,6 +3110,7 @@ function AppInner() {
             devices={devices}
             tickets={tickets}
             onNavigate={(m) => handleMenuChange(m)}
+            onOpenRecord={(kind, id) => { setFocusRecord({ kind, id }); handleMenuChange(kind); }}
             onLogout={auth.logout}
           />
 
@@ -3131,6 +3136,8 @@ function AppInner() {
               )}
               {menu === 'devices' && (
                 <DevicesPage
+                  focusId={focusRecord?.kind === 'devices' ? focusRecord.id : undefined}
+                  onFocusHandled={() => setFocusRecord(null)}
                   onBack={() => handleMenuChange('dashboard')}
                   currentOrgId={currentOrgId}
                   isSuperAdmin={globalScope}
@@ -3140,6 +3147,8 @@ function AppInner() {
               )}
               {menu === 'tickets' && (
                 <TicketsPage
+                  focusId={focusRecord?.kind === 'tickets' ? focusRecord.id : undefined}
+                  onFocusHandled={() => setFocusRecord(null)}
                   tickets={tickets}
                   onBack={() => handleMenuChange('dashboard')}
                   onTicketsChanged={reloadData}
@@ -3191,7 +3200,7 @@ function AppInner() {
                 <ReportsPage onBack={() => handleMenuChange('dashboard')} />
               )}
               {menu === 'audit' && (
-                <AuditLogPage onBack={() => handleMenuChange('dashboard')} />
+                <AuditLogPage onBack={() => handleMenuChange('dashboard')} userRole={role} />
               )}
               {menu === 'registrations' && (
                 <RegistrationsPage

@@ -22,6 +22,17 @@ def test_warranty_requires_code_then_uses_db_lookup(monkeypatch):
     assert second == "ข้อมูลจากทะเบียน" and seen == ["SERIAL-12345"]
 
 
+def test_claim_asks_symptom_before_warranty_or_repair(monkeypatch):
+    state = _stub_session(monkeypatch)
+    seen = []
+    monkeypatch.setattr(chatbot_core, "_dispatch", lambda _uid, symptom, *_args: seen.append(symptom) or "ขั้นตอนจากฐานความรู้")
+    first = chatbot_core.handle_message("u-test", "ขอเคลมอุปกรณ์", "")
+    assert "อาการอะไร" in first and state["phase"] == "claim_symptom_pending"
+    assert seen == []
+    second = chatbot_core.handle_message("u-test", "จอไม่มีภาพ", "")
+    assert second == "ขั้นตอนจากฐานความรู้" and seen == ["จอไม่มีภาพ"]
+
+
 def test_rating_and_payment_go_to_structured_handlers(monkeypatch):
     state = _stub_session(monkeypatch)
     monkeypatch.setattr(chatbot_rating, "record_rating", lambda *a: "บันทึกคะแนนแล้ว")
