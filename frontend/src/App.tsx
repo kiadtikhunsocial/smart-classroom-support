@@ -2730,7 +2730,6 @@ function AppInner() {
                 <TicketsPage
                   focusId={focusRecord?.kind === 'tickets' ? focusRecord.id : undefined}
                   onFocusHandled={() => setFocusRecord(null)}
-                  tickets={tickets}
                   onBack={() => handleMenuChange('dashboard')}
                   onTicketsChanged={reloadData}
                   canManage={canManage}
