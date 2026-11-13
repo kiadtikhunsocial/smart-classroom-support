@@ -15,6 +15,26 @@ def test_small_json_is_not_gzipped(client):
     assert r.headers.get("content-encoding") is None
 
 
+def test_uploads_are_not_recompressed():
+    """Photos are already compressed; gzipping them only costs CPU. Checked on the
+    middleware itself with a tiny app, so no real upload file is needed."""
+    from starlette.applications import Starlette
+    from starlette.responses import Response
+    from starlette.routing import Route
+    from starlette.testclient import TestClient
+
+    from app.main import _GZipExceptUploads
+
+    body = b"x" * 4096
+    inner = Starlette(routes=[
+        Route("/uploads/photo.jpg", lambda r: Response(body, media_type="image/jpeg")),
+        Route("/api/big", lambda r: Response(body, media_type="application/json")),
+    ])
+    c = TestClient(_GZipExceptUploads(inner, minimum_size=1024))
+    assert c.get("/uploads/photo.jpg", headers={"Accept-Encoding": "gzip"}).headers.get("content-encoding") is None
+    assert c.get("/api/big", headers={"Accept-Encoding": "gzip"}).headers.get("content-encoding") == "gzip"
+
+
 def test_ticket_ordering_index_exists():
     with SessionLocal() as db:
         names = {row[0] for row in db.execute(text("select indexname from pg_indexes where tablename='repair_tickets'"))}

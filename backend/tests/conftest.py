@@ -32,7 +32,7 @@ def ticket_world(tag):
     """สองโรงเรียน: โรงเรียน A มีใบงาน 3 ใบ (new / pending / waiting_parts), โรงเรียน B มี 1 ใบ
     ผู้ใช้: super_admin (เห็นทุกโรงเรียน) และ admin_school ของโรงเรียน B"""
     from app.main import create_token
-    from app.models import AuditLog, Device, Organization, RepairTicket, SessionLocal, User
+    from app.models import AuditLog, Device, Organization, RepairTicket, SessionLocal, TicketUpdate, User
 
     db = SessionLocal()
     created: dict = {"org_ids": [], "user_ids": [], "device_ids": [], "ticket_ids": []}
@@ -75,7 +75,12 @@ def ticket_world(tag):
         }
     finally:
         db.rollback()
-        for t in db.query(RepairTicket).filter(RepairTicket.ticket_id.in_(created["ticket_ids"] or ["-"])):
+        # ประวัติสถานะที่การรับงาน/ปิดงานในเทสต์สร้างไว้ ต้องลบก่อนตัวใบงาน (foreign key)
+        tickets = db.query(RepairTicket).filter(RepairTicket.ticket_id.in_(created["ticket_ids"] or ["-"])).all()
+        if tickets:
+            db.query(TicketUpdate).filter(TicketUpdate.ticket_id.in_([t.id for t in tickets])).delete(synchronize_session=False)
+            db.query(AuditLog).filter(AuditLog.entity_id.in_(created["ticket_ids"])).delete(synchronize_session=False)
+        for t in tickets:
             db.delete(t)
         db.flush()
         for d in db.query(Device).filter(Device.device_id.in_(created["device_ids"] or ["-"])):

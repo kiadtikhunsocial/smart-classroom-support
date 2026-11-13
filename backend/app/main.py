@@ -1364,7 +1364,22 @@ app.add_middleware(
     expose_headers=["X-Total-Count"],
 )
 # บีบอัด response ใหญ่ (รายการใบงาน/อุปกรณ์เป็น JSON หลายร้อย kB) — ตัวเล็กกว่า 1 kB ไม่คุ้มบีบ
-app.add_middleware(GZipMiddleware, minimum_size=1024)
+# ยกเว้น /uploads/: รูปภาพ (JPEG/PNG/WebP) ถูกบีบมาแล้ว — Starlette 0.36 ไม่กรองตามชนิดไฟล์
+# ถ้าไม่ยกเว้นจะเปลือง CPU ของ Render free tier โดยไม่ได้ไฟล์เล็กลง
+class _GZipExceptUploads:
+    # ชื่อพารามิเตอร์ต้องเป็น `app` — Starlette ส่ง app ตัวใน middleware stack มาเป็น keyword
+    def __init__(self, app, minimum_size: int = 1024):
+        self._plain = app
+        self._gzip = GZipMiddleware(app, minimum_size=minimum_size)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").startswith("/uploads/"):
+            await self._plain(scope, receive, send)
+        else:
+            await self._gzip(scope, receive, send)
+
+
+app.add_middleware(_GZipExceptUploads, minimum_size=1024)
 
 # ─── Logging (ข้อ 7: logging เพียงพอ + ไม่ leak sensitive data) ───────────────
 # (logging import ไว้ด้านบนของไฟล์แล้ว)
@@ -6172,6 +6187,7 @@ def ticket_accept(ticket_id: str, request: Request, db: Session = Depends(get_db
         request=request,
     )
     db.commit()
+    _notify_status_changed(t, old_status)
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 @app.post("/api/tickets/{ticket_id}/resolve", status_code=200)
@@ -6202,6 +6218,7 @@ def ticket_resolve(ticket_id: str, payload: TicketResolveReq, request: Request, 
         request=request,
     )
     db.commit()
+    _notify_status_changed(t, old_status)
     from app.ticket_rating_invite import invite_staff_rating
     invite_staff_rating(db, t)
     return {"ticket_id": t.ticket_id, "status": t.status, "resolved_at": t.resolved_at, "sla_met": t.sla_met}
@@ -6231,6 +6248,7 @@ def ticket_close(ticket_id: str, payload: TicketCloseReq, request: Request, db: 
         request=request,
     )
     db.commit()
+    _notify_status_changed(t, old_status)
     from app.ticket_rating_invite import invite_staff_rating
     invite_staff_rating(db, t)
     return {"ticket_id": t.ticket_id, "status": t.status, "closed_at": t.closed_at, "rating": t.rating}
@@ -6256,6 +6274,7 @@ def ticket_reopen(ticket_id: str, payload: TicketCommentReq, request: Request, d
         request=request,
     )
     db.commit()
+    _notify_status_changed(t, old_status)
     return {"ticket_id": t.ticket_id, "status": t.status}
 
 @app.post("/api/tickets/{ticket_id}/cancel", status_code=200)
@@ -6278,6 +6297,7 @@ def ticket_cancel(ticket_id: str, payload: TicketCommentReq, request: Request, d
         request=request,
     )
     db.commit()
+    _notify_status_changed(t, old_status)
     return {"ticket_id": t.ticket_id, "status": t.status}
 
 # ─── Comments (TOR 5.7) ────────────────────────────────────────────────
@@ -6740,6 +6760,16 @@ def _flush_notifications(timeout: float = 5.0) -> None:
     """รอให้ event ที่ค้างในคิวส่งเสร็จ — ใช้ในเทสต์เท่านั้น
     worker มีตัวเดียวและทำตามลำดับ งานว่างที่ส่งต่อท้ายจะเสร็จหลังงานก่อนหน้าทั้งหมด"""
     _NOTIFY_POOL.submit(lambda: None).result(timeout=timeout)
+
+
+def _notify_status_changed(ticket: "RepairTicket", from_status: str) -> None:
+    """แจ้ง n8n ว่าสถานะใบงานเปลี่ยน — payload รูปแบบเดียวกับ PATCH /api/tickets/{id}/status
+    (Notification Dispatcher ใน n8n อ่านได้โดยไม่ต้องแก้ workflow)
+    เรียกหลัง db.commit() เท่านั้น เพื่อไม่แจ้งเรื่องที่ถูก rollback"""
+    payload = _ticket_event_payload(ticket)
+    payload["from_status"] = from_status
+    payload["to_status"] = ticket.status
+    _notify_n8n("ticket.status_changed", payload)
 
 
 def _ticket_event_payload(t: "RepairTicket") -> dict:
