@@ -1159,3 +1159,23 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ─── พื้นที่ผลลัพธ์ (ติดตามใบงาน / ตรวจประกัน) ─────────────────────────────
+   หลังค้นเสร็จ PublicHomeView เลื่อนพื้นที่นี้ขึ้นมาและย้ายโฟกัสมาที่นี่
+   scroll-margin-top กันไม่ให้แถบบนแบบ sticky (สูงราว 110px บนมือถือที่ปุ่มขึ้นสองแถว)
+   บังหัวผลลัพธ์ */
+.ph-result-region {
+  scroll-margin-top: 128px;
+  border-radius: 14px;
+}
+
+@media (min-width: 720px) {
+  .ph-result-region { scroll-margin-top: 88px; }
+}
+
+.ph-result-region:focus { outline: none; }
+
+.ph-result-region:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.7);
+  outline-offset: 6px;
+}

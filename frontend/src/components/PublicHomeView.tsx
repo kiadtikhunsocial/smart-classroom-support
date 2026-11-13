@@ -226,6 +226,21 @@ function fmtDate(v?: string | null): string {
 }
 
 /**
+ * เลื่อนผลลัพธ์ขึ้นมาให้เห็นและย้ายโฟกัสไปที่ผลลัพธ์ ทุกครั้งที่ `tick` เปลี่ยน
+ * (ค้นเสร็จ — เจอ/ไม่เจอ/ผิดพลาด) — บนมือถือผลลัพธ์อยู่ใต้ขอบจอ ถ้าไม่เลื่อน
+ * ผู้ใช้จะรู้สึกว่ากดแล้วไม่มีอะไรเกิดขึ้น
+ * ทำใน effect เพื่อให้รันหลัง React วาดผลลัพธ์ลง DOM แล้ว
+ */
+function useRevealResult(ref: React.RefObject<HTMLElement>, tick: number) {
+  useEffect(() => {
+    if (tick === 0 || !ref.current) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    ref.current.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    ref.current.focus({ preventScroll: true });
+  }, [tick, ref]);
+}
+
+/**
  * การ์ด "ตรวจสอบประกันสินค้า" — กรอกหมายเลขสินค้าของเครื่องที่ซื้อไปแล้ว
  * แล้วดูสถานะประกันได้เอง ไม่ต้องล็อกอินและไม่ต้องมีเลขใบงาน
  * (endpoint รับรหัสอุปกรณ์ของโรงเรียนและ QR token ได้ด้วย)
@@ -237,6 +252,9 @@ function WarrantyCard() {
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const serialRef = useRef<HTMLInputElement | null>(null);
+  const resultRef = useRef<HTMLDivElement | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
+  useRevealResult(resultRef, revealTick);
 
   const lookup = useCallback(
     async (raw?: string) => {
@@ -260,6 +278,7 @@ function WarrantyCard() {
       } finally {
         setLoading(false);
         setSearched(true);
+        setRevealTick((n) => n + 1);
       }
     },
     [code],
@@ -326,7 +345,7 @@ function WarrantyCard() {
         (เช่น <code>SCHM01-B1-R101-DISP-01</code>) ก็ค้นได้เหมือนกัน
       </p>
 
-      <div aria-live="polite">
+      <div aria-live="polite" ref={resultRef} tabIndex={-1} className="ph-result-region" aria-label="ผลการตรวจสอบประกัน">
         {error && <div className="ph-alert ph-alert-danger">{error}</div>}
 
         {!error && searched && !data && !loading && (
@@ -402,6 +421,9 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const autoRan = useRef(false);
+  const resultRef = useRef<HTMLDivElement | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
+  useRevealResult(resultRef, revealTick);
 
   const search = useCallback(
     async (raw?: string) => {
@@ -435,6 +457,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
       } finally {
         setLoading(false);
         setSearched(true);
+        setRevealTick((n) => n + 1);
       }
     },
     [input],
@@ -649,7 +672,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
             </div>
           )}
 
-          <div aria-live="polite">
+          <div aria-live="polite" ref={resultRef} tabIndex={-1} className="ph-result-region" aria-label="ผลการค้นหาใบงาน">
             {error && <div className="ph-alert ph-alert-danger">{error}</div>}
 
             {!error && searched && !ticket && !loading && (
