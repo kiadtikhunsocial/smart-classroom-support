@@ -506,11 +506,11 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
           {tab === 'tasks' && <button className="btn btn-primary" onClick={() => { setPanelError(null); setShowTaskForm(true); }}>+ สร้างงาน PM รายเครื่อง</button>}
           {tab === 'flags' ? (
             <button className="btn btn-secondary" onClick={handleRunRules} disabled={runningRules}>
-              {runningRules ? 'กำลังตรวจ...' : 'ตรวจตามกฎทันที'}
+              {runningRules ? 'กำลังตรวจâ¦' : 'ตรวจตามกฎทันที'}
             </button>
           ) : (
             <button className="btn btn-secondary" onClick={handleGenerate} disabled={generating}>
-              {generating ? 'กำลังสร้าง...' : 'สร้างงานตามรอบ'}
+              {generating ? 'กำลังสร้างâ¦' : 'สร้างงานตามรอบ'}
             </button>
           )}
           {tab === 'plans' && canManagePlans && (
@@ -615,7 +615,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
               {loading ? (
                 <div className="loading-state" style={{ padding: 40 }}>
                   <div className="spinner" />
-                  <span>กำลังโหลด...</span>
+                  <span>กำลังโหลดâ¦</span>
                 </div>
               ) : tasks.length === 0 ? (
                 <div className="empty-state" style={{ padding: 40 }}>
@@ -916,7 +916,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                                       onClick={() => handleFlagStatus(f, 'acknowledged')}
                                       disabled={busy}
                                     >
-                                      {busy ? 'กำลังบันทึก...' : 'รับทราบ'}
+                                      {busy ? 'กำลังบันทึกâ¦' : 'รับทราบ'}
                                     </button>
                                   )}
                                   <button
@@ -925,7 +925,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                                     onClick={() => handleFlagStatus(f, 'resolved')}
                                     disabled={busy}
                                   >
-                                    {busy ? 'กำลังบันทึก...' : 'ปิดรายการ'}
+                                    {busy ? 'กำลังบันทึกâ¦' : 'ปิดรายการ'}
                                   </button>
                                 </div>
                               )}
@@ -1001,7 +1001,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                     onChange={(e) => handleUploadPhotos(e.target.files)}
                     disabled={uploading}
                   />
-                  {uploading && <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>กำลังอัปโหลด...</div>}
+                  {uploading && <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>กำลังอัปโหลดâ¦</div>}
                   {photos.length > 0 && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                       {photos.map((url) => (
@@ -1037,7 +1037,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving || uploading}>
-                    {saving ? 'กำลังบันทึก...' : 'บันทึกผลตรวจ'}
+                    {saving ? 'กำลังบันทึกâ¦' : 'บันทึกผลตรวจ'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={closeSubmit}>ยกเลิก</button>
                 </div>
@@ -1078,7 +1078,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                 )}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังบันทึก...' : 'ยืนยันข้ามรอบนี้'}
+                    {saving ? 'กำลังบันทึกâ¦' : 'ยืนยันข้ามรอบนี้'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setSkipTask(null)}>ยกเลิก</button>
                 </div>
@@ -1098,7 +1098,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
             <div className="form-group"><label className="form-label" htmlFor="pm-task-due">วันครบกำหนด *</label><input id="pm-task-due" className="form-input" type="date" required value={taskForm.due_date} onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })} /></div>
             <div className="form-group"><span className="form-label">รายการตรวจของแผน</span>{taskPlan ? (Array.isArray(taskPlan.checklist) && taskPlan.checklist.length ? <ol>{taskPlan.checklist.map((item: any, i: number) => <li key={i}>{checklistItemLabel(item, i)}</li>)}</ol> : <p role="alert">แผนนี้ไม่มีรายการตรวจ กรุณาแก้แผนก่อนสร้างงาน</p>) : <p>เลือกแผนเพื่อดูรายการตรวจ</p>}</div>
             {panelError && <p role="alert" style={{ color: 'var(--color-danger)' }}>{panelError}</p>}
-            <button className="btn btn-primary" type="submit" disabled={saving || !taskPlan?.checklist?.length || !taskForm.device_id || !taskForm.due_date}>{saving ? 'กำลังสร้าง...' : 'ยืนยันสร้างงาน PM'}</button>
+            <button className="btn btn-primary" type="submit" disabled={saving || !taskPlan?.checklist?.length || !taskForm.device_id || !taskForm.due_date}>{saving ? 'กำลังสร้างâ¦' : 'ยืนยันสร้างงาน PM'}</button>
           </form></div>
         </div>
       </div>}
@@ -1179,7 +1179,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
                 )}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังบันทึก...' : (editingPlanId != null ? 'บันทึกการแก้ไข' : 'บันทึกแผน')}
+                    {saving ? 'กำลังบันทึกâ¦' : (editingPlanId != null ? 'บันทึกการแก้ไข' : 'บันทึกแผน')}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={closePlanForm}>ยกเลิก</button>
                 </div>

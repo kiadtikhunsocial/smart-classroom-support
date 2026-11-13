@@ -8,6 +8,8 @@ import "./styles/themes.css";
 import "./styles/design-system.css";
 // เลเยอร์ธีมสุดท้าย: นิยาม token ตาม [data-mode]/[data-accent] จึงต้องอยู่หลังสุดจริง ๆ
 import "./styles/theme-tokens.css";
+// แอนิเมชันเปลี่ยนหน้า/โหลด — ใช้ token สีจากไฟล์บน จึงโหลดต่อท้าย
+import "./styles/motion.css";
 
 // ทาธีมที่ผู้ใช้เลือกไว้ก่อน render — กันจอกระพริบเป็นธีมผิดตอนโหลด
 initTheme();

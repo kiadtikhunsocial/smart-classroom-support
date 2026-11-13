@@ -248,7 +248,7 @@ export default function ProfilePage({ user, onUpdateUser, onBack }: {
             {success && <div className="prof-alert prof-alert--ok" role="status">{success}</div>}
 
             <button type="submit" className="btn btn-primary btn-full prof-submit" disabled={saving}>
-              {saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+              {saving ? 'กำลังบันทึกâ¦' : 'บันทึกข้อมูล'}
             </button>
           </form>
         </div>

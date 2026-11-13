@@ -463,7 +463,7 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
         {loading ? (
           <div className="loading-state" style={{ minHeight: 220, padding: 40 }}>
             <div className="spinner" />
-            <span>กำลังโหลดข้อมูลรายงาน...</span>
+            <span>กำลังโหลดข้อมูลรายงานâ¦</span>
           </div>
         ) : (
           <>
@@ -679,10 +679,10 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
                       onChange={(e) => setHistoryTicket(e.target.value)}
                     />
                     <button className="btn btn-primary" type="submit" disabled={!historyTicket.trim() || historyLoading}>
-                      {historyLoading ? 'กำลังโหลด...' : 'ดึงประวัติ'}
+                      {historyLoading ? 'กำลังโหลดâ¦' : 'ดึงประวัติ'}
                     </button>
                   </form>
-                  {historyLoading ? <Empty text="กำลังโหลด..." />
+                  {historyLoading ? <Empty text="กำลังโหลดâ¦" />
                     : history.length === 0 ? <Empty text="ยังไม่มีประวัติ — คลิกรหัส ticket ด้านบน หรือกรอก ID แล้วกดดึงประวัติ" />
                     : (
                       <div className="rp-table-wrap">
@@ -733,10 +733,10 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
                       onChange={(e) => setDeviceQuery(e.target.value)}
                     />
                     <button className="btn btn-primary" type="submit" disabled={!deviceQuery.trim() || deviceTicketsLoading}>
-                      {deviceTicketsLoading ? 'กำลังค้นหา...' : 'ค้นหา'}
+                      {deviceTicketsLoading ? 'กำลังค้นหาâ¦' : 'ค้นหา'}
                     </button>
                   </form>
-                  {deviceTicketsLoading ? <Empty text="กำลังโหลด..." />
+                  {deviceTicketsLoading ? <Empty text="กำลังโหลดâ¦" />
                     : ticketsByDevice.length === 0
                       ? <Empty text={deviceSearched ? 'ไม่พบ ticket ของอุปกรณ์นี้' : 'กรอกรหัสอุปกรณ์เพื่อดูประวัติงานซ่อมของเครื่องนั้น'} />
                       : (
@@ -884,7 +884,7 @@ export default function ReportsPage({ onBack }: { onBack: () => void }) {
                   )}
                   flush
                 >
-                  {selfServiceLoading ? <Empty text="กำลังโหลด..." />
+                  {selfServiceLoading ? <Empty text="กำลังโหลดâ¦" />
                     : selfServiceList.length === 0 ? <Empty text="ยังไม่มีข้อมูล self-service" />
                     : (
                       <div className="rp-table-wrap">

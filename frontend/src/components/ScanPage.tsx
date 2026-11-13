@@ -85,7 +85,7 @@ export default function ScanPage({ onScanDevice, onBack }: {
     setOpenTicketWarn(null);
     // ถ้าเป็น QR token (ไม่เข้ารูปรหัสอุปกรณ์) → resolve ผ่าน /qr/resolve
     if (isToken(code)) {
-      setStatus('พบ QR token — กำลังตรวจสอบอุปกรณ์...');
+      setStatus('พบ QR token — กำลังตรวจสอบอุปกรณ์â¦');
       try {
         const resp = await api.qrResolve(code);
         const device = resp?.device;
@@ -99,7 +99,7 @@ export default function ScanPage({ onScanDevice, onBack }: {
       return;
     }
     // กรณีเป็น device_id ตรงๆ
-    setStatus(`พบอุปกรณ์ ${code} — กำลังโหลดข้อมูล...`);
+    setStatus(`พบอุปกรณ์ ${code} — กำลังโหลดข้อมูลâ¦`);
     try {
       const device = await api.getDevice(code);
       setStatus(`${device.device_id} (${device.device_type}) — ${device.room_name || 'ไม่ระบุห้อง'}`);

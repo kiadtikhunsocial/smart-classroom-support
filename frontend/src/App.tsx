@@ -105,6 +105,12 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
 const useAuth = () => React.useContext(AuthContext);
 
+/** หน้าปัจจุบันจาก URL แบบ #/tickets (null = ไม่มี) */
+function menuFromHash(): string | null {
+  const m = /^#\/([a-z_]+)/.exec(window.location.hash || '');
+  return m ? m[1] : null;
+}
+
 // ─── Icon helpers ────────────────────────────────────────────────────────────
 function AppLogo({ size = 22 }: { size?: number }) {
   return (
@@ -312,7 +318,7 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
             {loading ? (
               <>
                 <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                กำลังเข้าสู่ระบบ...
+                กำลังเข้าสู่ระบบâ¦
               </>
             ) : (
               <>เข้าสู่ระบบ</>
@@ -396,7 +402,7 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
                   style={{ flex: 1, textTransform: 'uppercase' }}
                 />
                 <button type="submit" className="btn btn-primary" disabled={tLoading}>
-                  {tLoading ? '...' : 'ค้นหา'}
+                  {tLoading ? 'กำลังค้นหา…' : 'ค้นหา'}
                 </button>
               </form>
 
@@ -860,7 +866,7 @@ function DashboardContent({
   if (loading) return (
     <div className="dsh-loading" role="status" aria-live="polite">
       <div className="spinner" />
-      <span>กำลังโหลดข้อมูล...</span>
+      <span>กำลังโหลดข้อมูลâ¦</span>
     </div>
   );
 
@@ -1353,7 +1359,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
               {/* การ์ด: งานแจ้งซ่อมล่าสุดของเครื่องนี้ (ช่วยหาเลขคืนถ้าลืม) */}
               {recentLoading && (
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginBottom: 'var(--spacing-md)' }}>
-                  กำลังตรวจสอบประวัติ...
+                  กำลังตรวจสอบประวัติâ¦
                 </div>
               )}
               {!recentLoading && recentTicket && !submitted && (
@@ -1406,7 +1412,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
                   className="form-textarea"
                   value={form.description}
                   onChange={(e) => setField('description', e.target.value)}
-                  placeholder="บรรยายอาการที่เกิดขึ้น..."
+                  placeholder="บรรยายอาการที่เกิดขึ้นâ¦"
                   rows={4}
                 />
               </div>
@@ -1495,7 +1501,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
                 {submitting ? (
                   <>
                     <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                    กำลังส่ง...
+                    กำลังส่งâ¦
                   </>
                 ) : (
                   <>ส่งคำร้องแจ้งซ่อม</>
@@ -1567,7 +1573,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
   const requestScanLocation = () => {
     if (!navigator.geolocation) { setLocationStatus('เบราว์เซอร์นี้ไม่รองรับตำแหน่ง'); return; }
     setLocationBusy(true);
-    setLocationStatus('กำลังขออนุญาตตำแหน่ง...');
+    setLocationStatus('กำลังขออนุญาตตำแหน่งâ¦');
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setScanLocation({ lat: position.coords.latitude, lng: position.coords.longitude,
@@ -1817,7 +1823,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
             {deviceLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 16, background: 'var(--color-surface-secondary)', borderRadius: 'var(--radius-md)' }}>
                 <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>กำลังโหลดข้อมูลอุปกรณ์...</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>กำลังโหลดข้อมูลอุปกรณ์â¦</span>
               </div>
             ) : device ? (
               <div className="device-select-card" style={{ marginBottom: 16 }}>
@@ -1913,7 +1919,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                       onClick={handleAddNote}
                       disabled={noteSending || !noteText.trim()}
                     >
-                      {noteSending ? 'กำลังส่ง...' : 'ส่งข้อมูลเพิ่มเข้า Ticket เดิม'}
+                      {noteSending ? 'กำลังส่งâ¦' : 'ส่งข้อมูลเพิ่มเข้า Ticket เดิม'}
                     </button>
                     <div style={{ fontSize: '0.72rem', marginTop: 6, opacity: 0.9 }}>
                       ระบบไม่สร้าง Ticket ซ้ำ — ข้อมูลที่ส่งจะเข้าไปในงานเดิมให้ช่างเห็นตามลำดับเวลา
@@ -1930,7 +1936,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
             {/* งานแจ้งซ่อมล่าสุดของเครื่องนี้ (ช่วยผู้ใช้ที่ลืมเลขหาเลขคืน) */}
             {recentLoading && (
               <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
-                กำลังตรวจสอบประวัติการแจ้งซ่อม...
+                กำลังตรวจสอบประวัติการแจ้งซ่อมâ¦
               </div>
             )}
             {!recentLoading && recentTicket && !blocking && !submitted && (
@@ -1971,7 +1977,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
               <div className="form-group" style={{ padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: 10 }}>
                 <div className="form-label">ตำแหน่งขณะสแกน QR (ไม่บังคับ)</div>
                 <p style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>กดอนุญาตเพื่อให้เจ้าหน้าที่เห็นพิกัดใน Ticket ถ้าไม่สะดวก สามารถแจ้งซ่อมโดยไม่ส่งตำแหน่งได้</p>
-                <button type="button" className="btn btn-secondary" onClick={requestScanLocation} disabled={locationBusy}>{locationBusy ? 'กำลังระบุตำแหน่ง...' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}</button>
+                <button type="button" className="btn btn-secondary" onClick={requestScanLocation} disabled={locationBusy}>{locationBusy ? 'กำลังระบุตำแหน่งâ¦' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}</button>
                 {locationStatus && <div role="status" style={{ fontSize: '0.75rem', marginTop: 8 }}>{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</div>}
               </div>
               <div className="form-group">
@@ -1993,7 +1999,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                   className="form-textarea"
                   value={form.description}
                   onChange={(e) => setField('description', e.target.value)}
-                  placeholder="บรรยายอาการที่เกิดขึ้น... (เช่น เปิดเครื่องแล้วจอไม่ติด ไฟไม่เข้า)"
+                  placeholder="บรรยายอาการที่เกิดขึ้นâ¦ (เช่น เปิดเครื่องแล้วจอไม่ติด ไฟไม่เข้า)"
                   rows={3}
                 />
               </div>
@@ -2088,7 +2094,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                   {diagLoading ? (
                     <>
                       <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                      กำลังวิเคราะห์อาการ...
+                      กำลังวิเคราะห์อาการâ¦
                     </>
                   ) : diag ? (
                     <>
@@ -2166,7 +2172,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                   disabled={uploading || attachments.length >= 3}
                   style={{ padding: 8, fontSize: '0.8rem' }}
                 />
-                {uploading && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>กำลังอัปโหลด...</div>}
+                {uploading && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>กำลังอัปโหลดâ¦</div>}
                 {attachments.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                     {attachments.map((u, i) => (
@@ -2204,7 +2210,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                 {submitting ? (
                   <>
                     <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                    กำลังส่ง...
+                    กำลังส่งâ¦
                   </>
                 ) : (
                   <>ส่งคำร้องแจ้งซ่อม</>
@@ -2542,10 +2548,22 @@ function AppInner() {
     if (jobParam) {
       setFocusRecord({ kind: 'tickets', id: jobParam });
       setMenu('tickets');
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.replaceState({}, '', `${window.location.pathname}#/tickets`);
+    } else {
+      // เปิดแอป/กดรีเฟรชที่ #/devices → กลับไปหน้าเดิม (ตรวจสิทธิ์ใน handleMenuChange)
+      const fromHash = menuFromHash();
+      if (fromHash && fromHash !== 'dashboard') handleMenuChange(fromHash, { fromHistory: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.isAuthenticated, reloadData]);
+
+  // ─── ปุ่มย้อนกลับ/ไปข้างหน้าของเบราว์เซอร์ → เปลี่ยนหน้าตาม URL ─────────────
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+    const onPop = () => handleMenuChange(menuFromHash() || 'dashboard', { fromHistory: true });
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  });
 
   // ─── ฟัง event จาก SettingsPage (ปุ่ม "แก้ไขโปรไฟล์ →") ────────────────
   useEffect(() => {
@@ -2557,11 +2575,17 @@ function AppInner() {
     return () => window.removeEventListener('navigate', handler);
   });
 
-  const handleMenuChange = (menu: string) => {
+  const handleMenuChange = (menu: string, opts: { fromHistory?: boolean } = {}) => {
     // Role guard: ถ้าเมนูไม่ได้รับอนุญาตสำหรับบทบาทนี้ → กลับ Dashboard
     const allowed = ROLE_MENUS[role] || LEGACY_FALLBACK_MENUS;
     if (!allowed.includes(menu)) menu = 'dashboard';
     setMenu(menu);
+    // หน้าอยู่ใน URL (#/tickets) — กดรีเฟรชแล้วอยู่หน้าเดิม ปุ่มย้อนกลับของเบราว์เซอร์ใช้ได้
+    if (!opts.fromHistory && window.location.hash !== `#/${menu}`) {
+      try {
+        window.history.pushState({ menu }, '', `${window.location.pathname}#/${menu}`);
+      } catch { /* โหมดจำกัดสิทธิ์ — ไม่มี URL ก็ยังใช้งานได้ */ }
+    }
     if (menu === 'dashboard') reloadData();  // กลับหน้า Dashboard → ดึงข้อมูลใหม่เสมอ (ไม่ต้อง hard refresh)
     if (menu !== 'schools') setSelectedSchoolId(null);
     const titles: Record<string, string> = {
@@ -2585,6 +2609,8 @@ function AppInner() {
       profile: 'โปรไฟล์',
     };
     setPageTitle(titles[menu] || menu);
+    // หน้าใหม่เริ่มที่ด้านบนเสมอ (ไม่ค้างตำแหน่งเลื่อนของหน้าก่อน)
+    window.scrollTo({ top: 0 });
   };
 
   const openRepairPanel = (deviceId?: string) => {
@@ -2604,7 +2630,7 @@ function AppInner() {
     <div className="login-page" style={{ minHeight: '100vh' }}>
       <div style={{ textAlign: 'center' }}>
         <div className="spinner" style={{ width: 36, height: 36, margin: '0 auto 16px' }} />
-        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>กำลังโหลด...</span>
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>กำลังโหลดâ¦</span>
       </div>
     </div>
   );
@@ -2682,6 +2708,7 @@ function AppInner() {
   return (
     <>
       <div className="app-layout">
+        <a className="skip-link" href="#main-content">ข้ามไปยังเนื้อหา</a>
         <Sidebar
           activeMenu={menu}
           onMenuChange={handleMenuChange}
@@ -2707,12 +2734,13 @@ function AppInner() {
             onLogout={auth.logout}
           />
 
-          <div className="app-main">
+          <main className="app-main" id="main-content" tabIndex={-1}>
             {/* งานเด้งแบบ Grab — เฉพาะช่าง; ทำงานทุกหน้า ไม่ใช่แค่หน้าใบงาน */}
             {role === 'it_support' && (
               <DispatchOfferPopup onAccepted={(id) => { setFocusRecord({ kind: 'tickets', id }); handleMenuChange('tickets'); }} />
             )}
-            <div className="page-content">
+            {/* key={menu}: เปลี่ยนหน้า = เล่นแอนิเมชันเข้าใหม่ (เฟดขึ้นสั้น ๆ, ปิดเองเมื่อผู้ใช้ลดการเคลื่อนไหว) */}
+            <div className="page-content page-enter" key={menu}>
               {dataError && (
                 <div role="alert" className="alert alert-error">
                   โหลดข้อมูลล่าสุดไม่สำเร็จ กรุณาลองอีกครั้ง{' '}
@@ -2830,7 +2858,7 @@ function AppInner() {
                 <PrivacyPage onBack={() => handleMenuChange('dashboard')} />
               )}
             </div>
-          </div>
+          </main>
         </div>
 
         {showRepairPanel && (

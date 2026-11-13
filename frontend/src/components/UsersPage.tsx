@@ -230,7 +230,7 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+                    {saving ? 'กำลังบันทึกâ¦' : 'บันทึก'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
                 </div>
@@ -248,7 +248,7 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
           {loading ? (
             <div className="loading-state" style={{ padding: '40px' }}>
               <div className="spinner" />
-              <span>กำลังโหลด...</span>
+              <span>กำลังโหลดâ¦</span>
             </div>
           ) : users.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px' }}>

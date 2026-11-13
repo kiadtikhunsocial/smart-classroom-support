@@ -139,7 +139,7 @@ export default function SalesPage({ onBack, userRole }: { onBack: () => void; us
       <div className="page-content">
         <div className="loading-state" style={{ padding: '60px' }}>
           <div className="spinner" />
-          <span>กำลังโหลดข้อมูล...</span>
+          <span>กำลังโหลดข้อมูลâ¦</span>
         </div>
       </div>
     );

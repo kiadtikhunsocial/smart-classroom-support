@@ -346,7 +346,7 @@ export default function RegisterPage() {
                     display: 'inline-block',
                   }}
                 />
-                กำลังส่งคำขอ...
+                กำลังส่งคำขอâ¦
               </>
             ) : (
               <>ส่งคำขอสมัครสมาชิก</>

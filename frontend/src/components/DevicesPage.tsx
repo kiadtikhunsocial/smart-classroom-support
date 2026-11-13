@@ -488,7 +488,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
               const link = document.createElement('a'); link.href = url; link.download = 'device-import-template.csv'; link.click();
               window.setTimeout(() => URL.revokeObjectURL(url), 1000);
             }}>ดาวน์โหลดแม่แบบ CSV</button>
-            <p>ไฟล์: {importFile?.name} {importBusy ? '· กำลังตรวจ...' : ''}</p>
+            <p>ไฟล์: {importFile?.name} {importBusy ? '· กำลังตรวจâ¦' : ''}</p>
             {importError && <p role="alert" style={{ color: 'var(--color-danger)' }}>{importError}</p>}
             {importPreview && <>
               <p><strong>ทั้งหมด {importPreview.total} แถว · พร้อมนำเข้า {importPreview.valid} · ต้องแก้ไข {importPreview.invalid}</strong></p>
@@ -596,7 +596,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
                         ＋
                       </button>
                     </div>
-                    {roomsLoading && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>กำลังโหลดห้อง...</div>}
+                    {roomsLoading && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>กำลังโหลดห้องâ¦</div>}
                     {!roomsLoading && rooms.length === 0 && (
                       <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>
                         ยังไม่มีห้องในโรงเรียนนี้ — กด ＋ เพื่อเพิ่มห้อง
@@ -664,7 +664,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+                    {saving ? 'กำลังบันทึกâ¦' : 'บันทึก'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
                 </div>
@@ -726,7 +726,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
               {detailLoading && (
                 <div className="loading-state" style={{ padding: '16px 0' }}>
                   <div className="spinner" style={{ width: 24, height: 24 }} />
-                  <span>กำลังโหลดข้อมูลล่าสุด...</span>
+                  <span>กำลังโหลดข้อมูลล่าสุดâ¦</span>
                 </div>
               )}
 
@@ -860,7 +860,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
           {loading ? (
             <div className="loading-state" style={{ padding: '40px' }}>
               <div className="spinner" />
-              <span>กำลังโหลด...</span>
+              <span>กำลังโหลดâ¦</span>
             </div>
           ) : visibleDevices.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px' }}>

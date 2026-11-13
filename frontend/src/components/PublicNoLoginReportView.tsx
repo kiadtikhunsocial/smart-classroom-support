@@ -243,7 +243,7 @@ export default function PublicNoLoginReportView() {
 
   const startScan = async () => {
     setScanError(null);
-    setScanStatus('กำลังเปิดกล้อง...');
+    setScanStatus('กำลังเปิดกล้องâ¦');
     setScanning(true);
     try {
       const Html5Qrcode = (await import('html5-qrcode')).Html5Qrcode;
@@ -329,7 +329,7 @@ export default function PublicNoLoginReportView() {
   const requestScanLocation = () => {
     if (!navigator.geolocation) { setLocationStatus('เบราว์เซอร์นี้ไม่รองรับตำแหน่ง'); return; }
     setLocationBusy(true);
-    setLocationStatus('กำลังขออนุญาตตำแหน่ง...');
+    setLocationStatus('กำลังขออนุญาตตำแหน่งâ¦');
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setScanLocation({ lat: position.coords.latitude, lng: position.coords.longitude,
@@ -659,7 +659,7 @@ export default function PublicNoLoginReportView() {
                   onClick={() => applyQrDevice(manualCode)}
                   disabled={resolving || manualCode.trim().length < 4}
                 >
-                  {resolving ? 'กำลังตรวจสอบ...' : 'ใช้โค้ดนี้'}
+                  {resolving ? 'กำลังตรวจสอบâ¦' : 'ใช้โค้ดนี้'}
                 </button>
               </div>
               <p className="ph-hint">
@@ -713,7 +713,7 @@ export default function PublicNoLoginReportView() {
             {openTicketLoading && !blocking && (
               <p className="pr-checking" aria-live="polite">
                 <span className="ph-spinner" aria-hidden="true" />
-                กำลังตรวจสอบงานค้างของอุปกรณ์นี้...
+                กำลังตรวจสอบงานค้างของอุปกรณ์นี้â¦
               </p>
             )}
 
@@ -769,7 +769,7 @@ export default function PublicNoLoginReportView() {
                           disabled={noteSending}
                         >
                           {noteSending ? <span className="ph-spinner" aria-hidden="true" /> : <SendIcon />}
-                          <span>{noteSending ? 'กำลังส่ง...' : 'ส่งข้อมูลเพิ่มเข้าใบเดิม'}</span>
+                          <span>{noteSending ? 'กำลังส่งâ¦' : 'ส่งข้อมูลเพิ่มเข้าใบเดิม'}</span>
                         </button>
                         {photos.length > 0 && (
                           <p className="pr-note-hint">
@@ -793,7 +793,7 @@ export default function PublicNoLoginReportView() {
                 <span className="pr-label">ตำแหน่งขณะสแกน QR (ไม่บังคับ)</span>
                 <p className="pr-note-hint">อนุญาตเฉพาะเมื่อต้องการให้เจ้าหน้าที่เห็นพิกัดขณะกรอกฟอร์ม ไม่ใช่หลักฐานยืนยันที่ตั้งอุปกรณ์</p>
                 <button type="button" className="ph-btn" onClick={requestScanLocation} disabled={locationBusy}>
-                  {locationBusy ? 'กำลังระบุตำแหน่ง...' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}
+                  {locationBusy ? 'กำลังระบุตำแหน่งâ¦' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}
                 </button>
                 {locationStatus && <p className="pr-note-hint" role="status">{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</p>}
               </div>
@@ -941,7 +941,7 @@ export default function PublicNoLoginReportView() {
                 disabled={submitting}
               >
                 {submitting ? <span className="ph-spinner" aria-hidden="true" /> : <SendIcon />}
-                <span>{submitting ? 'กำลังส่ง...' : 'ส่งคำร้องแจ้งซ่อม'}</span>
+                <span>{submitting ? 'กำลังส่งâ¦' : 'ส่งคำร้องแจ้งซ่อม'}</span>
               </button>
             </form>
 

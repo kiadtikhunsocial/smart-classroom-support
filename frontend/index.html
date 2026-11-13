@@ -28,6 +28,19 @@
       html[data-mode='light'] {
         background-color: #f7f8fb;
       }
+      /* หน้าโหลดแรก (ก่อน React พร้อม) — React แทนที่ทั้งก้อนเมื่อ render ครั้งแรก
+         หน่วง 150ms ก่อนโผล่: เน็ตเร็วจะไม่เห็นมันกระพริบเลย */
+      .boot { position: fixed; inset: 0; display: grid; place-items: center; font-family: 'Noto Sans Thai', system-ui, sans-serif; color: #c9d3ee; }
+      html[data-mode='light'] .boot { color: #33405c; }
+      .boot-inner { display: grid; justify-items: center; gap: 14px; animation: boot-in 300ms ease-out 150ms both; }
+      .boot-logo { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; box-shadow: 0 8px 30px rgb(0 0 0 / 0.25); }
+      .boot-name { font-size: 15px; font-weight: 600; }
+      .boot-bar { position: relative; width: 140px; height: 3px; overflow: hidden; border-radius: 3px; background: rgb(127 140 180 / 0.25); }
+      .boot-bar::after { content: ''; position: absolute; inset: 0; width: 40%; border-radius: 3px; background: #7c6cff; animation: boot-slide 1.1s ease-in-out infinite; }
+      .boot-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      @keyframes boot-in { from { opacity: 0; transform: translateY(6px); } }
+      @keyframes boot-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+      @media (prefers-reduced-motion: reduce) { .boot-inner, .boot-bar::after { animation: none; } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -38,7 +51,16 @@
     <title>IWA Smart Classroom Support</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-live="polite">
+        <div class="boot-inner">
+          <img class="boot-logo" src="/logo.jpg" alt="" width="64" height="64" fetchpriority="high" />
+          <span class="boot-name">IWA Smart Classroom Support</span>
+          <span class="boot-bar" aria-hidden="true"></span>
+          <span class="boot-sr">กำลังโหลด…</span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

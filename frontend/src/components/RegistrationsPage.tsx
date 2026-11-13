@@ -300,7 +300,7 @@ export default function RegistrationsPage({ onBack, onOpenSales }: Registrations
             ดูลูกค้าที่สมัคร / สนใจซื้อ →
           </button>
           <button type="button" className="btn" onClick={() => void load()} disabled={loading}>
-            {loading ? 'กำลังโหลด...' : 'รีเฟรช'}
+            {loading ? 'กำลังโหลดâ¦' : 'รีเฟรช'}
           </button>
           <button type="button" className="btn" onClick={onBack}>
             ← กลับ Dashboard
@@ -420,7 +420,7 @@ export default function RegistrationsPage({ onBack, onOpenSales }: Registrations
       </div>
 
       {loading ? (
-        <p style={{ fontSize: '0.85rem', color: 'var(--color-text-tertiary)' }}>กำลังโหลด...</p>
+        <p style={{ fontSize: '0.85rem', color: 'var(--color-text-tertiary)' }}>กำลังโหลดâ¦</p>
       ) : visible.length === 0 ? (
         <div
           style={{
@@ -623,7 +623,7 @@ export default function RegistrationsPage({ onBack, onOpenSales }: Registrations
                       onClick={() => void handleApprove(row)}
                       disabled={busy}
                     >
-                      {busy ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
+                      {busy ? 'กำลังดำเนินการâ¦' : 'อนุมัติ'}
                     </button>
                     {rejectingId === row.id ? (
                       <>
