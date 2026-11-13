@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
@@ -71,6 +72,25 @@ def init_db():
             connection.execute(text(
                 "ALTER TABLE devices ALTER COLUMN device_type TYPE VARCHAR(64) USING device_type::text"
             ))
+        # คอลัมน์ของระบบส่งงานอัตโนมัติ — create_all ไม่เพิ่มคอลัมน์ให้ตารางที่มีอยู่แล้ว
+        for ddl in _DISPATCH_COLUMNS:
+            connection.execute(text(ddl))
+
+
+_DISPATCH_COLUMNS = (
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS on_duty BOOLEAN NOT NULL DEFAULT true",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_push_id VARCHAR(64)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_link_code VARCHAR(6)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_link_code_expires_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS ix_users_line_push_id ON users (line_push_id)",
+    "CREATE INDEX IF NOT EXISTS ix_users_line_link_code ON users (line_link_code)",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER "
+    "REFERENCES users(id) ON DELETE SET NULL",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS auto_assigned BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS offer_tried TEXT",
+    "CREATE INDEX IF NOT EXISTS ix_repair_tickets_assigned_user_id ON repair_tickets (assigned_user_id)",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +304,15 @@ class RepairTicket(Base):
         ticket_status_enum, default=TicketStatus.NEW, nullable=False, index=True
     )
     assigned_to: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # ผู้รับผิดชอบเป็นบัญชีจริง (assigned_to ยังเก็บชื่อไว้แสดงผลเหมือนเดิม)
+    assigned_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # True = ระบบเสนองานให้เอง ยังรอช่างกดรับ; แอดมินมอบหมายเอง = False (ระบบไม่ย้าย)
+    auto_assigned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    # id ช่างที่ระบบเคยเสนองานนี้ให้แล้ว (JSON list) — เสนอครบทุกคนแล้วหยุด ไม่วนทั้งคืน
+    offer_tried: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     channel: Mapped[Optional[str]] = mapped_column(String(32), default="qr", nullable=True)
     symptom_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     ai_category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
@@ -422,6 +451,12 @@ class User(Base):
         default=UserRole.IT_SUPPORT, nullable=False, index=True
     )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # ระบบส่งงาน (แบบ Grab): ระบบเสนองานให้เฉพาะช่างที่ "พร้อมรับงาน"
+    on_duty: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    # LINE userId จริง (U...) — ได้จากการส่งรหัสผูกบัญชีเข้า LINE OA ใช้ส่งข้อความส่วนตัว
+    line_push_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    line_link_code: Mapped[Optional[str]] = mapped_column(String(6), nullable=True, index=True)
+    line_link_code_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

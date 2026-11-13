@@ -800,6 +800,8 @@ def _create_ticket_from_fields(fields: dict, line_user_id: str | None = None):
                             note="สร้างจาก LINE chatbot", author_name=fields.get("name"),
                             author_role="reporter"))
         db.commit()
+        from app.dispatch import enqueue_dispatch
+        enqueue_dispatch(ticket.id)
         return ticket.ticket_id, None
     except Exception as e:
         db.rollback()

@@ -33,13 +33,13 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import DateTime as SQLDateTime, Numeric as SQLNumeric, bindparam, func, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.kb_loader import invalidate_kb_cache
 # Audit Log (§40) + Preventive Maintenance (§38) — โมเดลที่เพิ่มใหม่
-from app import google_sheets, pm_rules
+from app import dispatch, google_sheets, pm_rules
 from app.models import (AuditLog, ChatbotKnowledgeEntry, ChatbotPromptSetting,
                         DeviceHealthFlag, LineServiceRating, PMPlan, PMTask)
 from app.models import (
@@ -407,6 +407,9 @@ class TicketOut(BaseModel):
     priority: str
     status: str
     assigned_to: Optional[str] = None
+    assigned_user_id: Optional[int] = None
+    assigned_at: Optional[datetime] = None
+    auto_assigned: bool = False
     channel: Optional[str] = None
     symptom_code: Optional[str] = None
     ai_category: Optional[str] = None
@@ -1267,6 +1270,8 @@ async def lifespan(app: FastAPI):
         db.commit()
     finally:
         db.close()
+    # ระบบส่งงาน: เสนอต่อเมื่อช่างไม่ตอบในเวลา + หยิบใบงานใหม่ที่ยังไม่มีคนรับ
+    dispatch.start_sweeper()
     yield
 
 
@@ -1727,6 +1732,7 @@ def create_ticket(
 
     # แจ้ง n8n (fire-and-forget) — มี Ticket ใหม่
     _notify_n8n("ticket.created", _ticket_event_payload(ticket))
+    dispatch.enqueue_dispatch(ticket.id)
 
     return TicketOut(
         id=ticket.id,
@@ -1741,6 +1747,9 @@ def create_ticket(
         priority=ticket.priority,
         status=ticket.status,
         assigned_to=ticket.assigned_to,
+        assigned_user_id=ticket.assigned_user_id,
+        assigned_at=ticket.assigned_at,
+        auto_assigned=bool(ticket.auto_assigned),
         channel=ticket.channel,
         symptom_code=ticket.symptom_code,
         ai_category=ticket.ai_category,
@@ -2165,6 +2174,7 @@ def public_report(
 
         # แจ้ง n8n (fire-and-forget)
         _notify_n8n("ticket.created", _ticket_event_payload(ticket))
+        dispatch.enqueue_dispatch(ticket.id)
 
         return {
             "ticket_id": ticket.ticket_id,
@@ -3551,6 +3561,7 @@ def _ticket_filter_conditions(
     device_type: Optional[str] = None,
     device_category: Optional[str] = None,
     organization_id: Optional[int] = None,
+    mine: bool = False,
 ) -> Optional[list]:
     """เงื่อนไข WHERE ของรายการใบงาน (query ที่ join RepairTicket → Device → Organization แล้ว)
 
@@ -3582,6 +3593,11 @@ def _ticket_filter_conditions(
         conds.append(Device.device_type.in_(types))
     if organization_id:
         conds.append(Device.organization_id == organization_id)
+    if mine:
+        # แท็บ "งานของฉัน" — ใบงานที่ผู้ใช้คนนี้ถืออยู่ (กดรับ หรือระบบเสนอให้)
+        if not user:
+            return None
+        conds.append(RepairTicket.assigned_user_id == user.id)
     term = (q or "").strip()
     if term:
         pattern = f"%{_like_escape(term)}%"
@@ -3619,6 +3635,7 @@ def list_tickets(
     device_id: Optional[str] = Query(None),
     organization_id: Optional[int] = Query(None),
     q: Optional[str] = Query(None, max_length=100),
+    mine: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -3627,6 +3644,7 @@ def list_tickets(
     conds = _ticket_filter_conditions(
         db, user, q=q, status=status, priority=priority, device_id=device_id,
         device_type=device_type, device_category=device_category, organization_id=organization_id,
+        mine=mine,
     )
     if conds is None:
         response.headers["X-Total-Count"] = "0"
@@ -3671,6 +3689,9 @@ def list_tickets(
             priority=t.priority,
             status=t.status,
             assigned_to=t.assigned_to,
+            assigned_user_id=t.assigned_user_id,
+            assigned_at=t.assigned_at,
+            auto_assigned=bool(t.auto_assigned),
             channel=t.channel,
             symptom_code=t.symptom_code,
             ai_category=t.ai_category,
@@ -3717,14 +3738,20 @@ def ticket_counts(
         device_type=device_type, device_category=device_category, organization_id=organization_id,
     )
     if conds is None:
-        return {"total": 0, "by_status": {}}
+        return {"total": 0, "by_status": {}, "mine_open": 0}
     rows = db.execute(
         _ticket_list_base(select(RepairTicket.status, func.count()).select_from(RepairTicket))
         .where(*conds)
         .group_by(RepairTicket.status)
     ).all()
     by_status = {str(s.value if hasattr(s, "value") else s): n for s, n in rows}
-    return {"total": sum(by_status.values()), "by_status": by_status}
+    # ตัวเลขบนแท็บ "งานของฉัน" = งานที่ยังไม่เสร็จที่ผู้ใช้ถืออยู่
+    mine_open = db.execute(
+        _ticket_list_base(select(func.count()).select_from(RepairTicket))
+        .where(*conds, RepairTicket.assigned_user_id == user.id,
+               RepairTicket.status.in_(dispatch.OPEN_STATUSES))
+    ).scalar_one()
+    return {"total": sum(by_status.values()), "by_status": by_status, "mine_open": mine_open}
 
 
 @app.get("/api/tickets/{ticket_id}", response_model=TicketOut)
@@ -3769,6 +3796,9 @@ def get_ticket(ticket_id: str, db: Session = Depends(get_db), user: User = Depen
         priority=ticket.priority,
         status=ticket.status,
         assigned_to=ticket.assigned_to,
+        assigned_user_id=ticket.assigned_user_id,
+        assigned_at=ticket.assigned_at,
+        auto_assigned=bool(ticket.auto_assigned),
         channel=ticket.channel,
         symptom_code=ticket.symptom_code,
         ai_category=ticket.ai_category,
@@ -6001,8 +6031,16 @@ def qr_batch(organization_id: Optional[int] = Query(None), db: Session = Depends
 
 # ─── Request schemas ───────────────────────────────────────────────────
 class TicketAssignReq(BaseModel):
-    assignee: str = Field(..., min_length=2, max_length=128)
+    # เลือกจากรายชื่อช่าง (assignee_user_id) หรือพิมพ์ชื่อเอง (assignee) อย่างใดอย่างหนึ่ง
+    assignee: Optional[str] = Field(None, min_length=2, max_length=128)
+    assignee_user_id: Optional[int] = None
     note: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _need_someone(self):
+        if not self.assignee and not self.assignee_user_id:
+            raise ValueError("ต้องระบุช่างที่จะมอบหมาย")
+        return self
 
 class TicketResolveReq(BaseModel):
     root_cause: Optional[str] = None
@@ -6146,36 +6184,284 @@ def _add_update(db: Session, t: RepairTicket, from_s: Optional[str], to_s: Optio
 def ticket_assign(ticket_id: str, payload: TicketAssignReq, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
     """มอบหมายงานให้ช่าง (admin/super_admin)"""
     t = _get_ticket_or_404(db, ticket_id)
+    t = db.execute(select(RepairTicket).where(RepairTicket.id == t.id).with_for_update()).scalar_one()
     old = t.status
     old_assignee = t.assigned_to  # §40: เก็บผู้รับผิดชอบเดิมก่อนถูกเขียนทับ
-    t.assigned_to = payload.assignee
+    staff = None
+    if payload.assignee_user_id:
+        staff = db.get(User, payload.assignee_user_id)
+        if not staff or not staff.is_active or staff.role not in _STAFF_ROLES:
+            raise HTTPException(status_code=400, detail="ไม่พบช่างคนนี้ หรือบัญชีถูกปิดใช้งาน")
+    t.assigned_to = (staff.line_display_name or staff.line_user_id) if staff else payload.assignee
+    # แอดมินเลือกเอง = ระบบส่งงานไม่ย้ายใบนี้อีก
+    t.assigned_user_id = staff.id if staff else None
+    t.assigned_at = datetime.now(timezone.utc)
+    t.auto_assigned = False
     if old == "new":
         apply_transition(db, t, "assigned", force=True,
                          author_name=user.line_display_name or "Admin",
                          author_role=user.role,
-                         note=payload.note or f"มอบหมายให้ {payload.assignee}")
+                         note=payload.note or f"มอบหมายให้ {t.assigned_to}")
     else:
-        _add_update(db, t, old, t.status, payload.note or f"มอบหมายให้ {payload.assignee}", user.line_display_name or "Admin", user.role)
+        _add_update(db, t, old, t.status, payload.note or f"มอบหมายให้ {t.assigned_to}", user.line_display_name or "Admin", user.role)
     # §40: มอบหมายงานให้ช่าง
     write_audit(
         db, action="ticket_assign", user=user, entity_type="ticket", entity_id=t.ticket_id,
         old_value={"status": old, "assigned_to": old_assignee},
-        new_value={"status": t.status, "assigned_to": payload.assignee,
+        new_value={"status": t.status, "assigned_to": t.assigned_to,
                    "note": payload.note},
         request=request,
     )
     db.commit()
+    if staff:
+        dispatch.run_in_background(_push_assignment, t.id, staff.id)
+    return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to,
+            "assigned_user_id": t.assigned_user_id}
+
+
+_STAFF_ROLES = ("it_support", "admin", "admin_school", "super_admin", "owner")
+
+
+def _push_assignment(ticket_pk: int, user_id: int) -> None:
+    with SessionLocal() as s:
+        t, u = s.get(RepairTicket, ticket_pk), s.get(User, user_id)
+        if t and u:
+            dispatch.push_offer(s, t, u)
+
+
+@app.post("/api/tickets/{ticket_id}/decline", status_code=200)
+def ticket_decline(ticket_id: str, request: Request, db: Session = Depends(get_db),
+                   user: User = Depends(get_current_user)):
+    """ช่างกด "ข้าม" งานที่ระบบเสนอให้ → ระบบเสนอคนถัดไปทันที"""
+    t = _get_ticket_or_404(db, ticket_id)
+    old_status = t.status
+    if not (t.status == "assigned" and t.auto_assigned and t.assigned_user_id == user.id):
+        raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": "งานนี้ไม่ได้รอให้คุณตอบรับแล้ว"})
+    nxt = dispatch.decline(db, t, user)
+    write_audit(db, action="ticket_decline", user=user, entity_type="ticket", entity_id=t.ticket_id,
+                old_value={"status": old_status}, new_value={"status": t.status, "assigned_to": t.assigned_to},
+                request=request)
+    db.commit()
+    if nxt:
+        dispatch.run_in_background(_push_assignment, t.id, nxt.id)
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
+
+
+# ─── ระบบส่งงาน: ฝั่งช่าง (สถานะพร้อมรับงาน, งานที่ถูกเสนอ, ผูก LINE) ──────────
+
+def _offer_out(t: RepairTicket, org: Optional[Organization], device: Optional[Device]) -> dict:
+    deadline = (t.assigned_at + timedelta(minutes=dispatch.offer_minutes())) if t.assigned_at else None
+    return {
+        "ticket_id": t.ticket_id, "title": t.title, "priority": t.priority,
+        "device_id": t.device_id, "device_label": device_display_label(device) if device else t.device_id,
+        "organization_name": (org.short_name or org.name) if org else None,
+        "created_at": t.created_at, "offered_at": t.assigned_at, "expires_at": deadline,
+    }
+
+
+@app.get("/api/dispatch/me")
+def dispatch_me(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """หน้าจอช่าง: สถานะพร้อมรับงาน + งานที่ระบบเสนอมาให้ตอนนี้ (หน้าเว็บเรียกทุก ~15 วินาที)"""
+    rows = db.execute(
+        select(RepairTicket, Organization, Device)
+        .outerjoin(Device, Device.device_id == RepairTicket.device_id)
+        .outerjoin(Organization, Organization.id == Device.organization_id)
+        .where(RepairTicket.status == "assigned", RepairTicket.auto_assigned.is_(True),
+               RepairTicket.assigned_user_id == user.id)
+        .options(selectinload(Device.room))
+        .order_by(RepairTicket.assigned_at)
+    ).all()
+    load = dispatch.staff_load(db, [user.id])[user.id]
+    return {
+        "can_receive": user.role == "it_support",
+        "on_duty": bool(user.on_duty),
+        "line_linked": bool(user.line_push_id),
+        "offer_minutes": dispatch.offer_minutes(),
+        "open": load["open"], "done_today": load["done_today"],
+        "offers": [_offer_out(t, org, dev) for t, org, dev in rows],
+    }
+
+
+class DutyIn(BaseModel):
+    on_duty: bool
+
+
+@app.patch("/api/me/duty")
+def set_my_duty(payload: DutyIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """ช่างเปิด/ปิด "พร้อมรับงาน" — ปิดแล้วงานที่ระบบเสนอค้างอยู่จะถูกส่งต่อทันที"""
+    me = db.get(User, user.id)
+    me.on_duty = payload.on_duty
+    passed = []
+    if not payload.on_duty:
+        db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": dispatch._LOCK_KEY})
+        offered = db.execute(select(RepairTicket).where(
+            RepairTicket.status == "assigned", RepairTicket.auto_assigned.is_(True),
+            RepairTicket.assigned_user_id == me.id).with_for_update()).scalars().all()
+        for t in offered:
+            nxt = dispatch.offer_next(db, t, reason=f"{me.line_display_name or 'ช่าง'} ปิดรับงาน")
+            if nxt:
+                passed.append((t.id, nxt.id))
+    db.commit()
+    for tid, uid in passed:
+        dispatch.run_in_background(_push_assignment, tid, uid)
+    return {"on_duty": me.on_duty, "passed_on": len(passed)}
+
+
+_LINK_CODE_MINUTES = 15
+_LINK_FAILS: dict[str, list] = defaultdict(list)  # LINE userId → เวลาที่ใส่รหัสผิด
+_LINK_RE = None
+
+
+@app.post("/api/me/line-link-code")
+def make_line_link_code(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """ออกรหัส 6 หลัก (ใช้ได้ 15 นาที ครั้งเดียว) ให้ช่างพิมพ์ "ผูก 123456" ส่งเข้า LINE OA"""
+    import secrets
+    now = datetime.now(timezone.utc)
+    me = db.get(User, user.id)
+    for _ in range(20):
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        clash = db.execute(select(User.id).where(
+            User.line_link_code == code, User.line_link_code_expires_at > now, User.id != me.id)).first()
+        if not clash:
+            break
+    me.line_link_code = code
+    me.line_link_code_expires_at = now + timedelta(minutes=_LINK_CODE_MINUTES)
+    db.commit()
+    return {"code": code, "expires_at": me.line_link_code_expires_at, "message": f"ผูก {code}"}
+
+
+@app.delete("/api/me/line-link")
+def unlink_line(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    me = db.get(User, user.id)
+    me.line_push_id = None
+    db.commit()
+    return {"line_linked": False}
+
+
+def _try_line_link(line_user_id: str, text_msg: str) -> Optional[str]:
+    """ข้อความ "ผูก 123456" / "link 123456" → ผูก LINE userId กับบัญชีช่าง
+    คืนข้อความตอบกลับ หรือ None ถ้าไม่ใช่ข้อความผูกบัญชี (ให้ chatbot ทำงานต่อตามปกติ)"""
+    import re
+    global _LINK_RE
+    if _LINK_RE is None:
+        _LINK_RE = re.compile(r"^\s*(?:ผูก(?:บัญชี)?|link)\s*(\d{6})\s*$", re.IGNORECASE)
+    m = _LINK_RE.match(text_msg or "")
+    if not m or not line_user_id:
+        return None
+    now = datetime.now(timezone.utc)
+    fails = [t for t in _LINK_FAILS[line_user_id] if t > now - timedelta(minutes=15)]
+    _LINK_FAILS[line_user_id] = fails
+    if len(fails) >= 5:
+        return "ใส่รหัสผิดหลายครั้ง กรุณารอ 15 นาทีแล้วขอรหัสใหม่จากหน้าเว็บค่ะ"
+    with SessionLocal() as s:
+        u = s.execute(select(User).where(
+            User.line_link_code == m.group(1), User.line_link_code_expires_at > now,
+            User.is_active.is_(True))).scalar_one_or_none()
+        if not u:
+            fails.append(now)
+            return "รหัสไม่ถูกต้องหรือหมดอายุแล้ว กรุณากด \"ขอรหัสใหม่\" ในหน้าเว็บค่ะ"
+        # LINE เดียวผูกได้บัญชีเดียว — ถอดจากบัญชีเก่าก่อน
+        for other in s.execute(select(User).where(User.line_push_id == line_user_id, User.id != u.id)).scalars():
+            other.line_push_id = None
+        u.line_push_id = line_user_id
+        u.line_link_code = None
+        u.line_link_code_expires_at = None
+        s.commit()
+        _LINK_FAILS.pop(line_user_id, None)
+        return (f"ผูก LINE กับบัญชี {u.line_display_name or u.line_user_id} เรียบร้อยค่ะ ✅\n"
+                "เมื่อมีงานซ่อมเข้ามาให้คุณ ระบบจะแจ้งที่นี่")
+
+
+# ─── ระบบส่งงาน: หน้าสรุปของแอดมิน ─────────────────────────────────────
+
+def _staff_in_scope(db: Session, user: User) -> list[User]:
+    conds = [User.role == "it_support", User.is_active.is_(True)]
+    scope = visible_org_ids(user)
+    if scope is not None:
+        conds.append(or_(User.organization_id.is_(None), User.organization_id.in_(scope or {-1})))
+    return list(db.execute(select(User).where(*conds).order_by(User.line_display_name)).scalars())
+
+
+@app.get("/api/dispatch/summary")
+def dispatch_summary(db: Session = Depends(get_db),
+                     user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+    """หน้าสรุปทีมช่าง: ใครว่าง/มีงานกี่ใบ + ใบงานที่ยังไม่มีคนรับ"""
+    staff = _staff_in_scope(db, user)
+    load = dispatch.staff_load(db, [u.id for u in staff])
+    offers = dict(db.execute(
+        select(RepairTicket.assigned_user_id, func.count())
+        .where(RepairTicket.status == "assigned", RepairTicket.auto_assigned.is_(True),
+               RepairTicket.assigned_user_id.in_([u.id for u in staff] or [-1]))
+        .group_by(RepairTicket.assigned_user_id)).all())
+    rows = []
+    for u in staff:
+        s = load[u.id]
+        state = "off" if not u.on_duty else ("free" if s["open"] == 0 else "busy")
+        rows.append({
+            "id": u.id, "name": u.line_display_name or u.line_user_id, "username": u.line_user_id,
+            "organization_id": u.organization_id, "on_duty": bool(u.on_duty),
+            "line_linked": bool(u.line_push_id), "state": state,
+            "open": s["open"], "done_today": s["done_today"], "offers": offers.get(u.id, 0),
+        })
+    conds = _ticket_filter_conditions(db, user)
+    if conds is None:  # ไม่มีโรงเรียนให้เห็น — อย่าตกไปเป็น "ไม่กรอง" (เห็นทุกโรงเรียน)
+        conds = [RepairTicket.id == -1]
+    base = lambda *extra: db.execute(
+        _ticket_list_base(select(func.count()).select_from(RepairTicket)).where(*conds, *extra)).scalar_one()
+    unclaimed_rows = db.execute(
+        _ticket_list_base(select(RepairTicket, Device, Organization))
+        .where(*conds, RepairTicket.status == "new")
+        .options(selectinload(Device.room))
+        .order_by(RepairTicket.created_at).limit(20)).all()
+    return {
+        "auto_assign": dispatch.enabled(),
+        "line_push_configured": dispatch.line_push_configured(),
+        "offer_minutes": dispatch.offer_minutes(),
+        "staff": rows,
+        "tickets": {
+            "unclaimed": base(RepairTicket.status == "new"),
+            "offering": base(RepairTicket.status == "assigned", RepairTicket.auto_assigned.is_(True)),
+            "in_progress": base(RepairTicket.status.in_(dispatch.OPEN_STATUSES),
+                                ~(RepairTicket.status == "assigned")),
+            "done_today": base(RepairTicket.resolved_at >= dispatch.day_start_utc()),
+        },
+        "unclaimed": [
+            {**_offer_out(t, org, dev), "tried": len(dispatch._tried(t))}
+            for t, dev, org in unclaimed_rows
+        ],
+    }
+
+
+@app.patch("/api/staff/{user_id}/duty")
+def set_staff_duty(user_id: int, payload: DutyIn, request: Request, db: Session = Depends(get_db),
+                   user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+    """แอดมินเปิด/ปิด "พร้อมรับงาน" แทนช่าง (เช่น ช่างลาป่วยแต่ลืมปิด)"""
+    target = next((u for u in _staff_in_scope(db, user) if u.id == user_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="ไม่พบช่างคนนี้ในความดูแลของคุณ")
+    target.on_duty = payload.on_duty
+    write_audit(db, action="staff_duty", user=user, entity_type="user", entity_id=str(target.id),
+                old_value=None, new_value={"on_duty": payload.on_duty}, request=request)
+    db.commit()
+    return {"id": target.id, "on_duty": target.on_duty}
+
 
 @app.post("/api/tickets/{ticket_id}/accept", status_code=200)
 def ticket_accept(ticket_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school", "it_support"))):
     """ช่างรับงาน — assigned/new → in_progress"""
     t = _get_ticket_or_404(db, ticket_id)
-    old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     check_ticket_access(db, user, t)
+    # ล็อกแถวก่อนตรวจสถานะ — สองคนกดรับพร้อมกัน หรือกดรับตอนระบบกำลังส่งต่อ
+    # คนที่สองจะเห็นสถานะใหม่แล้วได้ 409 แทนการทับกัน
+    t = db.execute(select(RepairTicket).where(RepairTicket.id == t.id).with_for_update()).scalar_one()
+    old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     if t.status not in ("assigned", "new"):
         raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": f"สถานะปัจจุบันคือ {t.status} — ไม่สามารถรับงานได้"})
-    t.assigned_to = t.assigned_to or (user.line_display_name or "ช่าง")
+    # คนกดรับ = ผู้รับผิดชอบ (งานที่ระบบเสนอให้คนอื่นแต่เรากดรับก่อนก็ได้งานไป)
+    t.assigned_to = user.line_display_name or t.assigned_to or "ช่าง"
+    t.assigned_user_id = user.id
+    t.assigned_at = t.assigned_at or datetime.now(timezone.utc)
+    t.auto_assigned = False
     apply_transition(db, t, "in_progress", force=True,
                      author_name=user.line_display_name or "Technician",
                      author_role=user.role, note="รับงานแล้ว กำลังดำเนินการ")
@@ -6674,6 +6960,13 @@ def _process_line_text(user_id: str, text: str, reply_token: str, group_id: str,
     # กลุ่ม = แจ้งเตือนอย่างเดียว: ข้าม reply (การแจ้งเตือนใช้ push ไป group_id แยกต่างหาก)
     if is_group:
         return
+    # ช่างส่ง "ผูก 123456" มาผูก LINE กับบัญชีเจ้าหน้าที่ — ตอบเองไม่ส่งเข้า chatbot
+    link_reply = _try_line_link(user_id, text)
+    if link_reply is not None:
+        if reply_token:
+            from app.line_bot import send_line_reply
+            _LINE_EXECUTOR.submit(send_line_reply, reply_token, link_reply)
+        return
     def _run():
         # LINE can deliver two messages from the same user close together.
         # Serialize that user's state transitions while allowing different
@@ -6823,6 +7116,12 @@ def line_bot_handle(payload: LineBotIn, _: None = Depends(require_n8n_secret)):
     ถ้า reply_token มี → backend reply เองได้เลย
     ถ้าตั้ง N8N_SHARED_SECRET ไว้ ต้องแนบ header X-N8N-Secret ให้ตรง"""
     from app.chatbot_core import handle_message
+    link_reply = None if payload.is_group else _try_line_link(payload.user_id, payload.text)
+    if link_reply is not None:
+        if payload.reply_token:
+            from app.line_bot import send_line_reply
+            send_line_reply(payload.reply_token, link_reply)
+        return {"reply": link_reply, "handled": True}
     reply = handle_message(
         user_id=payload.user_id,
         text=payload.text,
@@ -7009,6 +7308,7 @@ def line_create_ticket(payload: N8nTicketIn, db: Session = Depends(get_db), _: N
         _notify_n8n("ticket.created", _ticket_event_payload(ticket))
     except Exception:
         pass
+    dispatch.enqueue_dispatch(ticket.id)
     return {"success": True, "ticket_no": ticket.ticket_id, "ticket_id": ticket.ticket_id,
             "device_id": dev.device_id, "status": "new"}
 

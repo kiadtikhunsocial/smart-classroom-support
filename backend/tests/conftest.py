@@ -1,11 +1,17 @@
 """ทำให้ `import app...` ใช้ได้จากในโฟลเดอร์ tests โดยไม่ต้องติดตั้งแพ็กเกจ
 และรวม fixture ที่ใช้ร่วมกันของเทสต์รายการใบงาน (ticket list / counts / compression)"""
 
+import os
 import pathlib
 import sys
 import uuid
 
 import pytest
+
+# ระบบส่งงานอัตโนมัติเขียนฐานข้อมูลเบื้องหลัง — ปิดไว้เป็นค่าเริ่มต้นของทุกเทสต์
+# เปิดเฉพาะใน test_dispatch.py (monkeypatch) เพื่อไม่ให้งานเบื้องหลังไปแตะข้อมูลของเทสต์อื่น
+os.environ["AUTO_ASSIGN_ENABLED"] = "0"
+os.environ["DISPATCH_SWEEP_DISABLED"] = "1"
 
 BACKEND_ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
