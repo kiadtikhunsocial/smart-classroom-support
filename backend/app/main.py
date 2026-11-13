@@ -15,6 +15,8 @@ import hashlib
 import hmac
 import io
 import logging
+
+import httpx
 import os
 import threading
 from uuid import UUID
@@ -6602,18 +6604,37 @@ _STATUS_LABEL_TH = {
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "http://n8n:5678/webhook/")
 
 
-def _notify_n8n(event: str, payload: dict):
-    """ส่ง event ไป n8n (fire-and-forget) — n8n ไม่พร้อมก็ข้าม ไม่ทำให้ request หลักล้ม"""
+# ส่ง webhook ไป n8n บน worker เบื้องหลัง ไม่ใช่ใน request
+# เดิมเรียก httpx.post ตรง ๆ ทำให้ทุกการสร้าง/เปลี่ยนสถานะใบงานต้องรอ n8n
+# (สูงสุด timeout 2 วิ และนานกว่านั้นเมื่อ DNS หา host ไม่เจอ เพราะ timeout ไม่ครอบ DNS)
+# max_workers=1 โดยเจตนา: (1) event ถึง n8n ตามลำดับที่เกิด — created มาก่อน status_changed
+# (2) ถ้า n8n ล่ม จะมี thread ค้างอยู่แค่ตัวเดียว ไม่บานตามจำนวน request
+_NOTIFY_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="n8n-notify")
+
+
+def _send_notification(url: str, body: dict) -> None:
     try:
-        import httpx
+        httpx.post(url, json=body, timeout=2.0)
+    except Exception:
+        # n8n ไม่พร้อม = ข้าม (เหมือนเดิม) — การแจ้งเตือนต้องไม่ทำให้งานหลักล้ม
+        pass
+
+
+def _notify_n8n(event: str, payload: dict):
+    """ส่ง event ไป n8n (fire-and-forget จริง) — คืนค่าทันที ตัวส่งทำงานบน _NOTIFY_POOL"""
+    try:
         url = f"{N8N_WEBHOOK_URL}notify"
         body = {"event": event, **payload}
-        try:
-            httpx.post(url, json=body, timeout=2.0)
-        except Exception:
-            pass
+        _NOTIFY_POOL.submit(_send_notification, url, body)
     except Exception:
+        # เช่น pool ถูกปิดตอน process กำลังจบ — ทิ้ง event นั้นไป ไม่ให้ request ล้ม
         pass
+
+
+def _flush_notifications(timeout: float = 5.0) -> None:
+    """รอให้ event ที่ค้างในคิวส่งเสร็จ — ใช้ในเทสต์เท่านั้น
+    worker มีตัวเดียวและทำตามลำดับ งานว่างที่ส่งต่อท้ายจะเสร็จหลังงานก่อนหน้าทั้งหมด"""
+    _NOTIFY_POOL.submit(lambda: None).result(timeout=timeout)
 
 
 def _ticket_event_payload(t: "RepairTicket") -> dict:
