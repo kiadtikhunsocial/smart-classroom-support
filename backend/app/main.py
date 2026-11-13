@@ -29,6 +29,7 @@ from fastapi.exceptions import RequestValidationError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -1362,6 +1363,8 @@ app.add_middleware(
     # เบราว์เซอร์ซ่อน header ที่ไม่ได้ประกาศไว้จาก fetch ข้ามโดเมน — หน้าเว็บอ่านจำนวนรวมจากตัวนี้
     expose_headers=["X-Total-Count"],
 )
+# บีบอัด response ใหญ่ (รายการใบงาน/อุปกรณ์เป็น JSON หลายร้อย kB) — ตัวเล็กกว่า 1 kB ไม่คุ้มบีบ
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # ─── Logging (ข้อ 7: logging เพียงพอ + ไม่ leak sensitive data) ───────────────
 # (logging import ไว้ด้านบนของไฟล์แล้ว)

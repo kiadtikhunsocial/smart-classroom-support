@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -253,6 +254,11 @@ class Device(Base):
 
 class RepairTicket(Base):
     __tablename__ = "repair_tickets"
+    # ตรงกับ ORDER BY ของรายการใบงาน (ใหม่สุดก่อน) — หน้าแบ่งหน้าอ่านจาก index ได้ตรง ๆ
+    # ฐานข้อมูลที่มีอยู่แล้ว: create_all ไม่เพิ่ม index ให้ ต้องรัน scripts/migrate_ticket_indexes.py
+    __table_args__ = (
+        Index("ix_repair_tickets_created_at_id", text("created_at DESC"), text("ticket_id DESC")),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ticket_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
