@@ -15,7 +15,7 @@
 - Eligible staff: `role == "it_support"`, `is_active`, `on_duty`, and (`organization_id is None` or equal to the ticket's organization).
 - Open statuses (count as load): `assigned, in_progress, pending, waiting_parts, waiting_user`.
 - Pick order: fewest open tickets, then fewest tickets resolved today (Asia/Bangkok day), then oldest `last assigned_at` (free longest; never-assigned first), then lowest user id.
-- Accept timeout: 30 minutes (`AUTO_ASSIGN_ACCEPT_MINUTES`, default 30). Sweep every 5 minutes. Only tickets with `auto_assigned = true` are passed on; an admin's manual assignment is never moved.
+- Accept timeout: `DISPATCH_OFFER_MINUTES`, default **5** (owner first chose 30; changed when the owner asked for Grab-style "pop up and tap to accept" - set 30 in Render env to restore). Sweep every 30 seconds. Only tickets with `auto_assigned = true` are passed on; an admin's manual assignment is never moved.
 - Kill switch: env `AUTO_ASSIGN_ENABLED` (default `1`).
 - Link code: 6 digits, valid 15 minutes, single use. LINE message `ผูก 123456` or `link 123456`.
 - Notifications never fail or slow the request (same rule as `_notify_n8n`).
@@ -47,3 +47,23 @@ Tests: code links once, expired/reused rejected; workload numbers; school admin 
 ### Task 4: Frontend
 "งานของฉัน" tab (first tab for it_support), holder badge on card and row ("ยังไม่มีคนรับ" when empty), `MyDutyCard` (on-duty switch + LINE link code) on Tickets page for staff, `TeamWorkloadPage` (menu "ทีมช่าง") for admins with duty toggles and open/today counts.
 Tests: vitest for tab params; browser check of the whole flow.
+
+---
+
+## As built (2026-11-13)
+
+- Owner refined the request mid-build: "simple, always ready to send, like Grab - the job pops up for whoever has the fewest jobs or is free, they tap accept". Built exactly that: pop-up with countdown + Accept/Skip, LINE push, team page.
+- **Reachable only:** a technician is offered work only when on duty AND (LINE linked OR the staff web app polled in the last 10 minutes). Without this, every dormant/demo it_support account would sit in front of the real technician for 5 minutes each.
+- Offers go to the school's own technician first only by the ranking rule (fewest open, fewest done today, free longest, lowest id) - no special preference.
+- After everyone eligible has been offered a ticket once, it returns to `new` and appears under "ยังไม่มีคนรับ" on the team page; no more pushes.
+- LINE push link is `/?job=<ticket>` (staff app). `/?ticket=` stays the public tracking page.
+- Row locks use `populate_existing` so accept/assign/skip re-read the row after locking.
+- Customer side (same branch): track by ticket number or device code, "my repair requests" list with live status, step times, technician name after accept, auto refresh every minute.
+- Tests: backend 184 passed / 15 skipped; vitest 27 passed.
+
+### Deploy notes
+- `init_db()` adds the new columns on the next deploy (users: on_duty, line_push_id, line_link_code, line_link_code_expires_at, last_seen_at; repair_tickets: assigned_user_id, assigned_at, auto_assigned, offer_tried). No manual migration.
+- The sweeper starts with the app and immediately offers every `new` ticket from the last 3 days to reachable technicians. On a fresh deploy nobody is reachable yet, so nothing moves until technicians open the app or link LINE.
+- Env: `AUTO_ASSIGN_ENABLED` (default 1), `DISPATCH_OFFER_MINUTES` (default 5), `STAFF_APP_URL` (default https://iwasmart-service.vercel.app), `DISPATCH_SWEEP_DISABLED=1` to stop the background sweep.
+- Linking LINE needs the OA webhook to reach the backend (`wf_line_forward.json` -> `/api/line/webhook`, or `/api/line/bot`). If the LINE console points at `wf_allinone.json`, which replies by itself, "ผูก 123456" never reaches the backend.
+- Render free tier sleeps: the sweep only runs while awake (`wf_keepalive.json` pings `/health`).

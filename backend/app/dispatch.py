@@ -95,8 +95,24 @@ def staff_load(db: Session, user_ids: Iterable[int], now: Optional[datetime] = N
     return out
 
 
+REACH_MINUTES = 10  # "เปิดแอปอยู่" = หน้าเว็บถามงานเข้ามาภายใน 10 นาทีที่ผ่านมา
+
+
+def reachable_cond(now: Optional[datetime] = None):
+    """ติดต่อได้จริง (แบบคนขับ Grab ที่ออนไลน์): ผูก LINE แล้ว หรือเปิดหน้าเว็บอยู่
+    บัญชีเก่าที่ไม่มีใครใช้ จึงไม่ถูกเสนองานแล้วปล่อยให้รอ 5 นาทีต่อคน"""
+    since = (now or _now()) - timedelta(minutes=REACH_MINUTES)
+    return or_(User.line_push_id.is_not(None), User.last_seen_at >= since)
+
+
+def is_reachable(u: User, now: Optional[datetime] = None) -> bool:
+    if u.line_push_id:
+        return True
+    return bool(u.last_seen_at and u.last_seen_at >= (now or _now()) - timedelta(minutes=REACH_MINUTES))
+
+
 def eligible_staff(db: Session, org_id: Optional[int]) -> list[User]:
-    conds = [User.role == "it_support", User.is_active.is_(True), User.on_duty.is_(True)]
+    conds = [User.role == "it_support", User.is_active.is_(True), User.on_duty.is_(True), reachable_cond()]
     if org_id is not None:
         conds.append(or_(User.organization_id.is_(None), User.organization_id == org_id))
     return list(db.execute(select(User).where(*conds)).scalars())
@@ -163,6 +179,7 @@ def offer_next(db: Session, ticket: RepairTicket, reason: str = "") -> Optional[
 def _locked_ticket(db: Session, ticket_pk: int) -> Optional[RepairTicket]:
     return db.execute(
         select(RepairTicket).where(RepairTicket.id == ticket_pk).with_for_update()
+        .execution_options(populate_existing=True)  # อ่านค่าหลังได้ lock แม้ session จะโหลดแถวนี้ไว้แล้ว
     ).scalar_one_or_none()
 
 
@@ -182,12 +199,17 @@ def dispatch_ticket(ticket_pk: int) -> Optional[int]:
         return None
 
 
+class NotOffered(Exception):
+    """งานนี้ไม่ได้รอให้ช่างคนนี้ตอบแล้ว (คนอื่นรับไป / หมดเวลา / แอดมินมอบหมายใหม่)"""
+
+
 def decline(db: Session, ticket: RepairTicket, user: User) -> Optional[User]:
-    """ช่างกด "ข้าม" — ใช้ใน request (ผู้เรียก commit แล้วค่อย push_offer)"""
+    """ช่างกด "ข้าม" — ใช้ใน request (ผู้เรียก commit แล้วค่อย push_offer)
+    ตรวจเงื่อนไขอีกครั้งหลังได้ lock — ระหว่างนั้นอาจมีคนกดรับหรือ sweep ส่งต่อไปแล้ว"""
     _lock(db)
     t = _locked_ticket(db, ticket.id)
     if t is None or t.status != "assigned" or not t.auto_assigned or t.assigned_user_id != user.id:
-        return None
+        raise NotOffered()
     return offer_next(db, t, reason=f"{user.line_display_name or 'ช่าง'} ข้าม")
 
 
@@ -246,7 +268,8 @@ def offer_message(db: Session, t: RepairTicket) -> str:
         f"เลขที่ {t.ticket_id}\n{t.title}\n"
         + (f"{place} · " if place else "") + f"อุปกรณ์ {t.device_id}\n"
         f"กดรับงานภายใน {offer_minutes()} นาที ไม่งั้นระบบจะส่งให้คนถัดไป\n"
-        f"{STAFF_APP_URL}/?ticket={t.ticket_id}"
+        # ?job= = แอปเจ้าหน้าที่ (ล็อกอินแล้วเปิดใบงาน + ปุ่มรับงาน); ?ticket= คือหน้าติดตามของลูกค้า
+        f"{STAFF_APP_URL}/?job={t.ticket_id}"
     )
 
 

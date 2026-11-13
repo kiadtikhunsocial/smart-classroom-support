@@ -2537,6 +2537,13 @@ function AppInner() {
       // ล้าง query param ออกจาก URL (ไม่ให้กด refresh แล้วเปิดซ้ำ) — เฉพาะ logged-in
       window.history.replaceState({}, '', window.location.pathname);
     }
+    // ─── ลิงก์งานจาก LINE ของช่าง: ?job=TK... → เปิดใบงานในแอปเจ้าหน้าที่ (มีปุ่มรับงาน)
+    const jobParam = params.get('job');
+    if (jobParam) {
+      setFocusRecord({ kind: 'tickets', id: jobParam });
+      setMenu('tickets');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.isAuthenticated, reloadData]);
 
@@ -2653,7 +2660,8 @@ function AppInner() {
       return <PrivacyPage onBack={() => setMenu('dashboard')} />;
     }
     // หน้าเข้าสู่ระบบเจ้าหน้าที่แยกเป็นอีกหน้า — เข้าถึงด้วย /?login=1 เท่านั้น
-    if (qrParams.get('login') !== null) {
+    // ?job= มาจากข้อความ LINE ของช่าง — ยังไม่ล็อกอินก็พาไปหน้าเข้าสู่ระบบ (URL คงไว้ เข้าแล้วเปิดใบงานต่อ)
+    if (qrParams.get('login') !== null || qrParams.get('job') !== null) {
       return <LoginPage onLogin={auth.login} onPrivacy={() => setMenu('privacy')} />;
     }
     // หน้าแรก = หน้าสาธารณะ (ติดตามสถานะ + สแกนแจ้งซ่อม) ไม่ใช่หน้า login อีกแล้ว

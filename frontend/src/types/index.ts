@@ -243,6 +243,8 @@ export interface DispatchStaff {
   on_duty: boolean;
   line_linked: boolean;
   state: 'free' | 'busy' | 'off';
+  /** false = ระบบจะไม่เสนองาน (ไม่ผูก LINE และไม่ได้เปิดเว็บใน 10 นาที) */
+  reachable: boolean;
   open: number;
   done_today: number;
   offers: number;

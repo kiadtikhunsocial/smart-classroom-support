@@ -125,6 +125,9 @@ export default function TeamPage({ onBack, onOpenTicket }: TeamPageProps) {
                     {s.offers > 0 && ` · รอตอบ ${s.offers}`}
                     {!s.line_linked && ' · ยังไม่ผูก LINE'}
                   </span>
+                  {s.on_duty && !s.reachable && (
+                    <span className="dp-staff-warn">ติดต่อไม่ได้ — ยังไม่ผูก LINE และไม่ได้เปิดเว็บใน 10 นาที ระบบจะยังไม่ส่งงานให้</span>
+                  )}
                 </span>
                 <button type="button" role="switch" aria-checked={s.on_duty} disabled={busyId === s.id}
                   aria-label={`${s.name} พร้อมรับงาน`}

@@ -82,6 +82,7 @@ _DISPATCH_COLUMNS = (
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_push_id VARCHAR(64)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_link_code VARCHAR(6)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_link_code_expires_at TIMESTAMPTZ",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ",
     "CREATE INDEX IF NOT EXISTS ix_users_line_push_id ON users (line_push_id)",
     "CREATE INDEX IF NOT EXISTS ix_users_line_link_code ON users (line_link_code)",
     "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER "
@@ -457,6 +458,8 @@ class User(Base):
     line_push_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     line_link_code: Mapped[Optional[str]] = mapped_column(String(6), nullable=True, index=True)
     line_link_code_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # หน้าเว็บของช่างถามงานล่าสุดเมื่อไร — ใช้ตัดสินว่า "ออนไลน์" (ระบบเสนองานให้ได้)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

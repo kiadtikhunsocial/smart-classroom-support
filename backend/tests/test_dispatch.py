@@ -23,7 +23,7 @@ def world(tag, monkeypatch):
     org2 = Organization(code=f"D2{tag}", name=f"รร.ส่งงาน 2 {tag}")
     db.add_all([org1, org2]); db.flush()
     mk = lambda key, **kw: User(line_user_id=f"{key}-{tag}", line_display_name=f"ช่าง{key}", role="it_support",
-                                is_active=True, **kw)
+                                is_active=True, line_push_id=f"U{key}{tag}", **kw)
     a, b = mk("A", organization_id=org1.id), mk("B", organization_id=org1.id)
     c, d = mk("C", organization_id=org1.id, on_duty=False), mk("D", organization_id=org2.id)
     sch = User(line_user_id=f"S-{tag}", line_display_name="admin2", role="admin_school",
@@ -230,3 +230,58 @@ def test_summary_shows_team_state_and_school_admin_sees_own_school_only(client, 
     assert mine["tickets"]["unclaimed"] == 1 and other_school.ticket_id
     # ช่างใช้หน้าสรุปไม่ได้
     assert client.get("/api/dispatch/summary", headers=w["h"](w["a"])).status_code == 403
+
+
+def test_unreachable_staff_are_skipped_until_they_open_the_app(client, world):
+    w = world
+    with SessionLocal() as s:  # A และ B ยังไม่ผูก LINE และไม่เคยเปิดเว็บ
+        for u in s.query(User).filter(User.id.in_([w["a"].id, w["b"].id])):
+            u.line_push_id = None
+        s.commit()
+        assert dispatch.pick_staff(s, w["org1"].id) is None
+    # B เปิดหน้าเว็บ (หน้าเว็บถาม /api/dispatch/me) → ออนไลน์ → ได้งาน
+    assert client.get("/api/dispatch/me", headers=w["h"](w["b"])).status_code == 200
+    with SessionLocal() as s:
+        assert dispatch.pick_staff(s, w["org1"].id).id == w["b"].id
+    body = client.get("/api/dispatch/summary", headers=w["h"](w["sch"])).json()
+    assert all("reachable" in r for r in body["staff"])
+
+
+def test_lock_reads_the_latest_row_even_if_session_already_holds_it(world):
+    w = world
+    t = w["ticket"]()
+    a = SessionLocal()
+    try:
+        held = a.get(RepairTicket, t.id)
+        assert held.status == "new"
+        with SessionLocal() as b:  # อีกคนกดรับไปก่อน
+            b.get(RepairTicket, t.id).status = "in_progress"
+            b.commit()
+        locked = dispatch._locked_ticket(a, t.id)
+        assert locked is held and locked.status == "in_progress"
+    finally:
+        a.rollback(); a.close()
+
+
+def test_school_admin_cannot_switch_off_a_technician_who_serves_every_school(client, world, tag):
+    w = world
+    with SessionLocal() as s:
+        g = User(line_user_id=f"G-{tag}", line_display_name="ช่างกลาง", role="it_support", is_active=True)
+        s.add(g); s.commit()
+    try:
+        r = client.patch(f"/api/staff/{g.id}/duty", json={"on_duty": False}, headers=w["h"](w["sch"]))
+        assert r.status_code == 403
+        assert client.patch(f"/api/staff/{w['d'].id}/duty", json={"on_duty": False}, headers=w["h"](w["sch"])).status_code == 200
+    finally:
+        with SessionLocal() as s:
+            s.query(AuditLog).filter(AuditLog.entity_id == str(g.id)).delete(synchronize_session=False)
+            s.query(User).filter(User.id == g.id).delete(synchronize_session=False)
+            s.commit()
+
+
+def test_line_offer_links_to_the_staff_app_not_the_public_tracking_page(world):
+    w = world
+    t = w["ticket"]()
+    with SessionLocal() as s:
+        msg = dispatch.offer_message(s, s.get(RepairTicket, t.id))
+    assert f"/?job={t.ticket_id}" in msg and "?ticket=" not in msg

@@ -469,7 +469,8 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         setTicket(r);
         // endpoint สาธารณะคืนคีย์ ticket_no (ส่วน endpoint ที่ต้องล็อกอินคืน ticket_id)
         const resolvedNo: string = r?.ticket_no || r?.ticket_id || no;
-        setRecent(saveRecent(resolvedNo));
+        // รีเฟรชอัตโนมัติไม่ต้องจัดลำดับรายการใหม่ (และไม่ยิงคำขอสถานะซ้ำทุกนาที)
+        if (!opts.quiet) setRecent(saveRecent(resolvedNo));
         // ให้ลิงก์แชร์/กดรีเฟรชแล้วยังอยู่ที่ใบงานเดิม
         try {
           window.history.replaceState({}, '', `/?ticket=${encodeURIComponent(resolvedNo)}`);

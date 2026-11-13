@@ -6133,7 +6133,8 @@ class PublicStatusIn(BaseModel):
 
 
 @app.post("/api/public/tickets/status")
-@limiter.limit("30/minute")
+# ไม่ใส่ rate limit: ตัวจำกัดปัจจุบันนับทุกคนหลัง proxy เป็นคนเดียว (ดูการตัดสินใจข้อ 4 ในแผน)
+# และ endpoint ติดตามรายใบ /api/tickets/track ก็ไม่มี limit อยู่แล้ว — จำกัดที่ 10 เลขต่อคำขอแทน
 def public_ticket_statuses(request: Request, payload: PublicStatusIn, db: Session = Depends(get_db)):
     """สถานะล่าสุดของ "งานแจ้งซ่อมของฉัน" (เลขที่เบราว์เซอร์จำไว้) ทีเดียวหลายใบ
     เลขที่ไม่พบถูกข้ามเงียบ ๆ — ไม่บอกว่าเลขไหนมีจริง (กันเดาเลขใบงานของคนอื่น)"""
@@ -6258,7 +6259,9 @@ def _add_update(db: Session, t: RepairTicket, from_s: Optional[str], to_s: Optio
 def ticket_assign(ticket_id: str, payload: TicketAssignReq, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles("owner", "super_admin", "admin"))):
     """มอบหมายงานให้ช่าง (admin/super_admin)"""
     t = _get_ticket_or_404(db, ticket_id)
-    t = db.execute(select(RepairTicket).where(RepairTicket.id == t.id).with_for_update()).scalar_one()
+    # populate_existing: ตัวแปร t ถูกโหลดไว้แล้ว — ต้องอ่านค่าจริงหลังได้ lock ไม่ใช่ค่าเก่าใน session
+    t = db.execute(select(RepairTicket).where(RepairTicket.id == t.id).with_for_update()
+                   .execution_options(populate_existing=True)).scalar_one()
     old = t.status
     old_assignee = t.assigned_to  # §40: เก็บผู้รับผิดชอบเดิมก่อนถูกเขียนทับ
     staff = None
@@ -6311,7 +6314,11 @@ def ticket_decline(ticket_id: str, request: Request, db: Session = Depends(get_d
     old_status = t.status
     if not (t.status == "assigned" and t.auto_assigned and t.assigned_user_id == user.id):
         raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": "งานนี้ไม่ได้รอให้คุณตอบรับแล้ว"})
-    nxt = dispatch.decline(db, t, user)
+    try:
+        nxt = dispatch.decline(db, t, user)
+    except dispatch.NotOffered:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": "งานนี้ไม่ได้รอให้คุณตอบรับแล้ว"})
     write_audit(db, action="ticket_decline", user=user, entity_type="ticket", entity_id=t.ticket_id,
                 old_value={"status": old_status}, new_value={"status": t.status, "assigned_to": t.assigned_to},
                 request=request)
@@ -6346,6 +6353,13 @@ def dispatch_me(db: Session = Depends(get_db), user: User = Depends(get_current_
         .order_by(RepairTicket.assigned_at)
     ).all()
     load = dispatch.staff_load(db, [user.id])[user.id]
+    # หน้าเว็บของช่างถามทุก ~15 วินาที = ช่าง "ออนไลน์" — ระบบเสนองานให้ได้แม้ยังไม่ผูก LINE
+    # เขียนอย่างมากนาทีละครั้ง ไม่ให้ทุกการถามกลายเป็นการเขียนฐานข้อมูล
+    now = datetime.now(timezone.utc)
+    if user.role == "it_support" and (not user.last_seen_at or user.last_seen_at < now - timedelta(seconds=60)):
+        me = db.get(User, user.id)
+        me.last_seen_at = now
+        db.commit()
     return {
         "can_receive": user.role == "it_support",
         "on_duty": bool(user.on_duty),
@@ -6475,6 +6489,8 @@ def dispatch_summary(db: Session = Depends(get_db),
             "id": u.id, "name": u.line_display_name or u.line_user_id, "username": u.line_user_id,
             "organization_id": u.organization_id, "on_duty": bool(u.on_duty),
             "line_linked": bool(u.line_push_id), "state": state,
+            # ไม่ผูก LINE และไม่ได้เปิดเว็บใน 10 นาที = ระบบจะไม่เสนองานให้ (กันงานค้างรอคนที่ติดต่อไม่ได้)
+            "reachable": dispatch.is_reachable(u),
             "open": s["open"], "done_today": s["done_today"], "offers": offers.get(u.id, 0),
         })
     conds = _ticket_filter_conditions(db, user)
@@ -6513,6 +6529,9 @@ def set_staff_duty(user_id: int, payload: DutyIn, request: Request, db: Session 
     target = next((u for u in _staff_in_scope(db, user) if u.id == user_id), None)
     if not target:
         raise HTTPException(status_code=404, detail="ไม่พบช่างคนนี้ในความดูแลของคุณ")
+    # ช่างส่วนกลาง (ไม่มีสังกัด) ดูแลทุกโรงเรียน — แอดมินโรงเรียนเดียวปิดรับงานแทนไม่ได้
+    if user.role == "admin_school" and target.organization_id != user.organization_id:
+        raise HTTPException(status_code=403, detail="ช่างคนนี้ดูแลหลายโรงเรียน — ให้แอดมินส่วนกลางเป็นผู้เปลี่ยน")
     target.on_duty = payload.on_duty
     write_audit(db, action="staff_duty", user=user, entity_type="user", entity_id=str(target.id),
                 old_value=None, new_value={"on_duty": payload.on_duty}, request=request)
@@ -6527,7 +6546,9 @@ def ticket_accept(ticket_id: str, request: Request, db: Session = Depends(get_db
     check_ticket_access(db, user, t)
     # ล็อกแถวก่อนตรวจสถานะ — สองคนกดรับพร้อมกัน หรือกดรับตอนระบบกำลังส่งต่อ
     # คนที่สองจะเห็นสถานะใหม่แล้วได้ 409 แทนการทับกัน
-    t = db.execute(select(RepairTicket).where(RepairTicket.id == t.id).with_for_update()).scalar_one()
+    # populate_existing: ตัวแปร t ถูกโหลดไว้แล้ว — ต้องอ่านค่าจริงหลังได้ lock ไม่ใช่ค่าเก่าใน session
+    t = db.execute(select(RepairTicket).where(RepairTicket.id == t.id).with_for_update()
+                   .execution_options(populate_existing=True)).scalar_one()
     old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     if t.status not in ("assigned", "new"):
         raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": f"สถานะปัจจุบันคือ {t.status} — ไม่สามารถรับงานได้"})
