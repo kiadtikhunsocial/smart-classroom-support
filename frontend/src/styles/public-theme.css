@@ -352,9 +352,11 @@
 
 /* ── 10. ผลการค้นหา: เลขใบงาน + badge สถานะ ─────────────────────────────── */
 
-/* ยังเป็น gradient เพราะ rule เดิมใช้ background-clip: text */
+/* ยังเป็น gradient เพราะ rule เดิมใช้ background-clip: text
+   ต้องใช้ background-image ไม่ใช่ shorthand `background:` — shorthand รีเซ็ต
+   background-clip กลับเป็น border-box ทำให้ตัวเลขโปร่งใสมองไม่เห็น */
 [data-mode] .ph-result-no strong {
-  background: linear-gradient(100deg, var(--ph-text), var(--ph-accent-text));
+  background-image: linear-gradient(100deg, var(--ph-text), var(--ph-accent-text));
 }
 
 [data-mode] .ph-page .badge.ph-status-badge {
@@ -591,8 +593,9 @@
   box-shadow: 0 0 0 6px rgb(var(--ph-ok-rgb) / 0.08), 0 0 30px rgb(var(--ph-ok-rgb) / 0.22);
 }
 
+/* background-image ไม่ใช่ `background:` — ดูเหตุผลที่ .ph-result-no strong ด้านบน */
 [data-mode] .pr-ticket-no {
-  background: linear-gradient(100deg, var(--ph-text), var(--ph-accent-text));
+  background-image: linear-gradient(100deg, var(--ph-text), var(--ph-accent-text));
 }
 
 [data-mode] .pr-link-btn {
