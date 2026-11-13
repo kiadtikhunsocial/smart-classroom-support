@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { Ticket } from '../../types';
+import ConfirmDialog from '../ConfirmDialog';
 import DetailField from '../DetailField';
+import { actionsFor, validateActionInput, type TicketAction } from './ticketActions';
 import {
   ticketDetailChannel, ticketDetailDate, ticketDetailPriority, ticketDetailStatus,
 } from './ticketLabels';
@@ -25,6 +27,14 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // ขั้นตอนงานที่กำลังกรอก (บันทึกผลซ่อม / เหตุผลยกเลิก / เหตุผลเปิดใหม่)
+  const [pending, setPending] = useState<TicketAction | null>(null);
+  const [solution, setSolution] = useState('');
+  const [rootCause, setRootCause] = useState('');
+  const [note, setNote] = useState('');
+  const [running, setRunning] = useState<TicketAction['id'] | null>(null);
+  const [actionError, setActionError] = useState('');
   const requestId = useRef(0);
 
   const load = useCallback(async () => {
@@ -45,25 +55,56 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
 
   useEffect(() => { void load(); return () => { requestId.current += 1; }; }, [load]);
 
+  // Esc ปิดแผง — ยกเว้นตอนกล่องยืนยันเปิดอยู่หรือกำลังบันทึก
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !confirmDelete && !running) onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, confirmDelete, running]);
 
   const handleDelete = async () => {
-    if (!window.confirm(`ย้ายใบงาน ${ticketId} ไปถังข้อมูลที่กู้คืนได้?`)) return;
     setDeleting(true);
     try {
       await api.deleteTicket(ticketId);
+      setConfirmDelete(false);
       onChanged();
       onClose();
     } catch (e: any) {
+      setConfirmDelete(false);
       setError('ลบไม่สำเร็จ: ' + (e?.message || ''));
     } finally {
       setDeleting(false);
     }
   };
+
+  const startAction = (action: TicketAction) => {
+    setActionError('');
+    if (action.needs === 'none') { void runAction(action); return; }
+    setPending(action); setSolution(''); setRootCause(''); setNote('');
+  };
+
+  const runAction = async (action: TicketAction) => {
+    const problem = validateActionInput(action, { solution, note });
+    if (problem) { setActionError(problem); return; }
+    setRunning(action.id); setActionError('');
+    try {
+      if (action.id === 'accept') await api.acceptTicket(ticketId);
+      else if (action.id === 'resolve') await api.resolveTicket(ticketId, { solution: solution.trim(), root_cause: rootCause.trim() || undefined });
+      else if (action.id === 'close') await api.closeTicket(ticketId, {});
+      else if (action.id === 'reopen') await api.reopenTicket(ticketId, note.trim());
+      else if (action.id === 'cancel') await api.cancelTicket(ticketId, note.trim());
+      setPending(null);
+      onChanged();
+    } catch (e: any) {
+      // เช่น อีกคนรับงานไปก่อน (409) — แสดงข้อความจาก server แล้วโหลดสถานะล่าสุด
+      setActionError(e?.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setRunning(null);
+      void load();
+    }
+  };
+
+  const actions = ticket ? actionsFor(ticket.status, canManage) : [];
 
   const t = ticket;
   return (
@@ -147,17 +188,76 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
                 <a href={a.file_url || a.url} target="_blank" rel="noreferrer">{a.file_name || a.filename || `ไฟล์ ${i + 1}`}</a>
               </li>)}</ul> : <p className="detail-sheet-empty">ไม่มีไฟล์แนบ</p>}
             </section>
+
+            {/* ลบอยู่ท้ายแผง แยกจากปุ่มขั้นตอนงาน — เดิมอยู่ติดปุ่มปิดที่ footer เสี่ยงกดพลาด */}
+            {canManage && (
+              <section className="detail-sheet-section tk-danger-zone">
+                <button type="button" className="tk-link-danger" disabled={deleting}
+                  onClick={() => setConfirmDelete(true)}>
+                  ย้ายใบงานนี้ไปถังกู้คืน
+                </button>
+              </section>
+            )}
           </>}
         </div>
-        <div className="detail-sheet-footer">
-          <button className="btn btn-secondary" onClick={onClose}>ปิดรายละเอียด</button>
-          {canManage && (
-            <button className="btn btn-danger" disabled={deleting || loading} onClick={() => void handleDelete()}>
-              {deleting ? 'กำลังลบ…' : 'ลบใบงาน'}
+
+        {pending && (
+          <form className="tk-action-form" onSubmit={(e) => { e.preventDefault(); void runAction(pending); }}>
+            {pending.needs === 'solution' ? (
+              <>
+                <label className="form-label" htmlFor="tk-solution">วิธีแก้ไข <span className="required">*</span></label>
+                <textarea id="tk-solution" className="form-input" rows={3} maxLength={2000} autoFocus
+                  value={solution} onChange={(e) => setSolution(e.target.value)}
+                  placeholder="เช่น เปลี่ยนสาย HDMI ใหม่ ทดสอบภาพขึ้นปกติ" />
+                <label className="form-label" htmlFor="tk-root-cause">สาเหตุ (ไม่บังคับ)</label>
+                <input id="tk-root-cause" className="form-input" maxLength={500}
+                  value={rootCause} onChange={(e) => setRootCause(e.target.value)} />
+              </>
+            ) : (
+              <>
+                <label className="form-label" htmlFor="tk-note">เหตุผล <span className="required">*</span></label>
+                <textarea id="tk-note" className="form-input" rows={2} maxLength={2000} autoFocus
+                  value={note} onChange={(e) => setNote(e.target.value)} />
+              </>
+            )}
+            <div className="tk-action-form-buttons">
+              <button type="button" className="btn btn-ghost" onClick={() => { setPending(null); setActionError(''); }} disabled={!!running}>
+                ไม่ใช่ตอนนี้
+              </button>
+              <button type="submit" className={`btn ${pending.id === 'cancel' ? 'btn-danger' : 'btn-primary'}`} disabled={!!running}>
+                {running ? 'กำลังบันทึก…' : `ยืนยัน${pending.label}`}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {actionError && <p className="tk-action-error" role="alert">{actionError}</p>}
+
+        <div className="detail-sheet-footer tk-sheet-footer">
+          {!pending && actions.map((a) => (
+            <button key={a.id} type="button"
+              className={`btn ${a.kind === 'primary' ? 'btn-primary' : 'btn-secondary'}`}
+              disabled={loading || !!running}
+              onClick={() => startAction(a)}>
+              {running === a.id ? 'กำลังบันทึก…' : a.label}
             </button>
-          )}
+          ))}
+          <span className="tk-footer-spacer" />
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={!!running}>ปิด</button>
         </div>
       </div>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="ย้ายใบงานไปถังกู้คืน"
+          message={`ย้ายใบงาน ${ticketId} ไปถังข้อมูลที่กู้คืนได้?`}
+          confirmLabel="ย้ายไปถังกู้คืน"
+          danger
+          busy={deleting}
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }
