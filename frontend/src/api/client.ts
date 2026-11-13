@@ -1,5 +1,5 @@
 import { User } from '../types/user';
-import type { PublicOptions, Ticket } from '../types';
+import type { DispatchMe, DispatchSummary, PublicOptions, Ticket } from '../types';
 
 // ─── API base URL ───────────────────────────────────────────────────────
 // ลำดับ: ค่าที่ฝังตอน build (__VITE_API_URL__) → import.meta.env → same-origin '/api'
@@ -125,7 +125,7 @@ export const api = {
   /** จำนวนใบงานแยกสถานะ ด้วยตัวกรองชุดเดียวกับรายการ (ไม่ส่งสถานะ/หน้า — แท็บต้องเห็นทุกสถานะ) */
   ticketCounts: (params: Record<string, string>) => {
     const { status: _status, limit: _limit, offset: _offset, ...rest } = params;
-    return request<{ total: number; by_status: Record<string, number> }>(`/tickets/counts${toQuery(rest)}`);
+    return request<{ total: number; by_status: Record<string, number>; mine_open?: number }>(`/tickets/counts${toQuery(rest)}`);
   },
 
   getTicket: (ticketId: string) => request<any>(`/tickets/${ticketId}`),
@@ -399,10 +399,21 @@ export const api = {
 
   // ─── Ticket lifecycle actions (Batch 1 backend) ──────────────────
     trackTicket: (ticketNo: string) => request<any>(`/tickets/track/${encodeURIComponent(ticketNo)}`),
-    assignTicket: (ticketId: string, data: { assignee: string; note?: string }) =>
+    assignTicket: (ticketId: string, data: { assignee?: string; assignee_user_id?: number; note?: string }) =>
       request<any>(`/tickets/${ticketId}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     acceptTicket: (ticketId: string) =>
       request<any>(`/tickets/${ticketId}/accept`, { method: 'POST' }),
+    // ─── ระบบส่งงาน (แบบ Grab) ───
+    declineTicket: (ticketId: string) =>
+      request<any>(`/tickets/${ticketId}/decline`, { method: 'POST' }),
+    dispatchMe: () => request<DispatchMe>('/dispatch/me'),
+    setMyDuty: (on_duty: boolean) =>
+      request<{ on_duty: boolean; passed_on: number }>('/me/duty', { method: 'PATCH', body: JSON.stringify({ on_duty }) }),
+    lineLinkCode: () => request<{ code: string; expires_at: string; message: string }>('/me/line-link-code', { method: 'POST' }),
+    unlinkLine: () => request<{ line_linked: boolean }>('/me/line-link', { method: 'DELETE' }),
+    dispatchSummary: () => request<DispatchSummary>('/dispatch/summary'),
+    setStaffDuty: (userId: number, on_duty: boolean) =>
+      request<{ id: number; on_duty: boolean }>(`/staff/${userId}/duty`, { method: 'PATCH', body: JSON.stringify({ on_duty }) }),
     resolveTicket: (ticketId: string, data: any) =>
       request<any>(`/tickets/${ticketId}/resolve`, { method: 'POST', body: JSON.stringify(data) }),
     closeTicket: (ticketId: string, data: { rating?: number; feedback?: string }) =>

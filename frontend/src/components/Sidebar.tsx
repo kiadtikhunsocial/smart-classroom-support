@@ -63,6 +63,16 @@ const menuItems: MenuItem[] = [
     ),
   },
   {
+    id: 'team',
+    label: 'ทีมช่าง',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="9" cy="8" r="3.5"/>
+        <path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/>
+      </svg>
+    ),
+  },
+  {
     id: 'kb',
     label: 'ฐานความรู้',
     icon: (
@@ -199,10 +209,10 @@ const adminMenuItems = menuItems.filter((i) => i.id === 'schools');
 // หมายเหตุสิทธิ์ฝั่ง backend: /api/pm/* → owner/super_admin/admin/it_support,
 // /api/audit-logs → owner/super_admin/admin เท่านั้น (admin_school จึงไม่เห็นสองเมนูนี้)
 const ROLE_MENUS: Record<string, string[]> = {
-  owner: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'chatbot', 'ratings', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
-  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'chatbot', 'ratings', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
-  admin: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
-  admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'registrations', 'users', 'reports', 'settings', 'profile'],
+  owner: ['dashboard', 'devices', 'scan', 'tickets', 'team', 'kb', 'chatbot', 'ratings', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
+  super_admin: ['dashboard', 'devices', 'scan', 'tickets', 'team', 'kb', 'chatbot', 'ratings', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
+  admin: ['dashboard', 'devices', 'scan', 'tickets', 'team', 'kb', 'qrbatch', 'pm', 'sales', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'],
+  admin_school: ['dashboard', 'devices', 'scan', 'tickets', 'team', 'kb', 'qrbatch', 'registrations', 'users', 'reports', 'settings', 'profile'],
   it_support: ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'qrbatch', 'pm', 'sales', 'reports', 'settings', 'profile'],
 };
 
@@ -221,7 +231,7 @@ export function visibleMenusForRole(role: string | undefined, organizationId?: n
 export { ROLE_MENUS };
 
 // เรียงเมนูตามลำดับเดิมใน menuItems
-const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'kb', 'chatbot', 'ratings', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'];
+const ROLE_MENU_ORDER = ['dashboard', 'devices', 'scan', 'tickets', 'team', 'kb', 'chatbot', 'ratings', 'qrbatch', 'pm', 'sales', 'schools', 'registrations', 'users', 'reports', 'audit', 'settings', 'profile'];
 
 function visibleMenusFor(role: string | undefined, organizationId?: number | null): MenuItem[] {
   const allowed = visibleMenusForRole(role, organizationId);
@@ -236,7 +246,7 @@ function visibleMenusFor(role: string | undefined, organizationId?: number | nul
 // กลุ่มไหนไม่มีเมนูที่ผู้ใช้เห็นได้เลย จะไม่ถูก render ทั้งกลุ่ม
 const MENU_GROUPS: { label: string; ids: string[] }[] = [
   { label: 'ภาพรวม', ids: ['dashboard', 'reports'] },
-  { label: 'งานซ่อม', ids: ['tickets', 'scan', 'pm', 'ratings'] },
+  { label: 'งานซ่อม', ids: ['tickets', 'team', 'scan', 'pm', 'ratings'] },
   { label: 'คลังอุปกรณ์', ids: ['devices', 'qrbatch', 'kb', 'chatbot'] },
   { label: 'จัดการระบบ', ids: ['schools', 'registrations', 'users', 'sales', 'audit'] },
   { label: 'บัญชีของฉัน', ids: ['settings', 'profile'] },

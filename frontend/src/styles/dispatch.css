@@ -1,0 +1,230 @@
+/* ============================================================================
+   dispatch.css — ระบบส่งงานแบบ Grab (components/dispatch/*)
+   ใช้ token ของระบบเท่านั้น จึงตามโหมดสว่าง/มืดเอง
+   ========================================================================== */
+
+.dp-mono { font-family: var(--font-mono); letter-spacing: 0.02em; }
+
+/* ── งานเด้ง ─────────────────────────────────────────────────────────────── */
+.dp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: end center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.5);
+  animation: dp-fade 160ms ease-out;
+}
+
+@media (min-width: 640px) { .dp-overlay { place-items: center; } }
+
+.dp-offer {
+  width: min(440px, 100%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.4);
+  overflow: hidden;
+  animation: dp-rise 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.dp-offer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.dp-offer-head h2 { flex: 1; margin: 0; font-size: 1.05rem; font-weight: 700; }
+
+.dp-pulse {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #fff;
+  animation: dp-pulse 1.2s ease-out infinite;
+}
+
+.dp-timer {
+  min-width: 56px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 0.2);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dp-timer.is-low { background: var(--color-danger); }
+
+.dp-offer-body { padding: 16px 18px 4px; }
+.dp-offer-title { margin: 0 0 12px; font-size: 1.1rem; font-weight: 700; line-height: 1.4; }
+
+.dp-offer-facts { display: grid; gap: 8px; margin: 0; }
+.dp-offer-facts div { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: center; }
+.dp-offer-facts dt { color: var(--color-text-secondary); font-size: 0.85rem; }
+.dp-offer-facts dd { margin: 0; font-size: 0.92rem; min-width: 0; overflow-wrap: anywhere; }
+
+.dp-more { margin: 12px 0 0; color: var(--color-text-secondary); font-size: 0.85rem; }
+.dp-error { margin: 12px 0 0; color: var(--color-danger); font-size: 0.88rem; }
+
+.dp-offer-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+  padding: 16px 18px 8px;
+}
+
+.dp-offer-actions .btn { min-height: 52px; justify-content: center; font-size: 1rem; font-weight: 700; }
+.dp-hint { margin: 0; padding: 0 18px 14px; color: var(--color-text-tertiary); font-size: 0.78rem; text-align: center; }
+
+.dp-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 1100;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: 0.9rem;
+}
+
+@keyframes dp-fade { from { opacity: 0; } }
+@keyframes dp-rise { from { opacity: 0; transform: translateY(24px) scale(0.98); } }
+@keyframes dp-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0.7); }
+  100% { box-shadow: 0 0 0 10px rgb(255 255 255 / 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-overlay, .dp-offer, .dp-pulse { animation: none; }
+}
+
+/* ── สวิตช์พร้อมรับงาน ─────────────────────────────────────────────────── */
+.dp-duty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: var(--spacing-md);
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.dp-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 14px 4px 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dp-switch-knob {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: background 150ms;
+}
+
+.dp-switch.is-on { border-color: var(--color-success); background: var(--color-success-light); }
+.dp-switch.is-on .dp-switch-knob { background: var(--color-success); }
+.dp-switch:disabled { opacity: 0.6; cursor: wait; }
+
+.dp-switch-sm { min-height: 32px; padding: 3px; }
+.dp-switch-sm .dp-switch-knob { width: 24px; height: 24px; }
+.dp-switch-sm.is-on { padding-left: 23px; }
+
+.dp-duty-stat { color: var(--color-text-secondary); font-size: 0.9rem; }
+.dp-duty-stat strong { color: var(--color-text); font-size: 1.05rem; }
+.dp-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.88rem; color: var(--color-text-secondary); }
+.dp-line.is-linked { color: var(--color-success); }
+.dp-duty-msg { flex-basis: 100%; color: var(--color-text-secondary); font-size: 0.85rem; }
+
+/* ── ผู้รับผิดชอบในรายการใบงาน ─────────────────────────────────────────── */
+.dp-holder { display: block; margin-top: 4px; color: var(--color-text-secondary); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.dp-holder.is-none { color: var(--color-warning); font-weight: 600; }
+.dp-holder.is-offer { color: var(--color-info); }
+
+/* ── หน้าทีมช่าง ────────────────────────────────────────────────────────── */
+.dp-alert { margin-bottom: var(--spacing-md); }
+
+.dp-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: var(--spacing-md);
+}
+
+.dp-kpi {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.dp-kpi.is-alert { border-color: var(--color-warning); background: var(--color-warning-light); }
+.dp-kpi-num { font-size: 1.8rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.dp-kpi-label { color: var(--color-text-secondary); font-size: 0.85rem; }
+
+.dp-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--spacing-md); align-items: start; }
+.dp-panel { padding: 16px; }
+.dp-panel-title { margin: 0 0 10px; font-size: 1rem; font-weight: 700; }
+.dp-empty { margin: 8px 0; color: var(--color-text-secondary); font-size: 0.9rem; }
+
+.dp-staff, .dp-unclaimed { list-style: none; margin: 0; padding: 0; }
+
+.dp-staff-row, .dp-unclaimed-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.dp-staff-row:first-child, .dp-unclaimed-row:first-child { border-top: 0; }
+
+.dp-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.dp-dot.is-free { background: var(--color-success); }
+.dp-dot.is-busy { background: var(--color-warning); }
+.dp-dot.is-off { background: var(--color-text-tertiary); }
+
+.dp-staff-name { flex: 1; min-width: 0; font-weight: 600; }
+.dp-staff-sub { display: block; color: var(--color-text-secondary); font-size: 0.8rem; font-weight: 400; }
+
+.dp-unclaimed-row { flex-wrap: wrap; }
+.dp-link {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dp-link:hover .dp-unclaimed-title { text-decoration: underline; }
+.dp-unclaimed-title { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-assign { display: flex; gap: 6px; flex: 1 1 260px; }
+.dp-assign .form-select { flex: 1; min-width: 0; }
+
+@media (max-width: 900px) {
+  .dp-grid { grid-template-columns: 1fr; }
+  .dp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

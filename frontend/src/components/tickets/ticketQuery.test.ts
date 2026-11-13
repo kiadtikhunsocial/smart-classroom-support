@@ -5,6 +5,7 @@ import {
   buildTicketParams,
   clampPage,
   pageCount,
+  holderText,
   tabCount,
 } from './ticketQuery';
 
@@ -57,5 +58,32 @@ describe('tabs and filters', () => {
 
   it('counts only the dropdown filters as active', () => {
     expect(activeFilterCount({ ...EMPTY_FILTERS, q: 'x', tab: 'new', priority: 'high', organizationId: '7' })).toBe(2);
+  });
+});
+
+describe('my work tab', () => {
+  it('asks the server for my unfinished tickets only', () => {
+    const p = buildTicketParams({ ...EMPTY_FILTERS, tab: 'mine' }, 1);
+    expect(p.mine).toBe('true');
+    expect(p.status).toBe('assigned,in_progress,pending,waiting_parts,waiting_user');
+  });
+  it('other tabs never send mine', () => {
+    expect(buildTicketParams({ ...EMPTY_FILTERS, tab: 'new' }, 1).mine).toBeUndefined();
+  });
+  it('counts come from mine_open, not from the status totals', () => {
+    expect(tabCount('mine', { in_progress: 9 }, 9, 2)).toBe(2);
+  });
+});
+
+describe('holderText', () => {
+  it('flags new tickets nobody holds', () => {
+    expect(holderText({ status: 'new', assigned_to: null })).toEqual({ kind: 'none', text: 'ยังไม่มีคนรับ' });
+  });
+  it('shows a pending offer differently from an accepted job', () => {
+    expect(holderText({ status: 'assigned', assigned_to: 'สมชาย', auto_assigned: true })?.kind).toBe('offer');
+    expect(holderText({ status: 'in_progress', assigned_to: 'สมชาย' })).toEqual({ kind: 'person', text: 'ช่าง: สมชาย' });
+  });
+  it('hides cancelled tickets', () => {
+    expect(holderText({ status: 'cancelled', assigned_to: 'สมชาย' })).toBeNull();
   });
 });

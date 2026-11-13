@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Ticket } from '../../types';
 import { STATUS_LABELS_TICKET, ticketDetailPriority } from './ticketLabels';
+import TicketHolder from './TicketHolder';
 
 export interface TicketCardProps {
   ticket: Ticket;
@@ -28,6 +29,7 @@ export default function TicketCard({ ticket, onOpen }: TicketCardProps) {
         <span className="tk-card-title">{ticket.title}</span>
         <span className="tk-card-device">{ticket.device_label || ticket.device_type || ticket.device_id}</span>
         {where && <span className="tk-card-meta">{where}</span>}
+        <TicketHolder ticket={ticket} />
         <span className="tk-card-id">{ticket.ticket_id}</span>
       </button>
     </li>

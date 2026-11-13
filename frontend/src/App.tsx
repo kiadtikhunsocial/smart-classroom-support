@@ -14,6 +14,8 @@ import DevicesPage from './components/DevicesPage';
 import DetailField from './components/DetailField';
 import TicketsPage from './components/tickets/TicketsPage';
 import { STATUS_LABELS_TICKET } from './components/tickets/ticketLabels';
+import TeamPage from './components/dispatch/TeamPage';
+import DispatchOfferPopup from './components/dispatch/DispatchOfferPopup';
 import UsersPage from './components/UsersPage';
 import ReportsPage from './components/ReportsPage';
 import SettingsPage from './components/SettingsPage';
@@ -2558,6 +2560,7 @@ function AppInner() {
       devices: 'อุปกรณ์',
       scan: 'สแกน QR',
       tickets: 'Tickets',
+      team: 'ทีมช่าง',
       kb: 'ฐานความรู้',
       chatbot: 'จัดการ AI / LINE OA',
       ratings: 'ผลประเมินลูกค้า',
@@ -2695,6 +2698,10 @@ function AppInner() {
           />
 
           <div className="app-main">
+            {/* งานเด้งแบบ Grab — เฉพาะช่าง; ทำงานทุกหน้า ไม่ใช่แค่หน้าใบงาน */}
+            {role === 'it_support' && (
+              <DispatchOfferPopup onAccepted={(id) => { setFocusRecord({ kind: 'tickets', id }); handleMenuChange('tickets'); }} />
+            )}
             <div className="page-content">
               {dataError && (
                 <div role="alert" className="alert alert-error">
@@ -2733,6 +2740,13 @@ function AppInner() {
                   onBack={() => handleMenuChange('dashboard')}
                   onTicketsChanged={reloadData}
                   canManage={canManage}
+                  userRole={role}
+                />
+              )}
+              {menu === 'team' && (
+                <TeamPage
+                  onBack={() => handleMenuChange('dashboard')}
+                  onOpenTicket={(id) => { setFocusRecord({ kind: 'tickets', id }); handleMenuChange('tickets'); }}
                 />
               )}
               {menu === 'kb' && (

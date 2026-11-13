@@ -9,7 +9,10 @@ import {
   EMPTY_FILTERS, PAGE_SIZE, TICKET_TABS, activeFilterCount, buildTicketParams, clampPage, tabCount,
   type TicketFilters, type TicketTabId,
 } from './ticketQuery';
+import DutyBar from '../dispatch/DutyBar';
+import TicketHolder from './TicketHolder';
 import '../../styles/tickets.css';
+import '../../styles/dispatch.css';
 
 export interface TicketsPageProps {
   onBack: () => void;
@@ -18,6 +21,8 @@ export interface TicketsPageProps {
   canManage: boolean;
   focusId?: string;
   onFocusHandled?: () => void;
+  /** ช่าง (it_support) เปิดหน้ามาที่แท็บ "งานของฉัน" */
+  userRole?: string;
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -28,13 +33,15 @@ function formatDate(value: string) {
 }
 
 /** หน้าใบงานซ่อม — ดึงทีละหน้าจาก server (ไม่โหลดทั้งหมดมากรองในเบราว์เซอร์แล้ว) */
-export default function TicketsPage({ onBack, onTicketsChanged, canManage, focusId, onFocusHandled }: TicketsPageProps) {
-  const [filters, setFilters] = useState<TicketFilters>(EMPTY_FILTERS);
+export default function TicketsPage({ onBack, onTicketsChanged, canManage, focusId, onFocusHandled, userRole }: TicketsPageProps) {
+  const [filters, setFilters] = useState<TicketFilters>(
+    userRole === 'it_support' ? { ...EMPTY_FILTERS, tab: 'mine' } : EMPTY_FILTERS,
+  );
   const [searchText, setSearchText] = useState('');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
-  const [counts, setCounts] = useState<{ total: number; by_status: Record<string, number> }>({ total: 0, by_status: {} });
+  const [counts, setCounts] = useState<{ total: number; by_status: Record<string, number>; mine_open?: number }>({ total: 0, by_status: {} });
   const [loading, setLoading] = useState(true);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [error, setError] = useState('');
@@ -95,6 +102,11 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
   }, [filters, page, reloadKey]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+  // รับ/ข้ามงานจาก popup งานเด้ง → รายการและตัวเลขบนแท็บต้องเปลี่ยนตาม
+  useEffect(() => {
+    window.addEventListener('dispatch:changed', reload);
+    return () => window.removeEventListener('dispatch:changed', reload);
+  }, [reload]);
   const afterChange = useCallback(() => { reload(); onTicketsChanged(); }, [reload, onTicketsChanged]);
 
   // ── เปิดใบงานที่ถูกขอจากหน้าอื่น (ค้นหาบนหัวเว็บ / หน้าอุปกรณ์) — โหลดตามเลข ไม่ต้องอยู่ในหน้านี้ ──
@@ -162,6 +174,7 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
 
       <div className="page-section">
         <div className="section-body">
+          <DutyBar />
           <div className="tk-toolbar">
             <input
               className="form-input tk-search"
@@ -212,7 +225,7 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
                   onClick={() => setFilter('tab', tab.id as TicketTabId)}
                   onKeyDown={(e) => onTabKey(e, i)}>
                   {tab.label}
-                  <span className="tk-tab-count">{tabCount(tab.id, counts.by_status, counts.total)}</span>
+                  <span className="tk-tab-count">{tabCount(tab.id, counts.by_status, counts.total, counts.mine_open ?? 0)}</span>
                 </button>
               );
             })}
@@ -298,6 +311,7 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
                               {STATUS_LABELS_TICKET[ticket.status] || ticket.status.replace(/_/g, ' ')}
                             </span>
                           )}
+                          <TicketHolder ticket={ticket} />
                         </td>
                         <td className="tk-date">{formatDate(ticket.created_at)}</td>
                       </tr>

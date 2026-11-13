@@ -5,11 +5,15 @@
 
 export const PAGE_SIZE = 20;
 
-export type TicketTabId = 'all' | 'new' | 'assigned' | 'in_progress' | 'waiting' | 'resolved' | 'done';
+export type TicketTabId = 'all' | 'mine' | 'new' | 'assigned' | 'in_progress' | 'waiting' | 'resolved' | 'done';
 
 /** แท็บสถานะ — แต่ละแท็บรวมได้หลายสถานะ (ส่งไป API แบบคั่นจุลภาค) */
-export const TICKET_TABS: { id: TicketTabId; label: string; statuses: string[] }[] = [
+export const MY_OPEN_STATUSES = ['assigned', 'in_progress', 'pending', 'waiting_parts', 'waiting_user'];
+
+export const TICKET_TABS: { id: TicketTabId; label: string; statuses: string[]; mine?: boolean }[] = [
   { id: 'all', label: 'ทั้งหมด', statuses: [] },
+  // งานที่ฉันถืออยู่และยังไม่เสร็จ (กดรับแล้ว หรือระบบเสนอให้)
+  { id: 'mine', label: 'งานของฉัน', statuses: MY_OPEN_STATUSES, mine: true },
   { id: 'new', label: 'รอรับเรื่อง', statuses: ['new'] },
   { id: 'assigned', label: 'มอบหมายแล้ว', statuses: ['assigned'] },
   { id: 'in_progress', label: 'กำลังซ่อม', statuses: ['in_progress'] },
@@ -47,6 +51,7 @@ export function buildTicketParams(f: TicketFilters, page: number): Record<string
   if (q) params.q = q;
   const statuses = tabStatuses(f.tab);
   if (statuses.length) params.status = statuses.join(',');
+  if (TICKET_TABS.find((t) => t.id === f.tab)?.mine) params.mine = 'true';
   if (f.priority) params.priority = f.priority;
   if (f.deviceType) params.device_type = f.deviceType;
   if (f.deviceCategory) params.device_category = f.deviceCategory;
@@ -66,7 +71,8 @@ export function clampPage(page: number, total: number): number {
   return Math.min(Math.max(1, page), pageCount(total));
 }
 
-export function tabCount(tab: TicketTabId, byStatus: Record<string, number>, total: number): number {
+export function tabCount(tab: TicketTabId, byStatus: Record<string, number>, total: number, mineOpen = 0): number {
+  if (tab === 'mine') return mineOpen;
   const statuses = tabStatuses(tab);
   if (!statuses.length) return total;
   return statuses.reduce((sum, s) => sum + (byStatus[s] ?? 0), 0);
@@ -75,4 +81,14 @@ export function tabCount(tab: TicketTabId, byStatus: Record<string, number>, tot
 /** จำนวนตัวกรองแบบ dropdown ที่เลือกไว้ (ไม่นับคำค้นและแท็บ — สองอย่างนั้นมองเห็นอยู่แล้ว) */
 export function activeFilterCount(f: TicketFilters): number {
   return [f.priority, f.deviceType, f.deviceCategory, f.organizationId].filter(Boolean).length;
+}
+
+/** ข้อความ "ใครถืองานนี้" สำหรับรายการ/การ์ด — null = ไม่ต้องแสดง (ยกเลิกแล้ว) */
+export function holderText(t: { status: string; assigned_to?: string | null; auto_assigned?: boolean }):
+  { kind: 'none' | 'offer' | 'person'; text: string } | null {
+  if (t.status === 'cancelled') return null;
+  const name = (t.assigned_to || '').trim();
+  if (!name) return t.status === 'new' ? { kind: 'none', text: 'ยังไม่มีคนรับ' } : null;
+  if (t.status === 'assigned' && t.auto_assigned) return { kind: 'offer', text: `รอ ${name} กดรับ` };
+  return { kind: 'person', text: `ช่าง: ${name}` };
 }
