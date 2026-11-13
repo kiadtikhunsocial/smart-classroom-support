@@ -10,6 +10,8 @@ import '../styles/public-premium.css';
 import '../styles/public-refresh.css';
 import PublicThemeToggle from './PublicThemeToggle';
 import AIChatWidget from './AIChatWidget';
+import { forgetRecent, loadRecent, looksLikeTicketNo, saveRecent } from '../publicRecent';
+import type { PublicTicketStatus } from '../types';
 
 /** ป้ายสถานะภาษาไทย — ใช้ชุดเดียวกับหน้าอื่น เพื่อไม่ให้ผู้แจ้งเห็นคำเรียกต่างกัน */
 const STATUS_LABELS: Record<string, string> = {
@@ -59,29 +61,29 @@ const SUB_STATUS_NOTE: Record<string, string> = {
   waiting_user: 'รอข้อมูลเพิ่มจากผู้แจ้ง กรุณาติดต่อเจ้าหน้าที่หรือแจ้งอาการเพิ่มเติม',
 };
 
-const RECENT_KEY = 'sc_recent_tickets';
+/** งานที่ยังไม่จบ — หน้าติดตามรีเฟรชสถานะเองทุก 60 วินาที */
+const LIVE_REFRESH_MS = 60_000;
+const FINISHED = new Set(['closed', 'cancelled']);
 
-function loadRecent(): string[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((x): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 6);
-  } catch {
-    return [];
+/** เวลาที่เข้าแต่ละขั้นของ stepper — จากไทม์ไลน์ (เอาครั้งแรกที่ถึงขั้นนั้น) */
+function stepTimes(history: any[]): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const h of history) {
+    const idx = STEP_INDEX[h.status ?? h.to_status];
+    if (typeof idx === 'number' && idx >= 0 && !(idx in out) && h.created_at) out[idx] = h.created_at;
   }
+  return out;
 }
 
-function saveRecent(no: string): string[] {
-  const clean = no.trim().toUpperCase();
-  if (!clean) return loadRecent();
-  const next = [clean, ...loadRecent().filter((x) => x !== clean)].slice(0, 6);
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-  } catch {
-    // โหมดส่วนตัว/พื้นที่เต็ม — จำไม่ได้ก็ไม่เป็นไร ไม่ต้องขัดจังหวะผู้ใช้
-  }
-  return next;
+function shortTime(v?: string | null): string {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return '';
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 }
 
 function fmtDateTime(v?: string | null): string {
@@ -107,6 +109,7 @@ function sinceText(v?: string | null): string {
 
 function statusLabelOf(t: any): string {
   if (!t) return '';
+  if (t.finding_technician) return 'กำลังจัดหาช่าง';
   return STATUS_LABELS[t.status] || t.status_label || t.status || '';
 }
 
@@ -416,6 +419,9 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [recent, setRecent] = useState<string[]>(() => loadRecent());
+  /** สถานะของงานที่เครื่องนี้จำไว้ — null = โหลดไม่สำเร็จ (ยังแสดงเป็นปุ่มเลขใบงานแทน) */
+  const [mine, setMine] = useState<PublicTicketStatus[] | null>([]);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [copied, setCopied] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -426,22 +432,40 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   useRevealResult(resultRef, revealTick);
 
   const search = useCallback(
-    async (raw?: string) => {
-      const no = (raw ?? input).replace(/\s+/g, '').toUpperCase();
+    async (raw?: string, opts: { quiet?: boolean } = {}) => {
+      let no = (raw ?? input).replace(/\s+/g, '').toUpperCase();
       if (!no) {
-        setError('กรุณากรอกเลขใบงาน เช่น TK.SCHM01.26.0001-T');
+        setError('กรุณากรอกเลขใบงาน หรือรหัสอุปกรณ์บนสติกเกอร์');
         setTicket(null);
         setSearched(false);
         return;
       }
-      setInput(no);
-      setLoading(true);
-      setError(null);
-      setTicket(null);
-      setSearched(false);
-      setCopied(false);
+      if (!opts.quiet) setInput(no);  // รีเฟรชเบื้องหลังต้องไม่ทับสิ่งที่ผู้ใช้กำลังพิมพ์
+      // รีเฟรชอัตโนมัติ: ไม่ล้างผลเดิม ไม่เลื่อนจอ — แค่อัปเดตข้อมูลในที่เดิม
+      if (!opts.quiet) {
+        setLoading(true);
+        setError(null);
+        setTicket(null);
+        setSearched(false);
+        setCopied(false);
+      }
       try {
+        // ไม่ใช่เลขใบงาน → ถือเป็นรหัสอุปกรณ์ แล้วเปิดใบงานล่าสุดของเครื่องนั้น
+        if (!looksLikeTicketNo(no)) {
+          let found: any;
+          try {
+            found = await api.getDeviceRecent(no);
+          } catch {
+            throw new Error(`ไม่พบเลขใบงานหรือรหัสอุปกรณ์ "${no}" — ตรวจตัวอักษรอีกครั้ง`);
+          }
+          if (!found?.recent_ticket?.ticket_id) {
+            throw new Error(`อุปกรณ์ ${no} ยังไม่มีงานแจ้งซ่อม — ถ้าเครื่องมีปัญหา กด "แจ้งซ่อมอุปกรณ์" ได้เลย`);
+          }
+          no = String(found.recent_ticket.ticket_id).toUpperCase();
+          setInput(no);
+        }
         const r: any = await api.trackTicket(no);
+        setLastChecked(new Date());
         setTicket(r);
         // endpoint สาธารณะคืนคีย์ ticket_no (ส่วน endpoint ที่ต้องล็อกอินคืน ticket_id)
         const resolvedNo: string = r?.ticket_no || r?.ticket_id || no;
@@ -453,15 +477,36 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           // บางเบราว์เซอร์ในโหมดจำกัดสิทธิ์เขียน history ไม่ได้ — ข้ามไป
         }
       } catch (err: any) {
-        setError(err?.message || 'ไม่พบเลขใบงานนี้ในระบบ');
+        if (!opts.quiet) setError(err?.message || 'ไม่พบเลขใบงานนี้ในระบบ');
       } finally {
         setLoading(false);
         setSearched(true);
-        setRevealTick((n) => n + 1);
+        if (!opts.quiet) setRevealTick((n) => n + 1);
       }
     },
     [input],
   );
+
+  // ── งานแจ้งซ่อมของฉัน: สถานะล่าสุดของทุกเลขที่เครื่องนี้จำไว้ (คำขอเดียว) ──
+  useEffect(() => {
+    if (!recent.length) { setMine([]); return; }
+    let alive = true;
+    api.publicTicketStatuses(recent)
+      .then((rows) => { if (alive) setMine(rows); })
+      .catch(() => { if (alive) setMine(null); });
+    return () => { alive = false; };
+  }, [recent, ticket?.status]);
+
+  // ── ใบงานที่เปิดอยู่และยังไม่จบ: อัปเดตเองทุก 60 วินาที (เฉพาะตอนเปิดหน้าอยู่) ──
+  const openNo: string | undefined = ticket?.ticket_no || ticket?.ticket_id;
+  const openFinished = FINISHED.has(ticket?.status);
+  useEffect(() => {
+    if (!openNo || openFinished) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void search(openNo, { quiet: true });
+    }, LIVE_REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [openNo, openFinished, search]);
 
   useEffect(() => {
     if (initialTicketId && !autoRan.current) {
@@ -516,6 +561,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
     };
   }, [ticket]);
   const history: any[] = Array.isArray(ticket?.history) ? ticket.history : [];
+  const times = useMemo(() => stepTimes(history), [ticket]);
   const subNote = ticket?.status ? SUB_STATUS_NOTE[ticket.status] : undefined;
 
   /** เปอร์เซ็นต์ความคืบหน้าของแถบเรืองแสงใต้ stepper */
@@ -642,7 +688,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                 spellCheck={false}
                 value={input}
                 onChange={(e) => setInput(e.target.value.toUpperCase())}
-                placeholder="TK.SCHM01.26.0001-T"
+                placeholder="เลขใบงาน หรือ รหัสอุปกรณ์"
                 aria-describedby="ph-ticket-hint"
               />
             </div>
@@ -652,23 +698,39 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
             </button>
           </form>
           <p className="ph-hint" id="ph-ticket-hint">
-            เลขใบงานแยกตามโรงเรียน — รูปแบบ <code>TK.รหัสโรงเรียน.ปี.ลำดับ-ตัวตรวจสอบ</code> พิมพ์เล็กหรือใหญ่ก็ได้
+            ใส่เลขใบงาน เช่น <code>TK.SCHM01.26.0001-T</code> หรือรหัสบนสติกเกอร์ของเครื่อง ระบบจะเปิดงานล่าสุดของเครื่องนั้นให้
           </p>
 
           {recent.length > 0 && (
-            <div className="ph-recent">
-              <span className="ph-recent-label">ดูล่าสุด:</span>
-              {recent.map((no) => (
-                <button
-                  key={no}
-                  type="button"
-                  className="ph-chip"
-                  onClick={() => search(no)}
-                  disabled={loading}
-                >
-                  {no}
-                </button>
-              ))}
+            <div className="ph-mine" aria-labelledby="ph-mine-title">
+              <h3 className="ph-mine-title" id="ph-mine-title">งานแจ้งซ่อมของฉัน <small>(จำไว้ในเครื่องนี้)</small></h3>
+              {mine && mine.length > 0 ? (
+                <ul className="ph-mine-list">
+                  {mine.map((m) => (
+                    <li key={m.ticket_no} className={m.ticket_no === openNo ? 'is-open' : ''}>
+                      <button type="button" className="ph-mine-row" onClick={() => search(m.ticket_no)} disabled={loading}
+                        aria-label={`ดูสถานะใบงาน ${m.ticket_no}`}>
+                        <span className={`badge badge-${m.status} ph-mine-badge`}>{m.status_label}</span>
+                        <span className="ph-mine-body">
+                          <strong>{m.title}</strong>
+                          <small>{m.device_label} · อัปเดต {sinceText(m.updated_at) || shortTime(m.updated_at)}</small>
+                        </span>
+                        <span className="ph-mine-no">{m.ticket_no}</span>
+                      </button>
+                      <button type="button" className="ph-mine-forget" aria-label={`เอา ${m.ticket_no} ออกจากรายการ`}
+                        onClick={() => setRecent(forgetRecent(m.ticket_no))}>×</button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="ph-recent">
+                  {recent.map((no) => (
+                    <button key={no} type="button" className="ph-chip" onClick={() => search(no)} disabled={loading}>
+                      {no}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -712,11 +774,17 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                           >
                             <span className="ph-step-dot">{done ? <CheckIcon /> : i + 1}</span>
                             <span className="ph-step-label">{s.label}</span>
+                            {times[i] && (done || current) && (
+                              <time className="ph-step-time" dateTime={times[i]}>{shortTime(times[i])}</time>
+                            )}
                           </li>
                         );
                       })}
                     </ol>
                     {subNote && <div className="ph-alert ph-alert-info">{subNote}</div>}
+                    {ticket.finding_technician && (
+                      <div className="ph-alert ph-alert-info">ระบบกำลังส่งงานนี้ให้ช่างที่ว่างอยู่ — เมื่อช่างกดรับ ชื่อช่างจะแสดงที่นี่</div>
+                    )}
                   </>
                 )}
 
@@ -737,6 +805,9 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                     value={dev?.room_name || '-'}
                     sub={dev?.organization_name || undefined}
                   />
+                  {ticket.technician && (
+                    <MetaItem label="ช่างผู้รับผิดชอบ" value={ticket.technician} />
+                  )}
                   <MetaItem
                     label="ความเร่งด่วน"
                     value={PRIORITY_LABELS[ticket.priority] || ticket.priority || 'ปกติ'}
@@ -769,7 +840,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                         <span className="ph-timeline-dot" aria-hidden="true" />
                         <div className="ph-timeline-body">
                           <div className="ph-timeline-status">
-                            {STATUS_LABELS[h.to_status || h.status] || h.to_status || h.status || 'อัปเดต'}
+                            {h.label || STATUS_LABELS[h.to_status || h.status] || h.to_status || h.status || 'อัปเดต'}
                           </div>
                           {h.note && <div className="ph-timeline-note">{h.note}</div>}
                           <div className="ph-timeline-time">
@@ -797,6 +868,12 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                     <RefreshIcon />
                     <span>รีเฟรชสถานะ</span>
                   </button>
+                  {lastChecked && (
+                    <span className="ph-last-checked" role="status">
+                      อัปเดตล่าสุด {lastChecked.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                      {!FINISHED.has(ticket.status) && ' · อัปเดตเองทุก 1 นาที'}
+                    </span>
+                  )}
                   <button type="button" className="ph-btn" onClick={copyLink}>
                     <LinkIcon />
                     <span>{copied ? 'คัดลอกลิงก์แล้ว' : 'คัดลอกลิงก์ติดตาม'}</span>

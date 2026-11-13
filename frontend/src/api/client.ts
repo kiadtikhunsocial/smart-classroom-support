@@ -1,5 +1,5 @@
 import { User } from '../types/user';
-import type { DispatchMe, DispatchSummary, PublicOptions, Ticket } from '../types';
+import type { DispatchMe, DispatchSummary, PublicOptions, PublicTicketStatus, Ticket } from '../types';
 
 // ─── API base URL ───────────────────────────────────────────────────────
 // ลำดับ: ค่าที่ฝังตอน build (__VITE_API_URL__) → import.meta.env → same-origin '/api'
@@ -399,6 +399,9 @@ export const api = {
 
   // ─── Ticket lifecycle actions (Batch 1 backend) ──────────────────
     trackTicket: (ticketNo: string) => request<any>(`/tickets/track/${encodeURIComponent(ticketNo)}`),
+    /** สถานะของ "งานแจ้งซ่อมของฉัน" หลายใบในคำขอเดียว (เลขที่ไม่พบถูกข้าม) */
+    publicTicketStatuses: (ticketNos: string[]) =>
+      request<PublicTicketStatus[]>('/public/tickets/status', { method: 'POST', body: JSON.stringify({ ticket_nos: ticketNos }) }),
     assignTicket: (ticketId: string, data: { assignee?: string; assignee_user_id?: number; note?: string }) =>
       request<any>(`/tickets/${ticketId}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     acceptTicket: (ticketId: string) =>

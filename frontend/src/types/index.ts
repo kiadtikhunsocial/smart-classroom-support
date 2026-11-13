@@ -256,3 +256,14 @@ export interface DispatchSummary {
   tickets: { unclaimed: number; offering: number; in_progress: number; done_today: number };
   unclaimed: DispatchOffer[];
 }
+
+/** สถานะย่อของใบงานสำหรับผู้แจ้ง (POST /api/public/tickets/status) */
+export interface PublicTicketStatus {
+  ticket_no: string;
+  status: string;
+  status_label: string;
+  title: string;
+  device_label: string;
+  created_at: string;
+  updated_at: string;
+}

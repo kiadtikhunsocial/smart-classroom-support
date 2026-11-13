@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { saveRecent } from '../publicRecent';
 import { REPORTER_TYPE_OPTIONS, DEFAULT_REPORTER_TYPE } from '../reporterTypes';
 import '../styles/public-home.css';
 import '../styles/public-report.css';
@@ -402,6 +403,7 @@ export default function PublicNoLoginReportView() {
     try {
       const result = await api.publicReport(payload);
       setTicketId(result.ticket_id || '-');
+      saveRecent(result.ticket_id);  // กลับหน้าแรกแล้วเห็นใน "งานแจ้งซ่อมของฉัน" ทันที
       setResultDevice(result);
       setLineReceiptSent(Boolean(result.line_receipt_sent));
       setSubmitted(true);

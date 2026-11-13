@@ -15,6 +15,7 @@ import DetailField from './components/DetailField';
 import TicketsPage from './components/tickets/TicketsPage';
 import { STATUS_LABELS_TICKET } from './components/tickets/ticketLabels';
 import TeamPage from './components/dispatch/TeamPage';
+import { saveRecent } from './publicRecent';
 import DispatchOfferPopup from './components/dispatch/DispatchOfferPopup';
 import UsersPage from './components/UsersPage';
 import ReportsPage from './components/ReportsPage';
@@ -1642,6 +1643,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
 
       const result = await api.createTicket(payload);
       setTicketId(result.ticket_id || '-');
+      saveRecent(result.ticket_id);  // หน้าแรกแสดงใน "งานแจ้งซ่อมของฉัน" โดยไม่ต้องจดเลข
       setSubmitted(true);
     } catch (err: any) {
       // กันแจ้งซ้ำ: อุปกรณ์มี ticket ค้างอยู่ (409 DUPLICATE_OPEN_TICKET)

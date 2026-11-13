@@ -6092,6 +6092,71 @@ def device_recent_ticket(device_id: str, db: Session = Depends(get_db)):
         },
     }
 
+def _public_first_name(name: Optional[str]) -> Optional[str]:
+    name = (name or "").strip()
+    if not name:
+        return None
+    for prefix in ("นาย", "นางสาว", "นาง", "คุณ"):
+        if name.startswith(prefix) and len(name) > len(prefix):
+            name = name[len(prefix):].strip()
+            break
+    parts = name.split()
+    # ชื่อบัญชีแบบ "ช่าง IT วัดราษฎร์บำรุง" — คำแรกไม่ใช่ชื่อคน แสดงทั้งชื่อ
+    if parts[0] in ("ช่าง", "IT", "เจ้าหน้าที่", "ทีม") or len(parts) > 2:
+        return name
+    return parts[0]
+
+
+def _public_history(db: Session, t: RepairTicket) -> list[dict]:
+    """ไทม์ไลน์สำหรับผู้แจ้ง: เฉพาะการเปลี่ยนสถานะพร้อมเวลา
+    ไม่มีบันทึกภายใน/ชื่อผู้แจ้ง และข้ามการเสนองานของระบบ (ช่างยังไม่ได้รับ) ที่อาจวนกลับไปมา"""
+    rows = db.execute(
+        select(TicketUpdate.to_status, TicketUpdate.created_at, TicketUpdate.author_role)
+        .where(TicketUpdate.ticket_id == t.id, TicketUpdate.to_status.is_not(None))
+        .order_by(TicketUpdate.created_at, TicketUpdate.id)
+    ).all()
+    out: list[dict] = []
+    for status, at, role in rows:
+        if role == "system":
+            continue
+        status = str(getattr(status, "value", status))
+        if out and out[-1]["status"] == status:
+            continue
+        out.append({"status": status, "label": PUBLIC_STATUS_LABELS.get(status, status), "created_at": at})
+    if not out:
+        out.append({"status": "new", "label": PUBLIC_STATUS_LABELS["new"], "created_at": t.created_at})
+    return out
+
+
+class PublicStatusIn(BaseModel):
+    ticket_nos: list[str] = Field(..., min_length=1, max_length=10)
+
+
+@app.post("/api/public/tickets/status")
+@limiter.limit("30/minute")
+def public_ticket_statuses(request: Request, payload: PublicStatusIn, db: Session = Depends(get_db)):
+    """สถานะล่าสุดของ "งานแจ้งซ่อมของฉัน" (เลขที่เบราว์เซอร์จำไว้) ทีเดียวหลายใบ
+    เลขที่ไม่พบถูกข้ามเงียบ ๆ — ไม่บอกว่าเลขไหนมีจริง (กันเดาเลขใบงานของคนอื่น)"""
+    nos = list(dict.fromkeys(n.strip().upper() for n in payload.ticket_nos if n and n.strip()))[:10]
+    rows = db.execute(
+        select(RepairTicket, Device).outerjoin(Device, Device.device_id == RepairTicket.device_id)
+        .where(func.upper(RepairTicket.ticket_id).in_(nos))
+        .options(selectinload(Device.room))
+    ).all()
+    out = []
+    for t, device in rows:
+        label = PUBLIC_STATUS_LABELS.get(t.status, t.status)
+        if t.status == "assigned" and t.auto_assigned:
+            label = "กำลังจัดหาช่าง"
+        out.append({
+            "ticket_no": t.ticket_id, "status": t.status, "status_label": label, "title": t.title,
+            "device_label": device_display_label(device) if device else t.device_id,
+            "created_at": t.created_at, "updated_at": t.updated_at or t.created_at,
+        })
+    order = {n: i for i, n in enumerate(nos)}
+    return sorted(out, key=lambda r: order.get(r["ticket_no"].upper(), 99))
+
+
 @app.get("/api/tickets/track/{ticket_no}")
 def ticket_track(ticket_no: str, db: Session = Depends(get_db)):
     """ติดตามสถานะด้วยหมายเลข Ticket — เปิดสาธารณะ คืนข้อมูลจำกัด (ไม่เปิดเผยข้อมูลส่วนบุคคล)"""
@@ -6110,10 +6175,19 @@ def ticket_track(ticket_no: str, db: Session = Depends(get_db)):
     # ไม่ใช่ idx = -1 ที่ทำให้แถบความคืบหน้าย้อนกลับไปขั้นแรก
     step_status = "pending" if t.status in ("waiting_parts", "waiting_user") else t.status
     idx = order.index(step_status) if step_status in order else -1
+    # ระบบกำลังเสนองานให้ช่าง (ยังไม่มีใครกดรับ) — ผู้แจ้งไม่ควรเข้าใจว่ามีช่างรับแล้ว
+    if t.status == "assigned" and t.auto_assigned:
+        status_label = "กำลังจัดหาช่าง"
     return {
         "ticket_no": t.ticket_id,
         "status": t.status,
         "status_label": status_label,
+        "finding_technician": bool(t.status == "assigned" and t.auto_assigned),
+        # ชื่อช่างแสดงเฉพาะเมื่อช่างกดรับแล้ว และแสดงแค่ชื่อแรก
+        "technician": _public_first_name(t.assigned_to)
+        if t.assigned_to and not (t.status == "assigned" and t.auto_assigned) and t.status != "new" else None,
+        "updated_at": t.updated_at or t.created_at,
+        "history": _public_history(db, t),
         "device_code": device.device_id if device else None,
         "device_type": device.device_type if device else None,
         "device_category": device_category_of(device.device_type) if device else None,
