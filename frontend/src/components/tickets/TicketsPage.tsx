@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { Ticket } from '../../types';
 import Pagination from './Pagination';
+import TicketCard from './TicketCard';
 import TicketDetailSheet from './TicketDetailSheet';
 import { ALL_STATUSES, STATUS_LABELS_TICKET, ticketDetailPriority } from './ticketLabels';
 import {
@@ -239,6 +240,14 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
                 <span className="empty-text">{hasFilter ? 'ไม่พบใบงานที่ตรงกับตัวกรอง' : 'ยังไม่มีใบงาน'}</span>
               </div>
             ) : (
+              <>
+              {/* จอเล็กแสดงการ์ด จอใหญ่แสดงตาราง — สลับด้วย CSS จากข้อมูลชุดเดียวกัน */}
+              <ul className="tk-cards">
+                {items.map((ticket) => (
+                  <TicketCard key={ticket.ticket_id} ticket={ticket}
+                    onOpen={(t) => setOpenTicket({ id: t.ticket_id, initial: t })} />
+                ))}
+              </ul>
               <div className="table-wrap tk-table-wrap">
                 <table className="data-table">
                   <thead>
@@ -296,6 +305,7 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
 

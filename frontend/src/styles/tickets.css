@@ -168,6 +168,62 @@
 /* ── แผงรายละเอียด ─────────────────────────────────────────────────────── */
 .tk-sheet { width: 760px; max-width: 96vw; }
 
+/* ── การ์ดใบงาน (จอมือถือ) ─────────────────────────────────────────────── */
+.tk-cards { display: none; list-style: none; margin: 0; padding: 0; }
+
+.tk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tk-card:active { background: var(--color-surface-raised); }
+.tk-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.tk-card-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tk-card-date { margin-left: auto; font-size: 0.78rem; color: var(--color-text-tertiary); white-space: nowrap; }
+
+.tk-card-title,
+.tk-card-device,
+.tk-card-meta {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tk-card-title { -webkit-line-clamp: 2; font-weight: 600; font-size: 0.98rem; line-height: 1.4; }
+.tk-card-device { -webkit-line-clamp: 1; font-size: 0.85rem; color: var(--color-text-secondary); }
+.tk-card-meta { -webkit-line-clamp: 1; font-size: 0.8rem; color: var(--color-text-tertiary); }
+.tk-card-id { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78rem; color: var(--color-text-tertiary); }
+
+/* ── จอเล็ก: การ์ดแทนตาราง, ตัวกรองยุบใต้ปุ่มเดียว, ปุ่มสูงพอให้นิ้วกด ───── */
+@media (max-width: 640px) {
+  .tk-cards { display: grid; gap: 10px; }
+  .tk-table-wrap { display: none; }
+
+  .tk-toolbar { flex-wrap: wrap; }
+  .tk-search { flex: 1 1 0; min-width: 0; max-width: none; min-height: 44px; }
+  .tk-toolbar .tk-filter-toggle { display: inline-flex; align-items: center; min-height: 44px; }
+
+  .tk-filters { display: none; flex: 1 1 100%; flex-direction: column; align-items: stretch; }
+  .tk-filters.is-open { display: flex; }
+  .tk-filters .form-select { max-width: none; min-height: 44px; }
+
+  .tk-tab { min-height: 44px; }
+
+  .tk-pager { flex-wrap: wrap; }
+  .tk-pager-info { order: -1; flex: 1 1 100%; }
+  .tk-pager-btn { flex: 1 1 0; min-height: 44px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tk-skeleton-row { animation: none; }
   .tk-results { transition: none; }
