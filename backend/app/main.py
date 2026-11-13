@@ -23,7 +23,7 @@ from uuid import UUID
 from typing import Literal, Optional
 from decimal import Decimal
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from slowapi import Limiter
@@ -33,7 +33,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import DateTime as SQLDateTime, Numeric as SQLNumeric, bindparam, func, select, text
+from sqlalchemy import DateTime as SQLDateTime, Numeric as SQLNumeric, bindparam, func, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.kb_loader import invalidate_kb_cache
@@ -1359,6 +1359,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # เบราว์เซอร์ซ่อน header ที่ไม่ได้ประกาศไว้จาก fetch ข้ามโดเมน — หน้าเว็บอ่านจำนวนรวมจากตัวนี้
+    expose_headers=["X-Total-Count"],
 )
 
 # ─── Logging (ข้อ 7: logging เพียงพอ + ไม่ leak sensitive data) ───────────────
@@ -3508,51 +3510,122 @@ def get_org_stats(org_id: int, db: Session = Depends(get_db), user: Optional[Use
     }
 
 
+_TICKET_STATUS_VALUES = frozenset({
+    "new", "assigned", "in_progress", "pending", "waiting_parts",
+    "waiting_user", "resolved", "closed", "cancelled",
+})
+_TICKET_PRIORITY_VALUES = frozenset({"low", "normal", "high", "critical"})
+
+
+def _like_escape(text_: str) -> str:
+    """ให้ % _ \\ ในคำค้นถูกค้นตามตัวอักษร ไม่ใช่ wildcard ของ LIKE"""
+    return text_.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _ticket_filter_conditions(
+    db: Session,
+    user: Optional[User],
+    *,
+    q: Optional[str] = None,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    device_id: Optional[str] = None,
+    device_type: Optional[str] = None,
+    device_category: Optional[str] = None,
+    organization_id: Optional[int] = None,
+) -> Optional[list]:
+    """เงื่อนไข WHERE ของรายการใบงาน (query ที่ join RepairTicket → Device → Organization แล้ว)
+
+    คืน None เมื่อรู้แน่ว่าผลลัพธ์ว่าง (หมวดที่ไม่รู้จัก, สถานะ/ความเร่งด่วนที่ไม่มีจริง,
+    ผู้ใช้ไม่มีโรงเรียนให้เห็น) — ผู้เรียกต้องคืนรายการว่างโดยไม่ query
+    ใช้ร่วมกันระหว่าง GET /api/tickets และ GET /api/tickets/counts ให้ตัวเลขตรงกันเสมอ
+    """
+    conds: list = []
+    if status:
+        # รับหลายค่าคั่นด้วยจุลภาค เช่น pending,waiting_parts (แท็บ "รออะไหล่/ผู้ใช้")
+        # ค่าที่ไม่มีจริงถูกตัดทิ้ง — เดิมส่งตรงเข้า enum ของ Postgres แล้วตอบ 500
+        wanted = [s.strip() for s in status.split(",") if s.strip()]
+        valid = [s for s in wanted if s in _TICKET_STATUS_VALUES]
+        if not valid:
+            return None
+        conds.append(RepairTicket.status == valid[0] if len(valid) == 1 else RepairTicket.status.in_(valid))
+    if priority:
+        if priority not in _TICKET_PRIORITY_VALUES:
+            return None
+        conds.append(RepairTicket.priority == priority)
+    if device_id:
+        conds.append(RepairTicket.device_id == device_id)
+    if device_type:
+        conds.append(Device.device_type == device_type)
+    if device_category:
+        types = _device_category_types(db).get(device_category)
+        if not types:
+            return None  # หมวดที่ไม่รู้จัก → ไม่เดา คืนว่าง
+        conds.append(Device.device_type.in_(types))
+    if organization_id:
+        conds.append(Device.organization_id == organization_id)
+    term = (q or "").strip()
+    if term:
+        pattern = f"%{_like_escape(term)}%"
+        conds.append(or_(*[
+            col.ilike(pattern, escape="\\")
+            for col in (
+                RepairTicket.ticket_id, RepairTicket.title, RepairTicket.description,
+                RepairTicket.reporter_name, RepairTicket.device_id,
+                Organization.name, Organization.short_name, Organization.code,
+            )
+        ]))
+    # ─── Role-based visibility: admin_school/it_support(มีสังกัด)/teacher/student เห็นเฉพาะรรตัวเอง ──
+    if user:
+        scope = visible_org_ids(user)
+        if scope is not None:
+            if not scope:
+                return None  # scope ว่าง → ไม่เห็นข้อมูล
+            conds.append(Device.organization_id.in_(scope))
+    return conds
+
+
+def _ticket_list_base(stmt):
+    return (stmt
+            .join(Device, Device.device_id == RepairTicket.device_id)
+            .join(Organization, Organization.id == Device.organization_id))
+
+
 @app.get("/api/tickets", response_model=list[TicketOut])
 def list_tickets(
+    response: Response,
     device_type: Optional[str] = Query(None),
     device_category: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     priority: Optional[str] = Query(None),
     device_id: Optional[str] = Query(None),
     organization_id: Optional[int] = Query(None),
+    q: Optional[str] = Query(None, max_length=100),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    conds = _ticket_filter_conditions(
+        db, user, q=q, status=status, priority=priority, device_id=device_id,
+        device_type=device_type, device_category=device_category, organization_id=organization_id,
+    )
+    if conds is None:
+        response.headers["X-Total-Count"] = "0"
+        return []
+    # จำนวนทั้งหมดก่อนตัดหน้า — หน้าเว็บใช้ทำปุ่มเปลี่ยนหน้า (body ยังเป็น list เหมือนเดิม)
+    total = db.execute(_ticket_list_base(select(func.count()).select_from(RepairTicket)).where(*conds)).scalar_one()
+    response.headers["X-Total-Count"] = str(total)
+
     # ดึง device_type มาด้วย — หน้าเว็บใช้แสดงและใช้เป็นตัวกรองประเภทอุปกรณ์
     stmt = (
-        select(RepairTicket, Device, Organization)
-        .join(Device, Device.device_id == RepairTicket.device_id)
-        .join(Organization, Organization.id == Device.organization_id)
+        _ticket_list_base(select(RepairTicket, Device, Organization))
+        .where(*conds)
         # room ถูกใช้ประกอบชื่ออุปกรณ์ (device_display_label) - preload กัน N+1
         .options(selectinload(Device.room))
         .order_by(RepairTicket.created_at.desc(), RepairTicket.ticket_id.desc())
+        .offset(offset).limit(limit)
     )
-    if status:
-        stmt = stmt.where(RepairTicket.status == status)
-    if priority:
-        stmt = stmt.where(RepairTicket.priority == priority)
-    if device_id:
-        stmt = stmt.where(RepairTicket.device_id == device_id)
-    if device_type:
-        stmt = stmt.where(Device.device_type == device_type)
-    if device_category:
-        types = _device_category_types(db).get(device_category)
-        if not types:
-            return []  # หมวดที่ไม่รู้จัก → ไม่เดา คืนว่าง
-        stmt = stmt.where(Device.device_type.in_(types))
-    if organization_id:
-        stmt = stmt.where(Device.organization_id == organization_id)
-    # ─── Role-based visibility: admin_school/it_support(มีสังกัด)/teacher/student เห็นเฉพาะรรตัวเอง ──
-    if user:
-        scope = visible_org_ids(user)
-        if scope is not None:
-            if not scope:
-                return []  # scope ว่าง → ไม่เห็นข้อมูล
-            stmt = stmt.where(Device.organization_id.in_(scope))
-    stmt = stmt.offset(offset).limit(limit)
 
     rows = db.execute(stmt).all()
     result: list[TicketOut] = []
@@ -3605,6 +3678,35 @@ def list_tickets(
             updated_at=t.updated_at,
         ))
     return result
+
+
+# ต้องประกาศก่อน /api/tickets/{ticket_id} — ไม่งั้นคำว่า "counts" ถูกจับเป็นเลขใบงาน
+@app.get("/api/tickets/counts")
+def ticket_counts(
+    device_type: Optional[str] = Query(None),
+    device_category: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    device_id: Optional[str] = Query(None),
+    organization_id: Optional[int] = Query(None),
+    q: Optional[str] = Query(None, max_length=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """จำนวนใบงานแยกตามสถานะ ด้วยตัวกรองชุดเดียวกับ GET /api/tickets (ยกเว้นสถานะ)
+    — ใช้แสดงตัวเลขบนแท็บสถานะของหน้าใบงาน"""
+    conds = _ticket_filter_conditions(
+        db, user, q=q, priority=priority, device_id=device_id,
+        device_type=device_type, device_category=device_category, organization_id=organization_id,
+    )
+    if conds is None:
+        return {"total": 0, "by_status": {}}
+    rows = db.execute(
+        _ticket_list_base(select(RepairTicket.status, func.count()).select_from(RepairTicket))
+        .where(*conds)
+        .group_by(RepairTicket.status)
+    ).all()
+    by_status = {str(s.value if hasattr(s, "value") else s): n for s, n in rows}
+    return {"total": sum(by_status.values()), "by_status": by_status}
 
 
 @app.get("/api/tickets/{ticket_id}", response_model=TicketOut)
