@@ -436,8 +436,11 @@ Rules for `actionsFor` (empty list when `canManage` is false):
 |---|---|---|
 | `new`, `assigned` | accept "รับงาน" (`none`) | cancel "ยกเลิกงาน" (`note`) |
 | `in_progress`, `pending`, `waiting_parts`, `waiting_user` | resolve "บันทึกผลซ่อม" (`solution`) | cancel "ยกเลิกงาน" (`note`) |
-| `resolved` | close "ปิดงาน" (`none`) | reopen "เปิดงานใหม่" (`note`) |
-| `closed`, `cancelled` | — | reopen "เปิดงานใหม่" (`note`) |
+| `resolved` | close "ปิดงาน" (`none`) | cancel "ยกเลิกงาน" (`note`) |
+| `closed` | — | reopen "เปิดงานใหม่" (`note`) |
+| `cancelled` | — | — |
+
+> **As built (2026-11-13):** changed from the first draft to match the server. `POST /reopen` accepts only `closed` and `POST /cancel` refuses `closed`/`cancelled`, so the draft's reopen on `resolved`/`cancelled` would always have returned 409. The workflow endpoints also did not notify n8n; they now send `ticket.status_changed` like `PATCH /status` (test: `backend/tests/test_workflow_notifications.py`).
 
 `validateActionInput`: `solution` trimmed shorter than 3 characters → `'กรุณากรอกวิธีแก้ไขอย่างน้อย 3 ตัวอักษร'`; `note` trimmed empty → `'กรุณาระบุเหตุผล'`; both capped at 2000 characters → `'ข้อความยาวเกิน 2000 ตัวอักษร'` (limits from `TicketResolveReq` / `TicketCommentReq`).
 
@@ -453,11 +456,9 @@ it('offers resolve while work is under way or waiting', () => {
   for (const s of ['in_progress', 'pending', 'waiting_parts', 'waiting_user'])
     expect(actionsFor(s, true).map(a => a.id)).toEqual(['resolve', 'cancel']);
 });
-it('offers close then reopen on a resolved ticket', () => { expect(actionsFor('resolved', true).map(a => a.id)).toEqual(['close', 'reopen']); });
-it('offers only reopen on finished tickets', () => {
-  expect(actionsFor('closed', true).map(a => a.id)).toEqual(['reopen']);
-  expect(actionsFor('cancelled', true).map(a => a.id)).toEqual(['reopen']);
-});
+it('offers close on a resolved ticket', () => { expect(actionsFor('resolved', true).map(a => a.id)).toEqual(['close', 'cancel']); });
+it('offers reopen only on a closed ticket', () => { expect(actionsFor('closed', true).map(a => a.id)).toEqual(['reopen']); });
+it('offers nothing on a cancelled ticket', () => { expect(actionsFor('cancelled', true)).toEqual([]); });
 it('offers nothing for an unknown status', () => { expect(actionsFor('weird', true)).toEqual([]); });
 it('requires a solution of three characters', () => {
   const resolve = actionsFor('in_progress', true)[0];
@@ -513,6 +514,17 @@ Backend full suite → 153 passed, 17 skipped. `npx vitest run` → 15 passed. `
 | First request size | Network panel, `tickets?limit=20…` | 20 rows, `content-encoding: gzip` |
 | Phone readability | device mode 390 × 844 | `document.documentElement.scrollWidth === 390` |
 | Workflow from the sheet | accept → resolve → close on one ticket | each step updates sheet and list |
+
+**Measured 2026-11-13** (76 seeded tickets, `admin`):
+
+| Measure | Result | Met? |
+|---|---|---|
+| Page height at 1440 px | 2,256 px (was 9,919) | **No** — 20 rows × ~76 px plus header; at 1280 px it is 2,427 px and the table scrolls ~74 px sideways inside its box |
+| First request | 20 rows; full 200-row list 10 kB gzipped (was 117 kB) | Yes |
+| Phone | `scrollWidth` 390, first card visible without scrolling, 4,135 px tall (was 37,484) | Yes |
+| Workflow | accept → resolve → close, validation, delete confirm, two-tab conflict | Yes |
+
+Known gap: the conflict message is the server's text and shows the raw status code (e.g. `in_progress`).
 
 - [ ] **Step 3: Review Focus items 4 and 5 by hand**
 
