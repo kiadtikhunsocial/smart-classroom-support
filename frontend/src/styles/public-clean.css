@@ -404,7 +404,7 @@
 @media (min-width: 880px) {
   .pc-main.ph-main { grid-template-columns: minmax(0, 1fr) minmax(0, 0.88fr); column-gap: 44px; row-gap: 24px; }
   .pc-left, .pc-right { grid-row: 1; }
-  .pc-right { position: sticky; top: 84px; align-self: start; }
+  .pc-right { align-self: start; }
   .pc-links, .pc-sheet, .pc-flow, .pc-faq { grid-column: 1 / -1; }
   .pc-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pc-link-cell + .pc-link-cell { border-top: 0; border-left: 1px solid var(--pc-line); }

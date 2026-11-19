@@ -148,7 +148,7 @@ export default function CustomerSignupPage() {
             {done.message}
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18, flexWrap: 'wrap' }}>
-            <a className="btn btn-primary" href="/" style={{ textDecoration: 'none' }}>
+            <a className="btn btn-primary" href="/?home=1" style={{ textDecoration: 'none' }}>
               กลับหน้าแรก
             </a>
             <button className="btn btn-ghost" type="button" onClick={() => setDone(null)}>
@@ -163,7 +163,7 @@ export default function CustomerSignupPage() {
   return (
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 560 }}>
-        <a href="/" className="btn btn-ghost" style={{ marginBottom: 16, textDecoration: 'none' }}>← กลับหน้าแรก</a>
+        <a href="/?home=1" className="btn btn-ghost" style={{ marginBottom: 16, textDecoration: 'none' }}>← กลับหน้าแรก</a>
         <h1 className="login-title">สอบถามสินค้าและบริการ</h1>
         <p className="login-subtitle">
           กรอกข้อมูลติดต่อไว้ ทีมขายจะติดต่อกลับพร้อมรายละเอียดสินค้า ราคา และโปรโมชั่น

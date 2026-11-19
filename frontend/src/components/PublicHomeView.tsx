@@ -513,7 +513,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   return (
     <div className="ph-page pc-home">
       <header className="ph-topbar pc-topbar">
-        <a className="ph-brand" href={staffLoggedIn ? '/' : '/?home=1'}>
+        <a className="ph-brand" href="/?home=1">
           <img className="pc-logo" src="/logo.jpg" alt="IWA" width="36" height="36" />
           <span className="ph-brand-text">
             <strong>IWA Smart Classroom Support</strong>

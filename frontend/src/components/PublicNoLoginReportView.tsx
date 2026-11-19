@@ -562,7 +562,7 @@ export default function PublicNoLoginReportView() {
       </div>
 
       <header className="ph-topbar">
-        <a className="ph-brand" href="/" aria-label="กลับหน้าแรก">
+        <a className="ph-brand" href="/?home=1" aria-label="กลับหน้าแรก">
           <span className="ph-brand-mark">
             <img className="ph-brand-logo" src="/logo.jpg" alt="" />
           </span>
@@ -634,7 +634,7 @@ export default function PublicNoLoginReportView() {
                   <SearchIcon />
                   <span>ติดตามสถานะใบงานนี้</span>
                 </a>
-                <a className="ph-btn" href="/">
+                <a className="ph-btn" href="/?home=1">
                   <BackIcon />
                   <span>กลับหน้าแรก</span>
                 </a>
@@ -730,7 +730,7 @@ export default function PublicNoLoginReportView() {
             </div>
 
             <div className="pr-back-row">
-              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/'; }}>
+              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/?home=1'; }}>
                 <BackIcon />
                 <span>กลับหน้าแรก</span>
               </button>
@@ -1031,7 +1031,7 @@ export default function PublicNoLoginReportView() {
             </form>
 
             <div className="pr-back-row">
-              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/'; }}>
+              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/?home=1'; }}>
                 <BackIcon />
                 <span>กลับหน้าแรก</span>
               </button>

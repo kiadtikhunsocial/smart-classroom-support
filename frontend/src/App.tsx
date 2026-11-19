@@ -272,7 +272,7 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
     <main className="login-page">
       <div className="login-card login-staff">
         {/* หน้า login เป็นหน้าแยกแล้ว — ต้องมีทางกลับหน้าแรกสาธารณะ */}
-        <a href="/" className="login-back-link">← กลับไปหน้าบริการ</a>
+        <a href="/?home=1" className="login-back-link">← กลับไปหน้าบริการ</a>
         <div className="login-logo">
           <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
             <div className="login-logo-icon"><AppLogo size={22} /></div>

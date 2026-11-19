@@ -136,7 +136,7 @@ export default function RegisterPage() {
               ไปหน้าเข้าสู่ระบบ
             </a>
             <a
-              href="/"
+              href="/?home=1"
               style={{
                 textAlign: 'center',
                 fontSize: '0.8rem',
@@ -155,7 +155,7 @@ export default function RegisterPage() {
   return (
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 520 }}>
-        <a href="/" className="login-back-link">
+        <a href="/?home=1" className="login-back-link">
           ← กลับหน้าแรก (แจ้งซ่อม/ติดตามสถานะ)
         </a>
         <div className="login-logo">
