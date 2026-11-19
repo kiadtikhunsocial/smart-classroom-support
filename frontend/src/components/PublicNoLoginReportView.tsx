@@ -114,7 +114,7 @@ const SearchIcon = () => (
   </svg>
 );
 
-const STEPS = ['สแกน QR อุปกรณ์', 'กรอกอาการเสีย', 'ส่งคำร้อง'];
+const STEPS = ['ระบุอุปกรณ์', 'กรอกอาการ', 'รับเลขใบงาน'];
 
 export default function PublicNoLoginReportView() {
   const [lineReportToken] = useState(() =>
@@ -496,11 +496,17 @@ export default function PublicNoLoginReportView() {
       : null;
 
   const stepIndex = submitted ? 2 : scanned ? 1 : 0;
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (stepIndex === 0) return;
+    stepHeading.current?.focus({ preventScroll: true });
+    stepHeading.current?.scrollIntoView({ block: 'nearest' });
+  }, [stepIndex]);
   // สถานะประกันของเครื่องที่สแกนได้ — คำนวณตอน render เพราะขึ้นกับวันปัจจุบัน
   const warranty = scanned ? warrantyState(scanned.warranty_until) : null;
 
   return (
-    <div className="ph-page pr-page">
+    <div className="ph-page pr-page service-report">
       {/* พื้นหลังตกแต่ง — ชุดเดียวกับหน้าแรกสาธารณะ */}
       <div className="ph-bg" aria-hidden="true">
         <div className="ph-bg-aurora ph-bg-aurora-1" />
@@ -521,26 +527,20 @@ export default function PublicNoLoginReportView() {
           </span>
         </a>
         <div className="ph-topbar-right">
-          <span className="ph-live">
-            <span className="ph-live-dot" aria-hidden="true" />
-            ไม่ต้องเข้าสู่ระบบ
-          </span>
-          <PublicThemeToggle />
-          <a className="ph-login-link" href="/?login=1">
-            เข้าสู่ระบบเจ้าหน้าที่
+          <a className="ph-staff-entry" href="/?login=1">
+            พื้นที่เจ้าหน้าที่
           </a>
+          <PublicThemeToggle />
         </div>
       </header>
 
       <main className="ph-main pr-main">
         <section className="pr-head">
-          <span className="ph-eyebrow">PUBLIC REPAIR REQUEST</span>
           <h1 className="pr-title">
-            แจ้งซ่อมอุปกรณ์<span className="ph-hero-accent">ในห้องเรียน</span>
+            แจ้งซ่อมอุปกรณ์ห้องเรียน
           </h1>
           <p className="pr-sub">
-            สแกน QR บนตัวอุปกรณ์ที่เสีย ระบบจะระบุห้อง อุปกรณ์ และโรงเรียนให้อัตโนมัติ
-            จากนั้นกรอกอาการแล้วส่ง — จะได้เลขใบงานไว้ติดตามสถานะทันที
+            ระบุอุปกรณ์และอาการที่พบ ระบบจะออกเลขใบงานให้ใช้ติดตามสถานะ
           </p>
 
           <ol className="pr-steps" aria-label="ขั้นตอนการแจ้งซ่อม">
@@ -570,7 +570,7 @@ export default function PublicNoLoginReportView() {
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
               </div>
-              <h2 className="pr-success-title">ส่งคำร้องเรียบร้อยแล้ว</h2>
+              <h2 className="pr-success-title" ref={stepHeading} tabIndex={-1}>ส่งคำร้องเรียบร้อยแล้ว</h2>
               <p className="pr-success-sub">หมายเลขใบงานของคุณ</p>
               <div className="pr-ticket-no">{ticketId}</div>
               {resultDevice?.device_id && (
@@ -603,8 +603,7 @@ export default function PublicNoLoginReportView() {
               เปิดจากแชต LINE แล้ว — กรุณาใช้ปุ่มสแกน QR ในหน้านี้ เพื่อให้เลขใบงานส่งกลับไปยังแชตเดิมอัตโนมัติ
             </div>}
             <div className="ph-card-head">
-              <h2 className="ph-card-title">สแกน QR ที่ตัวอุปกรณ์</h2>
-              <span className="ph-card-tag">STEP 1</span>
+              <h2 className="ph-card-title">ระบุอุปกรณ์ที่ต้องการแจ้งซ่อม</h2>
             </div>
 
             <button
@@ -629,7 +628,7 @@ export default function PublicNoLoginReportView() {
                 type="file"
                 accept="image/*"
                 capture="environment"
-                hidden
+                className="ph-sr-only"
                 disabled={resolving}
                 onChange={(e) => { scanPhoto(e.target.files?.[0]); e.target.value = ''; }}
               />
@@ -651,7 +650,7 @@ export default function PublicNoLoginReportView() {
               <div className="pr-fallback-head">
                 <span className="pr-fallback-icon"><CameraOffIcon /></span>
                 <label className="pr-label pr-label-inline" htmlFor="qr-manual-code">
-                  กล้องใช้ไม่ได้? พิมพ์โค้ด/ลิงก์ใต้สติกเกอร์ QR
+                  กรอกรหัสอุปกรณ์หรือลิงก์ QR
                 </label>
               </div>
               <div className="pr-inline-row">
@@ -667,7 +666,7 @@ export default function PublicNoLoginReportView() {
                       if (manualCode.trim().length >= 4 && !resolving) applyQrDevice(manualCode);
                     }
                   }}
-                  placeholder="เช่น /scan?t=xxxxxxxx"
+                  placeholder="เช่น DEV-001"
                   autoComplete="off"
                   maxLength={200}
                 />
@@ -677,7 +676,7 @@ export default function PublicNoLoginReportView() {
                   onClick={() => applyQrDevice(manualCode)}
                   disabled={resolving || manualCode.trim().length < 4}
                 >
-                  {resolving ? 'กำลังตรวจสอบ…' : 'ใช้โค้ดนี้'}
+                  {resolving ? 'กำลังตรวจสอบ…' : 'ค้นหาอุปกรณ์'}
                 </button>
               </div>
               <p className="ph-hint">
@@ -696,8 +695,7 @@ export default function PublicNoLoginReportView() {
           /* ─── ขั้นที่ 2: อุปกรณ์ถูกล็อกจาก QR แล้ว → กรอกอาการเสีย ─── */
           <section className="ph-card pr-card">
             <div className="ph-card-head">
-              <h2 className="ph-card-title">กรอกอาการที่พบ</h2>
-              <span className="ph-card-tag">STEP 2</span>
+              <h2 className="ph-card-title" ref={stepHeading} tabIndex={-1}>กรอกอาการที่พบ</h2>
             </div>
 
             <div className="pr-device">

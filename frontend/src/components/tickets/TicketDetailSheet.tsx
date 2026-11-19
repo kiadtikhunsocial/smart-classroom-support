@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ModalOverlay from '../ModalOverlay';
 import { api } from '../../api/client';
 import type { Ticket } from '../../types';
 import ConfirmDialog from '../ConfirmDialog';
@@ -81,13 +82,6 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
 
   useEffect(() => { void load(); return () => { requestId.current += 1; }; }, [load]);
 
-  // Esc ปิดแผง — ยกเว้นตอนกล่องยืนยันเปิดอยู่หรือกำลังบันทึก
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !confirmDelete && !running) onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, confirmDelete, running]);
-
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -161,9 +155,8 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
       : { label: 'ปิดงาน', at: t.closed_at || firstAt('closed'), hint: t.status === 'resolved' ? 'รอผู้แจ้งยืนยัน' : undefined },
   ] : [];
   return (
-    <div className="panel-overlay" onClick={onClose}>
-      <div className="repair-panel detail-sheet tk-sheet" onClick={(e) => e.stopPropagation()}
-        role="dialog" aria-modal="true" aria-labelledby="ticket-detail-title">
+    <ModalOverlay labelledBy="ticket-detail-title" onClose={() => { if (!confirmDelete && !running) onClose(); }}>
+      <div className="repair-panel detail-sheet tk-sheet">
         <div className="repair-panel-header">
           <h3 className="repair-panel-title" id="ticket-detail-title">รายละเอียดใบงาน</h3>
           <button className="repair-panel-close" onClick={onClose} aria-label="ปิด">×</button>
@@ -354,6 +347,6 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
           onCancel={() => setConfirmDelete(false)}
         />
       )}
-    </div>
+    </ModalOverlay>
   );
 }

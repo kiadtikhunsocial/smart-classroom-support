@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ModalOverlay from './ModalOverlay';
 import QRCode from 'qrcode';
 import { api } from '../api/client';
 import DetailField from './DetailField';
@@ -540,8 +541,8 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
         </div>
       </div>
 
-      {(importFile || importBusy) && <div className="panel-overlay" onClick={() => { if (!importBusy) setImportFile(null); }}>
-        <div className="repair-panel" style={{ width: 680, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="นำเข้าอุปกรณ์จาก Google Sheets">
+      {(importFile || importBusy) && <ModalOverlay label="นำเข้าอุปกรณ์จาก Google Sheets" onClose={() => { if (!importBusy) setImportFile(null); }}>
+        <div className="repair-panel" style={{ width: 680, maxWidth: '96vw' }}>
           <div className="repair-panel-header"><h3 className="repair-panel-title">นำเข้าอุปกรณ์จาก Google Sheets</h3><button className="repair-panel-close" onClick={() => setImportFile(null)} aria-label="ปิด">×</button></div>
           <div className="repair-panel-body">
             <p>ใน Google Sheets เลือก ไฟล์ → ดาวน์โหลด → ค่าที่คั่นด้วยจุลภาค (.csv) แล้วเลือกไฟล์ที่นี่ ระบบจะตรวจทุกแถวก่อนเพิ่มข้อมูล โดยไม่เขียนทับอุปกรณ์เดิม</p>
@@ -567,7 +568,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
             </>}
           </div>
         </div>
-      </div>}
+      </ModalOverlay>}
 
       {error && (
         <div style={{ padding: '10px 14px', background: 'var(--color-danger-light)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', marginBottom: 16 }}>
@@ -577,8 +578,8 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
 
       {/* ฟอร์มเพิ่ม/แก้ไข */}
       {showForm && (
-        <div className="panel-overlay" onClick={() => setShowForm(false)}>
-          <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="ข้อมูลอุปกรณ์" onClose={() => setShowForm(false)}>
+          <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editingId ? `แก้ไข ${editingId}` : 'เพิ่มอุปกรณ์ใหม่'}</h3>
               <button className="repair-panel-close" onClick={() => setShowForm(false)} aria-label="ปิด" title="ปิด">
@@ -735,13 +736,13 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
               </form>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* QR Modal */}
       {qrDevice && (
-        <div className="panel-overlay" onClick={() => setQrDevice(null)}>
-          <div className="repair-panel" style={{ width: 380, maxWidth: '95vw', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="QR ของอุปกรณ์" onClose={() => setQrDevice(null)}>
+          <div className="repair-panel" style={{ width: 380, maxWidth: '95vw', textAlign: 'center' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">QR Code — {qrDevice.device_id}</h3>
               <button className="repair-panel-close" onClick={() => setQrDevice(null)} aria-label="ปิด" title="ปิด">
@@ -771,13 +772,13 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* แผงรายละเอียดอุปกรณ์ */}
       {detailDevice && (
-        <div className="panel-overlay" onClick={closeDetail}>
-          <div className="repair-panel detail-sheet" style={{ width: 740, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="device-detail-title">
+        <ModalOverlay labelledBy="device-detail-title" onClose={closeDetail}>
+          <div className="repair-panel detail-sheet" style={{ width: 740, maxWidth: '96vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title" id="device-detail-title">รายละเอียดอุปกรณ์</h3>
               <button className="repair-panel-close" onClick={closeDetail} aria-label="ปิด" title="ปิด">
@@ -915,7 +916,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
                     <button className="btn btn-ghost" onClick={closeDetail}>ปิด</button>
                   </div>}
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── การ์ดสรุป: กดเพื่อกรอง ─────────────────────────────────────── */}

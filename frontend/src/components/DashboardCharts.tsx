@@ -13,7 +13,7 @@
    อ่านง่ายทั้งสองโหมด:
    - tooltip เป็นคอมโพเนนต์ของเราเอง (.dsh-tip ใน dashboard.css) ใช้ token ของธีม
      เดิม recharts ระบายตัวอักษรในทูลทิปเป็นสีดำตายตัว → มองไม่เห็นบนพื้น navy
-   - สถานะ Ticket เป็นแท่งแนวนอน: ป้ายภาษาไทยยาว ๆ ไม่ชนกัน/ไม่หาย และมีตัวเลขท้ายแท่ง
+   - สถานะใบงาน เป็นแท่งแนวนอน: ป้ายภาษาไทยยาว ๆ ไม่ชนกัน/ไม่หาย และมีตัวเลขท้ายแท่ง
    - วงล้ออุปกรณ์แสดง 8 ประเภทแรก + "อื่น ๆ" เพื่อไม่ให้สีซ้ำ และมีตารางสีข้าง ๆ
      บอกจำนวน/เปอร์เซ็นต์ ชี้ที่แถวไหนชิ้นในวงล้อจะเด่นขึ้น
    ========================================================================== */
@@ -25,7 +25,7 @@ import {
 } from 'recharts';
 import { useThemeVersion, chartPalette, cssVar } from '../theme';
 
-/** สถานะ Ticket — สีถูกคิดมาจากฝั่ง App (STATUS_COLORS ของธีมปัจจุบัน) */
+/** สถานะใบงาน — สีถูกคิดมาจากฝั่ง App (STATUS_COLORS ของธีมปัจจุบัน) */
 export type StatusDatum = { name: string; value: number; color: string };
 /** ยอดรายเดือน — month เป็นรูปแบบ YYYY-MM */
 export type MonthlyDatum = { month: string; value: number };
@@ -201,12 +201,12 @@ export default function DashboardCharts({
       <div className="dsh-charts" ref={chartsRef}>
         <div className="dsh-card">
           <div className="dsh-card-head">
-            <span className="dsh-card-title">สถานะ Ticket</span>
+            <span className="dsh-card-title">สถานะใบงาน</span>
             <span className="dsh-card-badge">ทั้งหมด {nf.format(ticketTotal)} ใบ</span>
           </div>
           <div className="dsh-chart-box">
             {statusData.length === 0 ? (
-              <div className="dsh-empty">ยังไม่มี Ticket</div>
+              <div className="dsh-empty">ยังไม่มีใบงาน</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 {/* แท่งแนวนอน: ชื่อสถานะภาษาไทยยาว ๆ อยู่ซ้ายครบทุกตัว ไม่โดนซ่อน */}
@@ -229,7 +229,7 @@ export default function DashboardCharts({
                     cursor={BAR_CURSOR}
                     content={<ChartTip unit="ใบ" total={ticketTotal} />}
                   />
-                  <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={18}>
+                  <Bar dataKey="value" isAnimationActive={false} radius={[0, 6, 6, 0]} barSize={18}>
                     {statusData.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
@@ -243,12 +243,12 @@ export default function DashboardCharts({
 
         <div className="dsh-card">
           <div className="dsh-card-head">
-            <span className="dsh-card-title">ยอด Ticket รายเดือน</span>
+            <span className="dsh-card-title">ใบงานรายเดือน</span>
             <span className="dsh-card-badge">{monthlyRangeLabel}</span>
           </div>
           <div className="dsh-chart-box">
             {monthly.length === 0 ? (
-              <div className="dsh-empty">ยังไม่มี Ticket</div>
+              <div className="dsh-empty">ยังไม่มีใบงาน</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthly} margin={{ top: 22, right: 10, left: -8, bottom: 4 }}>
@@ -263,7 +263,7 @@ export default function DashboardCharts({
                   <XAxis dataKey="name" tick={axisTick} stroke={axis} interval={0} />
                   <YAxis tick={axisTick} stroke={axis} allowDecimals={false} />
                   <RechartsTooltip cursor={BAR_CURSOR} content={<ChartTip unit="ใบ" />} />
-                  <Bar dataKey="value" fill="url(#fx-bar-monthly)" radius={[6, 6, 0, 0]} maxBarSize={44}>
+                  <Bar dataKey="value" isAnimationActive={false} fill="url(#fx-bar-monthly)" radius={[6, 6, 0, 0]} maxBarSize={44}>
                     <LabelList dataKey="value" position="top" style={valueLabel} />
                   </Bar>
                 </BarChart>

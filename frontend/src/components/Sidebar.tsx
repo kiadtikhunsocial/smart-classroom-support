@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
+import { roleLabel } from '../roleLabels';
 
 interface SidebarProps {
   activeMenu: string;
@@ -159,7 +160,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'sales',
-    label: 'ยอดขาย',
+    label: 'ลูกค้าและการขาย',
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
@@ -245,15 +246,48 @@ function visibleMenusFor(role: string | undefined, organizationId?: number | nul
 // สิทธิ์การมองเห็นยังคุมด้วย ROLE_MENUS/visibleMenusForRole เท่านั้น
 // กลุ่มไหนไม่มีเมนูที่ผู้ใช้เห็นได้เลย จะไม่ถูก render ทั้งกลุ่ม
 const MENU_GROUPS: { label: string; ids: string[] }[] = [
-  { label: 'ภาพรวม', ids: ['dashboard', 'reports'] },
-  { label: 'งานซ่อม', ids: ['tickets', 'team', 'scan', 'pm', 'ratings'] },
-  { label: 'คลังอุปกรณ์', ids: ['devices', 'qrbatch', 'kb', 'chatbot'] },
-  { label: 'จัดการระบบ', ids: ['schools', 'registrations', 'users', 'sales', 'audit'] },
+  { label: 'พื้นที่ทำงาน', ids: ['dashboard', 'tickets', 'scan', 'team'] },
+  { label: 'อุปกรณ์และการดูแล', ids: ['devices', 'pm', 'qrbatch', 'kb'] },
+  { label: 'จัดการระบบ', ids: ['schools', 'registrations', 'users', 'chatbot', 'audit'] },
+  { label: 'รายงานและลูกค้า', ids: ['reports', 'ratings', 'sales'] },
   { label: 'บัญชีของฉัน', ids: ['settings', 'profile'] },
 ];
 
 export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart Classroom Support', userRole, userOrgId, userName, userAvatar, open, onClose, onLogout }: SidebarProps) {
   const visibleItems = visibleMenusFor(userRole, userOrgId);
+  const sidebar = useRef<HTMLElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const mobile = window.matchMedia('(max-width: 768px)');
+    if (!mobile.matches) { onClose?.(); return; }
+    const opener = document.querySelector<HTMLButtonElement>('.header-menu-toggle');
+    const outside = Array.from(document.querySelectorAll<HTMLElement>('.app-layout > :is(.main-column, .skip-link)'));
+    outside.forEach((element) => { element.inert = true; });
+    const focusDrawer = () => {
+      if (sidebar.current?.contains(document.activeElement)) return;
+      closeButton.current?.focus({ preventScroll: true });
+      if (!sidebar.current?.contains(document.activeElement)) sidebar.current?.focus({ preventScroll: true });
+    };
+    focusDrawer();
+    const frame = window.requestAnimationFrame(focusDrawer);
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      onClose?.();
+    };
+    document.addEventListener('keydown', dismiss);
+    const onResize = () => { if (!mobile.matches) onClose?.(); };
+    mobile.addEventListener('change', onResize);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', dismiss);
+      outside.forEach((element) => { element.inert = false; });
+      mobile.removeEventListener('change', onResize);
+      if (mobile.matches) opener?.focus({ preventScroll: true });
+    };
+  }, [open, onClose]);
 
   // เมนูที่ยังไม่ได้จัดกลุ่ม (เผื่อมีการเพิ่ม id ใหม่ในอนาคต) — ต้องไม่หายไปจาก UI
   const groupedIds: Record<string, true> = {};
@@ -281,19 +315,30 @@ export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart 
     <>
       {/* Overlay เฉพาะมือถือ — คลิกปิด */}
       <div className={`sidebar-overlay${open ? ' open' : ''}`} onClick={onClose} />
-      <aside className={`sidebar${open ? ' open' : ''}`}>
+      <aside ref={sidebar} id="workspace-sidebar" className={'sidebar' + (open ? ' open' : '')}
+        role={open ? 'dialog' : undefined} tabIndex={open ? -1 : undefined} aria-modal={open || undefined} aria-label={open ? 'เมนูหลัก' : undefined}
+        onKeyDown={(event) => {
+          if (!open) return;
+          if (event.key !== 'Tab') return;
+          const items = sidebar.current?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)');
+          if (!items?.length) return;
+          const first = items[0];
+          const last = items[items.length - 1];
+          if (event.shiftKey && (event.target === first || event.target === sidebar.current)) { event.preventDefault(); last.focus(); }
+          if (!event.shiftKey && event.target === last) { event.preventDefault(); first.focus(); }
+        }}>
         <div className="sidebar-top">
           <div className="sidebar-brand">
             <a href="/?home=1" aria-label="ไปหน้าแรกแจ้งซ่อม" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', gap: 10 }}>
               <div className="sidebar-brand-icon">
-                <img src="/logo.jpg" alt="IWA" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
+                <img src="/logo.jpg" alt="IWA" />
               </div>
               <div>
                 <div className="sidebar-brand-text">Smart Classroom Support</div>
-                <div className="sidebar-brand-sub">{schoolName}</div>
+                {schoolName !== 'Smart Classroom Support' && <div className="sidebar-brand-sub">{schoolName}</div>}
               </div>
             </a>
-            <button className="sidebar-close-mobile" onClick={onClose} aria-label="ปิดเมนู">
+            <button ref={closeButton} type="button" className="sidebar-close-mobile" onClick={onClose} aria-label="ปิดเมนู">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
@@ -335,7 +380,7 @@ export default function Sidebar({ activeMenu, onMenuChange, schoolName = 'Smart 
             )}
             <div>
               <div className="sidebar-footer-name">{userName || 'ผู้ใช้'}</div>
-              <div className="sidebar-footer-role">{userRole || ''}</div>
+              <div className="sidebar-footer-role">{userRole ? roleLabel(userRole) : ''}</div>
             </div>
           </div>
           {onLogout && (

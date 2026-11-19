@@ -27,22 +27,15 @@
       html, body { margin: 0; }
       html, html[data-mode='light'] { background-color: #f4f6f9; }
       html[data-mode='dark'] { background-color: #12161d; }
-      /* หน้าโหลดแรก (ก่อน React พร้อม) — React แทนที่ทั้งก้อนเมื่อ render ครั้งแรก
-         หน่วง 150ms ก่อนโผล่: เน็ตเร็วจะไม่เห็นมันกระพริบเลย */
-      .boot { position: fixed; inset: 0; display: grid; place-items: center; font-family: 'Noto Sans Thai', system-ui, sans-serif; color: #1b2333; }
-      html[data-mode='dark'] .boot { color: #e4e8ee; }
-      .boot-inner { display: grid; justify-items: center; gap: 12px; padding: 32px 40px; animation: boot-in 280ms ease-out 150ms both; }
-      .boot-logo { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 1px solid #e1e6ed; background: #fff; }
-      html[data-mode='dark'] .boot-logo { border-color: #2a313d; }
-      .boot-name { font-size: 15px; font-weight: 600; letter-spacing: 0; }
-      .boot-sub { font-size: 13px; color: #6b7686; }
-      html[data-mode='dark'] .boot-sub { color: #8a93a2; }
-      .boot-spin { width: 22px; height: 22px; margin-top: 6px; border-radius: 50%; border: 2.5px solid #e1e6ed; border-top-color: #24497f; animation: boot-spin 0.8s linear infinite; }
-      html[data-mode='dark'] .boot-spin { border-color: #2a313d; border-top-color: #8faedb; }
-      .boot-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-      @keyframes boot-in { from { opacity: 0; transform: translateY(4px); } }
+      .boot { --boot-ink: #1b2333; --boot-muted: #4a5568; --boot-line: #d6dee8; --boot-surface: #fff; --boot-accent: #25476e; position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; font: 500 .95rem/1.5 "Noto Sans Thai", Tahoma, system-ui, sans-serif; color: var(--boot-ink); }
+      html[data-mode='dark'] .boot { --boot-ink: #e4e8ee; --boot-muted: #b8c2d0; --boot-line: #3a4655; --boot-surface: #1b222c; --boot-accent: #9ab6d8; }
+      .boot-inner { display: grid; justify-items: center; gap: 10px; width: min(100%, 320px); box-sizing: border-box; padding: 28px 18px; border: 1px solid var(--boot-line); border-radius: 16px; background: var(--boot-surface); text-align: center; }
+      .boot-logo { width: 52px; height: 52px; border-radius: 10px; object-fit: contain; background: #fff; }
+      .boot-name { font-weight: 700; }
+      .boot-sub { color: var(--boot-muted); font-size: .88rem; }
+      .boot-spin { width: 21px; height: 21px; margin-top: 4px; border-radius: 50%; border: 2px solid var(--boot-line); border-top-color: var(--boot-accent); animation: boot-spin 1s linear infinite; }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
-      @media (prefers-reduced-motion: reduce) { .boot-inner { animation: none; } .boot-spin { animation-duration: 2.4s; } }
+      @media (prefers-reduced-motion: reduce) { .boot-spin { animation: none; } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -56,11 +49,10 @@
     <div id="root">
       <div class="boot" role="status" aria-live="polite">
         <div class="boot-inner">
-          <img class="boot-logo" src="/logo.jpg" alt="" width="56" height="56" fetchpriority="high" />
+          <img class="boot-logo" src="/logo.jpg" alt="" width="52" height="52" fetchpriority="high" />
           <span class="boot-name">IWA Smart Classroom Support</span>
-          <span class="boot-sub">ระบบแจ้งซ่อมและดูแลอุปกรณ์ห้องเรียน</span>
           <span class="boot-spin" aria-hidden="true"></span>
-          <span class="boot-sr">กำลังโหลด…</span>
+          <span class="boot-sub">กำลังเปิดระบบ…</span>
         </div>
       </div>
     </div>

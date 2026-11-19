@@ -12,6 +12,7 @@ import "./styles/theme-tokens.css";
 import "./styles/motion.css";
 // ดีไซน์ Calm / ทางการ — เลเยอร์สุดท้าย (ถอดได้ด้วยการลบบรรทัดนี้)
 import "./styles/calm-ui.css";
+import "./styles/workspace-ui.css";
 
 // ทาธีมที่ผู้ใช้เลือกไว้ก่อน render — กันจอกระพริบเป็นธีมผิดตอนโหลด
 initTheme();

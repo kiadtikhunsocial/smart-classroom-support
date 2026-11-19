@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 
 // ใช้ base เดียวกับ client.ts เพื่อไม่ให้สองไฟล์ resolve URL คนละแบบ
 import { API_BASE as BASE } from '../api/client';
@@ -29,7 +29,9 @@ export default function AIChatWidget() {
   const [sessionId] = useState<string>(resolveSessionId);
   const [greeted, setGreeted] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
 
   // ข้อความต้อนรับตอนเปิดครั้งแรก
   useEffect(() => {
@@ -50,8 +52,13 @@ export default function AIChatWidget() {
   }, [messages, typing, open]);
 
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 60);
+    if (open) closeRef.current?.focus();
   }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   const send = async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
@@ -89,7 +96,7 @@ export default function AIChatWidget() {
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
       send();
     }
@@ -97,61 +104,28 @@ export default function AIChatWidget() {
 
   return (
     <>
-      {/* ปุ่มลอย มุมขวาล่าง */}
       <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        title="คุยกับผู้ช่วย AI"
-        style={{
-          position: 'fixed',
-          bottom: 22,
-          right: 22,
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '12px 18px',
-          borderRadius: 999,
-          border: 'none',
-          cursor: 'pointer',
-          background: 'var(--color-primary, #2563eb)',
-          color: '#fff',
-          fontSize: 14,
-          fontWeight: 600,
-          boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-        }}
+        type="button" ref={triggerRef} className="public-chat-trigger"
+        aria-label="คุยกับผู้ช่วย AI" aria-expanded={open} aria-controls={open ? panelId : undefined}
+        onClick={() => open ? close() : setOpen(true)}
       >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.4-3.5A7.5 7.5 0 1 1 20 11.5Z" />
+          <path d="M9 10h6m-6 3h4" />
+        </svg>
         <span>คุยกับผู้ช่วย AI</span>
       </button>
 
-      {/* Panel แชท */}
       {open && (
-        <div
-          role="dialog"
-          aria-label="คุยกับผู้ช่วย AI"
-          style={{
-            position: 'fixed',
-            bottom: 80,
-            right: 22,
-            zIndex: 9999,
-            width: 360,
-            maxWidth: 'calc(100vw - 32px)',
-            height: 480,
-            maxHeight: 'calc(100vh - 120px)',
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'var(--color-surface, #fff)',
-            border: '1px solid var(--color-border, #e5e7eb)',
-            borderRadius: 16,
-            overflow: 'hidden',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.3)',
-          }}
+        <section
+          id={panelId} className="public-chat-panel" role="dialog" aria-label="คุยกับผู้ช่วย AI"
+          onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); close(); } }}
         >
           {/* Header */}
           <div
             style={{
               padding: '12px 16px',
-              background: 'var(--color-primary, #2563eb)',
+              background: 'var(--chat-emphasis)',
               color: '#fff',
               fontWeight: 700,
               fontSize: 15,
@@ -162,9 +136,7 @@ export default function AIChatWidget() {
           >
             <span>ผู้ช่วย AI</span>
             <button
-              onClick={() => setOpen(false)}
-              style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', lineHeight: 0, padding: 2, display: 'inline-flex' }}
-              title="ปิด"
+              type="button" ref={closeRef} className="btn btn-ghost public-chat-close" onClick={close}
               aria-label="ปิด"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -228,7 +200,7 @@ export default function AIChatWidget() {
                 <div key={i} style={{ display: 'flex', justifyContent: 'flex-end', maxWidth: '85%', alignSelf: 'flex-end' }}>
                   <div
                     style={{
-                      background: 'var(--color-primary, #2563eb)',
+                      background: 'var(--chat-emphasis)',
                       color: '#fff',
                       padding: '8px 12px',
                       borderRadius: '12px 4px 12px 12px',
@@ -291,41 +263,21 @@ export default function AIChatWidget() {
           {/* ช่องพิมพ์ */}
           <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--color-border, #e5e7eb)', background: 'var(--color-surface, #fff)' }}>
             <input
-              ref={inputRef}
+              className="form-input public-chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
               placeholder="พิมพ์ข้อความ…"
               aria-label="พิมพ์ข้อความถึงผู้ช่วย AI"
-              style={{
-                flex: 1,
-                padding: '9px 12px',
-                borderRadius: 8,
-                border: '1px solid var(--color-border, #e5e7eb)',
-                background: 'var(--color-bg, #f9fafb)',
-                color: 'var(--color-text, #111827)',
-                fontSize: 13.5,
-                outline: 'none',
-              }}
             />
             <button
-              onClick={() => send()}
+              type="button" className="btn btn-primary" onClick={() => send()}
               disabled={typing || !input.trim()}
-              style={{
-                padding: '9px 16px',
-                borderRadius: 8,
-                border: 'none',
-                background: typing || !input.trim() ? 'var(--color-muted, #9ca3af)' : 'var(--color-primary, #2563eb)',
-                color: '#fff',
-                fontWeight: 600,
-                fontSize: 13.5,
-                cursor: typing || !input.trim() ? 'not-allowed' : 'pointer',
-              }}
             >
               ส่ง
             </button>
           </div>
-        </div>
+        </section>
       )}
     </>
   );

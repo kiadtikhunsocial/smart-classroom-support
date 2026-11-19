@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ModalOverlay from './ModalOverlay';
 import { api } from '../api/client';
 
 // ─── สถานะงาน PM (ตรงกับ backend: pending / overdue / done / skipped) ──────
@@ -944,8 +945,8 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
 
       {/* ─── Panel: กรอกผลตรวจ PM ───────────────────────────────── */}
       {submitTask && (
-        <div className="panel-overlay" onClick={closeSubmit}>
-          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="บันทึกผลการบำรุงรักษา" onClose={closeSubmit}>
+          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">ผลตรวจ {submitTask.task_no}</h3>
               <button className="repair-panel-close" onClick={closeSubmit} aria-label="ปิด" title="ปิด">
@@ -1044,13 +1045,13 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
               </form>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ─── Panel: ข้ามงาน PM ──────────────────────────────────── */}
       {skipTask && (
-        <div className="panel-overlay" onClick={() => setSkipTask(null)}>
-          <div className="repair-panel" style={{ width: 460, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="ข้ามงานบำรุงรักษา" onClose={() => setSkipTask(null)}>
+          <div className="repair-panel" style={{ width: 460, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">ข้ามงาน {skipTask.task_no}</h3>
               <button className="repair-panel-close" onClick={() => setSkipTask(null)} aria-label="ปิด" title="ปิด">
@@ -1085,11 +1086,11 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
               </form>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
-      {showTaskForm && <div className="panel-overlay" onClick={() => setShowTaskForm(false)}>
-        <div className="repair-panel" style={{ width: 560, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="สร้างงาน PM รายเครื่อง">
+      {showTaskForm && <ModalOverlay label="สร้างงาน PM รายเครื่อง" onClose={() => setShowTaskForm(false)}>
+        <div className="repair-panel" style={{ width: 560, maxWidth: '96vw' }}>
           <div className="repair-panel-header"><h3 className="repair-panel-title">สร้างงาน PM รายเครื่อง</h3><button className="repair-panel-close" onClick={() => setShowTaskForm(false)} aria-label="ปิด">×</button></div>
           <div className="repair-panel-body"><form onSubmit={handleCreateTask}>
             <p>เลือกแผนและเครื่องที่ต้องตรวจ กำหนดวันครบกำหนด แล้วทวนรายการตรวจก่อนออกงาน</p>
@@ -1101,12 +1102,12 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
             <button className="btn btn-primary" type="submit" disabled={saving || !taskPlan?.checklist?.length || !taskForm.device_id || !taskForm.due_date}>{saving ? 'กำลังสร้าง…' : 'ยืนยันสร้างงาน PM'}</button>
           </form></div>
         </div>
-      </div>}
+      </ModalOverlay>}
 
       {/* ─── Panel: เพิ่มแผน PM ─────────────────────────────────── */}
       {showPlanForm && (
-        <div className="panel-overlay" onClick={closePlanForm}>
-          <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="แผนบำรุงรักษา" onClose={closePlanForm}>
+          <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editingPlanId != null ? 'แก้ไขแผน PM' : 'เพิ่มแผน PM'}</h3>
               <button className="repair-panel-close" onClick={closePlanForm} aria-label="ปิด" title="ปิด">
@@ -1189,7 +1190,7 @@ export default function PMPage({ onBack, userRole, isGlobalScope = false, curren
               </form>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

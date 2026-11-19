@@ -1,11 +1,12 @@
 import React, { useState, useEffect, ReactNode } from 'react';
+import ModalOverlay from './components/ModalOverlay';
 import { DeviceInfo, Ticket, Stats, DeviceCreate, TicketCreate } from './types';
 import { User, UserRole, Organization } from './types/user';
 import { isRetiredRole } from './roleLabels';
 import { DevicePageRole, DEVICE_PAGE_ROLES, DEVICE_PAGE_ROLE_BADGE } from './types/index';
 import { api, login, setToken } from './api/client';
 import StatCard from './components/StatCard';
-import Sidebar, { ROLE_MENUS, LEGACY_FALLBACK_MENUS } from './components/Sidebar';
+import Sidebar, { visibleMenusForRole } from './components/Sidebar';
 import SchoolsPage, { SchoolAdminView } from './components/SchoolsPage';
 import ScanPage from './components/ScanPage';
 import PublicNoLoginReportView from './components/PublicNoLoginReportView';
@@ -268,44 +269,47 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
   };
 
   return (
-    <div className="login-page">
-      <div className="login-card">
+    <main className="login-page">
+      <div className="login-card login-staff">
         {/* หน้า login เป็นหน้าแยกแล้ว — ต้องมีทางกลับหน้าแรกสาธารณะ */}
-        <a href="/" className="login-back-link">← กลับหน้าแรก (แจ้งซ่อม/ติดตามสถานะ)</a>
+        <a href="/" className="login-back-link">← กลับไปหน้าบริการ</a>
         <div className="login-logo">
           <a href="https://iwa-web.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
             <div className="login-logo-icon"><AppLogo size={22} /></div>
             <div>
-              <h1 className="login-title">IWA Smart Classroom Support</h1>
-              <p className="login-subtitle">เข้าสู่ระบบสำหรับเจ้าหน้าที่</p>
+              <h1 className="login-title">เข้าสู่ระบบเจ้าหน้าที่</h1>
+              <p className="login-subtitle">IWA Smart Classroom Support</p>
             </div>
           </a>
         </div>
         <div className="login-divider" />
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 14 }}>
           <div className="form-group">
-            <label className="form-label">ชื่อผู้ใช้</label>
+            <label className="form-label" htmlFor="staff-username">ชื่อผู้ใช้</label>
             <input
               type="text"
               className="form-input"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="ชื่อผู้ใช้ (username)"
-              autoFocus
+              id="staff-username"
+              autoComplete="username"
+              required
             />
           </div>
           <div className="form-group">
-            <label className="form-label">รหัสผ่าน</label>
+            <label className="form-label" htmlFor="staff-password">รหัสผ่าน</label>
             <input
               type="password"
               className="form-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="รหัสผ่าน"
+              id="staff-password"
+              autoComplete="current-password"
+              required
             />
           </div>
           {error && (
-            <div style={{
+            <div role="alert" style={{
               padding: '10px 14px', background: 'var(--color-danger-light)',
               color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)',
               fontSize: '0.8rem',
@@ -324,59 +328,22 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
             )}
           </button>
         </form>
-        <p className="login-note">
-          เข้าสู่ระบบเพื่อจัดการแจ้งซ่อมอุปกรณ์และติดตามสถานะซ่อม
-        </p>
-        <div style={{ textAlign: 'center', marginTop: 8, fontSize: '0.8rem' }}>
-          <span style={{ color: 'var(--color-text-tertiary)' }}>ยังไม่มีบัญชีเจ้าหน้าที่? </span>
-          <a href="/?register=1" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-            สมัครสมาชิก (รอผู้ดูแลอนุมัติ)
-          </a>
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 8, fontSize: '0.8rem' }}>
-          <span style={{ color: 'var(--color-text-tertiary)' }}>มีเลข Ticket แล้วแต่ยังไม่มีบัญชี? </span>
-          <a
-            href="#"
-            style={{ color: 'var(--color-primary)', fontWeight: 600 }}
-            onClick={(e) => { e.preventDefault(); setShowTrack(true); }}
-          >
-            ติดตามสถานะโดยไม่ต้องเข้าสู่ระบบ
-          </a>
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 14, fontSize: '0.8rem', borderTop: '1px solid var(--color-border)', paddingTop: 14 }}>
-          <span style={{ color: 'var(--color-text-tertiary)' }}>ยังไม่มีบัญชี? </span>
-          <a
-            href="/?publicreport=1"
-            style={{ color: 'var(--color-primary)', fontWeight: 600 }}
-          >
-            แจ้งซ่อม โดยไม่ต้องมีบัญชี
-          </a>
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 6, fontSize: '0.78rem' }}>
-          <span style={{ color: 'var(--color-text-tertiary)' }}>การใช้งานเว็บไซต์นี้อยู่ภายใต้ </span>
-          <a
-            href="#"
-            style={{ color: 'var(--color-primary)' }}
-            onClick={(e) => { e.preventDefault(); onPrivacy?.(); }}
-          >
-            นโยบายความเป็นส่วนตัว
-          </a>
+        <div className="login-help" aria-label="ทางเลือกในการใช้บริการ">
+          <a href="/?register=1">ขอเปิดบัญชีเจ้าหน้าที่</a>
+          <a href="/?publicreport=1">แจ้งซ่อมอุปกรณ์</a>
+          <button type="button" onClick={() => setShowTrack(true)}>ติดตามงานซ่อม</button>
+          <button type="button" onClick={onPrivacy}>นโยบายความเป็นส่วนตัว</button>
         </div>
 
         {/* ─── Modal: ติดตามสถานะด้วยเลข Ticket (ไม่ต้อง login) ─── */}
         {showTrack && (
-          <div
-            className="panel-overlay"
-            onClick={() => setShowTrack(false)}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
-          >
+          <ModalOverlay label="ติดตามสถานะงานซ่อม" onClose={() => setShowTrack(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
             <div
               style={{
-                width: 440, maxWidth: '92vw', background: 'var(--color-surface)',
+                width: 'min(440px, 100%)', background: 'var(--color-surface)',
                 borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)',
                 padding: 24, position: 'relative', maxHeight: '85vh', overflowY: 'auto',
               }}
-              onClick={(e) => e.stopPropagation()}
             >
               <button
                 onClick={() => setShowTrack(false)}
@@ -395,7 +362,8 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
               <form onSubmit={handleTrack} style={{ display: 'flex', gap: 8 }}>
                 <input
                   className="form-input"
-                  placeholder="TK.TEST1.26.0001-V"
+                  aria-label="เลขใบงาน"
+                  placeholder="เช่น TK.SCHM01.26.0001-T"
                   value={tNo}
                   onChange={(e) => setTNo(e.target.value)}
                   style={{ flex: 1, textTransform: 'uppercase' }}
@@ -449,18 +417,19 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
                 </div>
               )}
             </div>
-          </div>
+          </ModalOverlay>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 
 // ─── Header ────────────────────────────────────────────────────────────────
-function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate, onOpenRecord, onLogout }: {
+function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate, onOpenRecord, onLogout, sidebarOpen }: {
   pageTitle: string;
   user?: User | null;
   onMenuToggle?: () => void;
+  sidebarOpen?: boolean;
   devices?: DeviceInfo[];
   tickets?: Ticket[];
   onNavigate?: (menu: string) => void;
@@ -468,9 +437,27 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
   onLogout?: () => void;
 }) {
   const [q, setQ] = useState('');
-  const [showResults, setShowResults] = useState(false);
-  const [showNotif, setShowNotif] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [popover, setPopover] = useState<'search' | 'notifications' | 'account' | null>(null);
+  const headerRef = React.useRef<HTMLElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!popover) return;
+    const closeOutside = (event: PointerEvent | FocusEvent) => {
+      if (event.target instanceof Node && !headerRef.current?.contains(event.target)) setPopover(null);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('focusin', closeOutside);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('focusin', closeOutside);
+    };
+  }, [popover]);
+
+  const toggle = (next: NonNullable<typeof popover>, trigger: HTMLButtonElement) => {
+    triggerRef.current = trigger;
+    setPopover(popover === next ? null : next);
+  };
 
   // ─── ค้นหา: อุปกรณ์ + Ticket ──────────────────────────────────────────
   const searchResults = (() => {
@@ -496,188 +483,86 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
     ['new', 'assigned', 'in_progress', 'pending'].includes(t.status)
   );
 
+  const openRecord = (kind: 'devices' | 'tickets', id: string) => {
+    setPopover(null);
+    setQ('');
+    onOpenRecord?.(kind, id);
+  };
+
   return (
-    <header className="app-header">
+    <header className="app-header" ref={headerRef} onKeyDown={(event) => {
+      if (event.key === 'Escape' && popover) {
+        event.stopPropagation();
+        setPopover(null);
+        triggerRef.current?.focus();
+      }
+    }}>
       <div className="header-left">
         {onMenuToggle && (
-          <button className="header-menu-toggle" onClick={onMenuToggle} aria-label="เปิดเมนู">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 6h18M3 12h18M3 18h18"/>
-            </svg>
+          <button type="button" className="header-menu-toggle" onClick={onMenuToggle} aria-label="เปิดเมนูหลัก" aria-controls="workspace-sidebar" aria-expanded={sidebarOpen}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
           </button>
         )}
-        <a href="/?home=1" aria-label="ไปหน้าแรกแจ้งซ่อม" style={{ display: 'inline-flex' }}><AppLogo size={22} /></a>
-        <h2 className="header-page-title">{pageTitle}</h2>
+        <p className="header-page-title">{pageTitle}</p>
       </div>
-      <div className="header-right">
-        {/* ค้นหา */}
-        <div className="header-search" style={{ position: 'relative' }}>
-          <span className="header-search-icon"><SearchIcon /></span>
-          <input
-            className="header-search-input"
-            type="text"
-            placeholder="ค้นหาอุปกรณ์ / Ticket..."
-            value={q}
-            onChange={(e) => { setQ(e.target.value); setShowResults(true); }}
-            onFocus={() => setShowResults(true)}
-            onBlur={() => setTimeout(() => setShowResults(false), 150)}
-          />
-          {showResults && q.trim() && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-              zIndex: 100, maxHeight: 320, overflow: 'auto', fontSize: '0.8rem',
-            }}>
-              {searchResults.devices.length === 0 && searchResults.tickets.length === 0 && (
-                <div style={{ padding: 12, color: 'var(--color-text-tertiary)' }}>ไม่พบผลการค้นหา</div>
-              )}
-              {searchResults.devices.length > 0 && (
-                <>
-                  <div style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-tertiary)', fontSize: '0.7rem', background: 'var(--color-bg)' }}>อุปกรณ์</div>
-                  {searchResults.devices.map((d) => (
-                    <button
-                      key={d.device_id}
-                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--color-text)' }}
-                      onClick={() => { onOpenRecord?.('devices', d.device_id); setShowResults(false); setQ(''); }}
-                    >
-                      <span style={{ fontWeight: 600 }}>{d.device_id}</span>
-                      <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 6 }}>{d.device_type}{d.room_name ? ` · ${d.room_name}` : ''}</span>
-                    </button>
-                  ))}
-                </>
-              )}
-              {searchResults.tickets.length > 0 && (
-                <>
-                  <div style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-tertiary)', fontSize: '0.7rem', background: 'var(--color-bg)' }}>Ticket</div>
-                  {searchResults.tickets.map((t) => (
-                    <button
-                      key={t.ticket_id}
-                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--color-text)' }}
-                      onClick={() => { onOpenRecord?.('tickets', t.ticket_id); setShowResults(false); setQ(''); }}
-                    >
-                      <span style={{ fontWeight: 600 }}>{t.ticket_id}</span>
-                      <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 6 }}>{t.title}</span>
-                    </button>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* แจ้งเตือน */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setShowNotif(!showNotif)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', padding: 4 }}
-            aria-label="แจ้งเตือน"
-          >
-            <BellIcon badge={openTickets.length} />
-          </button>
-          {showNotif && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 320,
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-              zIndex: 100, maxHeight: 380, overflow: 'auto',
-            }}>
-              <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: '0.85rem', borderBottom: '1px solid var(--color-border)' }}>
-                การแจ้งเตือน ({openTickets.length})
-              </div>
-              {openTickets.length === 0 ? (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: '0.8rem' }}>
-                  ไม่มีงานค้าง
-                </div>
-              ) : (
-                openTickets.slice(0, 10).map((t) => (
-                  <button
-                    key={t.ticket_id}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer' }}
-                    onClick={() => { onOpenRecord?.('tickets', t.ticket_id); setShowNotif(false); }}
-                  >
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{t.ticket_id}</div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 2 }}>{t.title}</div>
-                    <span className={`badge badge-${t.status}`} style={{ fontSize: '0.68rem', marginTop: 4 }}>
-                      {STATUS_LABELS_TICKET[t.status] || t.status}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
+      <div className="workspace-tools">
+        <button type="button" className="workspace-tool workspace-search-trigger" aria-label="ค้นหาอุปกรณ์หรือใบงาน" aria-expanded={popover === 'search'} onClick={(event) => toggle('search', event.currentTarget)}>
+          <SearchIcon /><span>ค้นหาอุปกรณ์หรือใบงาน</span>
+        </button>
+        <button type="button" className="workspace-tool" aria-label={openTickets.length ? 'งานค้าง ' + openTickets.length + ' รายการ' : 'งานค้าง'} aria-expanded={popover === 'notifications'} onClick={(event) => toggle('notifications', event.currentTarget)}>
+          <BellIcon badge={openTickets.length} />
+        </button>
         {user && (
-          <div style={{ position: 'relative' }}>
-            <button
-              className="header-user"
-              onClick={() => setShowUserMenu((v) => !v)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: 4 }}
-              aria-label="เมนูผู้ใช้"
-            >
-              {user.line_picture_url ? (
-                <img className="header-user-avatar" src={user.line_picture_url} alt="" style={{ objectFit: 'cover' }} />
-              ) : (
-                <div className="header-user-avatar">
-                  {user.line_display_name?.charAt(0) || 'U'}
-                </div>
-              )}
-              <div className="header-user-info">
-                <span className="header-user-name">{user.line_display_name || 'ผู้ใช้'}</span>
-                <span className="header-user-role">
-                  {user.role}
-                  <span className={`role-badge ${user.role}`} style={{ marginLeft: 6, verticalAlign: 'middle', fontSize: '0.6rem' }}>
-                    {user.role}
-                  </span>
-                </span>
-              </div>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--color-text-tertiary)' }}>
-                <path d="M6 9l6 6 6-6"/>
-              </svg>
-            </button>
-
-            {/* Dropdown: โปรไฟล์ / การตั้งค่า / ออกจากระบบ */}
-            {showUserMenu && (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 98 }} onClick={() => setShowUserMenu(false)} />
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 220,
-                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)', boxShadow: '0 12px 32px rgba(0,0,0,0.14)',
-                  zIndex: 99, overflow: 'hidden',
-                }}>
-                  <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{user.line_display_name || 'ผู้ใช้'}</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                      {roleLabel(user.role)}
-                    </div>
-                  </div>
-                  <button
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-text)', textAlign: 'left' }}
-                    onMouseDown={() => { setShowUserMenu(false); onNavigate?.('profile'); }}
-                  >
-                    โปรไฟล์
-                  </button>
-                  <button
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-text)', textAlign: 'left' }}
-                    onMouseDown={() => { setShowUserMenu(false); onNavigate?.('settings'); }}
-                  >
-                    การตั้งค่า
-                  </button>
-                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
-                  <button
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--color-danger)', textAlign: 'left' }}
-                    onMouseDown={() => { setShowUserMenu(false); onLogout?.(); }}
-                  >
-                    ออกจากระบบ
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <button type="button" className="workspace-tool workspace-account" aria-label="เมนูบัญชี" aria-expanded={popover === 'account'} onClick={(event) => toggle('account', event.currentTarget)}>
+            {user.line_picture_url ? <img className="header-user-avatar" src={user.line_picture_url} alt="" /> :
+              <span className="header-user-avatar" aria-hidden="true">{(user.line_display_name || 'U').charAt(0).toUpperCase()}</span>}
+            <span className="workspace-account-name">{user.line_display_name || 'ผู้ใช้'}</span>
+            <ChevronDownIcon />
+          </button>
         )}
       </div>
+      {popover === 'search' && (
+        <section className="workspace-popover workspace-search-panel" aria-label="ค้นหาในระบบ">
+          <label className="form-label" htmlFor="workspace-search">ค้นหาอุปกรณ์หรือใบงาน</label>
+          <input id="workspace-search" type="search" className="form-input" autoFocus value={q} onChange={(event) => setQ(event.target.value)} placeholder="รหัส ชื่ออุปกรณ์ หรือเลขใบงาน" />
+          <div className="workspace-popover-list">
+            {q.trim() && !searchResults.devices.length && !searchResults.tickets.length && <p className="workspace-popover-empty" role="status">ไม่พบรายการ ลองตรวจสอบรหัสหรือใช้คำค้นสั้นลง</p>}
+            {searchResults.devices.length > 0 && <h2>อุปกรณ์</h2>}
+            {searchResults.devices.map((device) => <button key={device.device_id} type="button" onClick={() => openRecord('devices', device.device_id)}>
+              <strong>{device.device_id}</strong><span>{[device.device_type, device.room_name].filter(Boolean).join(' · ')}</span>
+            </button>)}
+            {searchResults.tickets.length > 0 && <h2>ใบงาน</h2>}
+            {searchResults.tickets.map((ticket) => <button key={ticket.ticket_id} type="button" onClick={() => openRecord('tickets', ticket.ticket_id)}>
+              <strong>{ticket.ticket_id}</strong><span>{ticket.title}</span>
+            </button>)}
+          </div>
+        </section>
+      )}
+      {popover === 'notifications' && (
+        <section className="workspace-popover" aria-label="งานค้าง">
+          <h2>งานค้าง ({openTickets.length})</h2>
+          <div className="workspace-popover-list">
+            {!openTickets.length && <p className="workspace-popover-empty">ไม่มีงานค้าง</p>}
+            {openTickets.slice(0, 10).map((ticket) => (
+              <button key={ticket.ticket_id} type="button" onClick={() => openRecord('tickets', ticket.ticket_id)}>
+                <strong>{ticket.ticket_id}</strong><span>{ticket.title}</span>
+                <span className={'badge badge-' + ticket.status}>{STATUS_LABELS_TICKET[ticket.status] || ticket.status}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {popover === 'account' && user && (
+        <section className="workspace-popover workspace-account-panel" aria-label="เมนูบัญชี">
+          <h2>{user.line_display_name || 'ผู้ใช้'}</h2>
+          <p>{roleLabel(user.role)}</p>
+          <div className="workspace-popover-list">
+            <button type="button" onClick={() => { setPopover(null); onNavigate?.('profile'); }}>โปรไฟล์</button>
+            <button type="button" onClick={() => { setPopover(null); onNavigate?.('settings'); }}>การตั้งค่า</button>
+            <button type="button" onClick={() => { setPopover(null); onLogout?.(); }}>ออกจากระบบ</button>
+          </div>
+        </section>
+      )}
     </header>
   );
 }
@@ -687,6 +572,8 @@ function DashboardContent({
   onOpenRepairPanel,
   onOpenTicket,
   onOpenDevice,
+  onNavigate,
+  canScan,
   stats,
   tickets,
   devices,
@@ -700,6 +587,8 @@ function DashboardContent({
   onOpenTicket?: (ticketId: string) => void;
   /** ปุ่ม "ดูรายละเอียด" บนการ์ดอุปกรณ์ → เปิดเครื่องนั้นในหน้าอุปกรณ์ */
   onOpenDevice?: (deviceId: string) => void;
+  onNavigate: (menu: string) => void;
+  canScan: boolean;
   stats: Stats | null;
   tickets: Ticket[];
   devices: DeviceInfo[];
@@ -870,8 +759,8 @@ function DashboardContent({
 
   if (loading) return (
     <div className="dsh-loading" role="status" aria-live="polite">
-      <div className="spinner" />
-      <span>กำลังโหลดข้อมูล…</span>
+      <div className="spinner" aria-hidden="true" />
+      <span>กำลังโหลดภาพรวม…</span>
     </div>
   );
 
@@ -882,7 +771,7 @@ function DashboardContent({
         {/* Hero banner ต้อนรับ — สไตล์อยู่ในคลาส .dsh-hero (dashboard.css) เปลี่ยนตามธีมเอง */}
         <div className="dsh-hero">
           <div>
-            <div className="dsh-hero-title">สวัสดีครับ ยินดีต้อนรับ</div>
+            <h1 className="dsh-hero-title">งานแจ้งซ่อมของฉัน</h1>
             <div className="dsh-hero-sub">
               ติดตามงานแจ้งซ่อมของคุณได้ที่นี่ — หากพบปัญหาอุปกรณ์ สแกน QR ที่ตัวเครื่องเพื่อแจ้งซ่อม
             </div>
@@ -967,28 +856,25 @@ function DashboardContent({
 
   return (
     <div className="dsh-page">
-      {/* Hero banner สรุปภาพรวม */}
-      <div className="dsh-hero">
+      <section className="dsh-hero workspace-overview" aria-labelledby="workspace-overview-title">
         <div>
-          <div className="dsh-hero-title">ภาพรวมระบบซ่อมบำรุง</div>
-          <div className="dsh-hero-sub">
-            มี Ticket ทั้งหมด <b>{stats?.total_tickets ?? 0}</b> รายการ · กำลังดำเนินการ <b>{stats?.in_progress ?? 0}</b> · รอรับเรื่อง <b>{stats?.new ?? 0}</b>
-          </div>
+          <h1 className="dsh-hero-title" id="workspace-overview-title">งานซ่อมและอุปกรณ์</h1>
+          <p className="dsh-hero-sub">ตรวจงานค้างและความพร้อมของอุปกรณ์ในที่เดียว</p>
         </div>
-        <div className="dsh-hero-chips">
-          <span className="dsh-chip">เสร็จสิ้น {stats?.resolved ?? 0}</span>
-          <span className="dsh-chip">อุปกรณ์ {stats?.total_devices ?? 0}</span>
+        <div className="workspace-overview-actions">
+          <button type="button" className="btn btn-primary" onClick={() => onNavigate('tickets')}>ดูใบงาน</button>
+          {canScan && <button type="button" className="btn btn-secondary" onClick={() => onNavigate('scan')}>สแกน QR</button>}
         </div>
-      </div>
+      </section>
 
       {/* KPI Stat Cards — ทันสมัย */}
       <div className="dsh-kpi-grid">
         {[
-          { icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', value: stats?.total_tickets ?? 0, label: 'Ticket ทั้งหมด', color: '--chart-1', sub: 'ทุกสถานะ' },
+          { icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', value: stats?.total_tickets ?? 0, label: 'ใบงานทั้งหมด', color: '--chart-1', sub: 'ทุกสถานะ' },
           { icon: 'M12 6v6l4 2', value: stats?.new ?? 0, label: 'รอรับเรื่อง', color: '--status-assigned', sub: 'ยังไม่มีช่างรับ' },
           { icon: 'M13 10V3L4 14h7v7l9-11h-7z', value: stats?.in_progress ?? 0, label: 'กำลังดำเนินการ', color: '--status-in-progress', sub: 'อยู่ระหว่างซ่อม' },
-          { icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', value: stats?.resolved ?? 0, label: 'ซ่อมเสร็จ', color: '--status-resolved', sub: 'รอ/ปิดงาน' },
-          { icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8', value: stats?.high ?? 0, label: 'ความเร่งด่วนสูง', color: '--status-new', sub: 'high+critical' },
+          { icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', value: stats?.resolved ?? 0, label: 'ซ่อมเสร็จ', color: '--status-resolved', sub: 'รอยืนยันหรือปิดงาน' },
+          { icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8', value: stats?.high ?? 0, label: 'ความเร่งด่วนสูง', color: '--status-new', sub: 'ระดับสูงขึ้นไป' },
           { icon: 'M3 6h18M3 12h18M3 18h18', value: stats?.total_devices ?? 0, label: 'อุปกรณ์ทั้งหมด', color: '--color-muted', sub: 'ที่ลงทะเบียน' },
         ].map((kpi) => (
           <div key={kpi.label} className="dsh-kpi">
@@ -1048,7 +934,7 @@ function DashboardContent({
         </div>
 
         <div className="dsh-toolbar-field">
-          <label className="dsh-toolbar-label" htmlFor="dsh-filter-status">สถานะ Ticket</label>
+          <label className="dsh-toolbar-label" htmlFor="dsh-filter-status">สถานะใบงาน</label>
           <select
             id="dsh-filter-status"
             className="dsh-select"
@@ -1252,7 +1138,7 @@ function DashboardContent({
 function RepairPanel({ deviceId, onClose, onSubmit }: {
   deviceId?: string;
   onClose: () => void;
-  onSubmit: (data: { success: boolean; ticket_id?: string }) => void;
+  onSubmit: (ticketId?: string) => void;
 }) {
   const [form, setForm] = useState({
     title: '',
@@ -1265,8 +1151,6 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [successTicketId, setSuccessTicketId] = useState('');
   const [recentTicket, setRecentTicket] = useState<any | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
 
@@ -1314,13 +1198,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
       };
 
       const result = await api.createTicket(payload);
-      // ไม่ใส่เลขตัวอย่างปลอม ('SC-xxxx' เป็นรูปแบบเก่าและทำให้ผู้แจ้งจดเลขผิด)
-      // ถ้า backend ไม่คืนเลขมา ให้เว้นไว้ แล้วให้ผู้ใช้ไปดูจากหน้าติดตามสถานะ
-      setSuccessTicketId(result.ticket_id || '');
-      setSubmitted(true);
-      setTimeout(() => {
-        onSubmit({ success: true, ticket_id: result.ticket_id });
-      }, 1200);
+      onSubmit(result.ticket_id);
     } catch (err: any) {
       const msg = err.message || 'เกิดข้อผิดพลาด';
       setError(msg);
@@ -1329,208 +1207,188 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
   };
 
   return (
-    <div className="panel-overlay" onClick={onClose}>
-      <div className="repair-panel" onClick={(e) => e.stopPropagation()}>
+    <ModalOverlay labelledBy="staff-repair-title" onClose={() => { if (!submitting) onClose(); }}>
+      <div className="repair-panel">
         <div className="repair-panel-header">
-          <h3 className="repair-panel-title">แจ้งซ่อมอุปกรณ์</h3>
-          <button className="repair-panel-close" onClick={onClose}>
+          <h2 className="repair-panel-title" id="staff-repair-title">แจ้งซ่อมอุปกรณ์</h2>
+          <button type="button" className="repair-panel-close" onClick={onClose} disabled={submitting} aria-label="ปิดหน้าต่างแจ้งซ่อม">
             <CloseIcon />
           </button>
         </div>
 
         <div className="repair-panel-body">
-          {submitted ? (
-            <div className="success-state">
-              <div className="success-icon" aria-hidden="true">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 6L9 17l-5-5" />
-                </svg>
+          <form onSubmit={handleSubmit}>
+            {deviceId && (
+              <div className="device-select-card">
+                <div className="device-select-icon">
+                  <DeviceIconSvg type="อุปกรณ์" />
+                </div>
+                <div className="device-select-text">
+                  <div className="device-select-name">{deviceId}</div>
+                  <div className="device-select-sub">อุปกรณ์ที่เลือก</div>
+                </div>
               </div>
-              <div className="success-title">ส่งคำร้องเรียบร้อยแล้ว</div>
-              <div className="success-sub">หมายเลข Ticket:</div>
-              <div className="success-ticket-id">{successTicketId}</div>
-              <div style={{ marginTop: 16, fontSize: '0.8rem', color: 'var(--color-text-secondary)', maxWidth: 280 }}>
-                เจ้าหน้าที่จะดำเนินการตรวจสอบและซ่อมแซมภายใน 24 ชั่วโมง
+            )}
+
+            {/* การ์ด: งานแจ้งซ่อมล่าสุดของเครื่องนี้ (ช่วยหาเลขคืนถ้าลืม) */}
+            {recentLoading && (
+              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginBottom: 'var(--spacing-md)' }}>
+                กำลังตรวจสอบประวัติ…
               </div>
+            )}
+            {!recentLoading && recentTicket && (
+              <div style={{
+                padding: '12px 14px', marginBottom: 'var(--spacing-md)',
+                background: 'var(--color-info-light)', borderRadius: 'var(--radius-sm)',
+                fontSize: '0.85rem', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+              }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                  งานแจ้งซ่อมล่าสุดของเครื่องนี้
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>{recentTicket.ticket_id}</strong>
+                  <span className={`badge badge-${recentTicket.status}`} style={{ fontSize: '0.68rem' }}>
+                    {STATUS_LABELS_TICKET[recentTicket.status] || recentTicket.status}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                  {recentTicket.title || ''}
+                </div>
+                <a
+                  href="#"
+                  style={{ display: 'inline-block', marginTop: 8, color: 'var(--color-primary)', fontWeight: 600, fontSize: '0.8rem' }}
+                  onClick={(e) => { e.preventDefault(); window.location.href = `/?ticket=${encodeURIComponent(recentTicket.ticket_id)}`; }}
+                >
+                  ดูสถานะงานนี้ → (ไม่ต้องเข้าสู่ระบบ)
+                </a>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label">
+                หัวข้อ<span className="required">*</span>
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.title}
+                onChange={(e) => setField('title', e.target.value)}
+                placeholder="เช่น จอภาพไม่ติด, Wi-Fi ไม่เข้า"
+                maxLength={200}
+                required
+              />
             </div>
-          ) : (
-            <form onSubmit={handleSubmit}>
-              {deviceId && (
-                <div className="device-select-card">
-                  <div className="device-select-icon">
-                    <DeviceIconSvg type="อุปกรณ์" />
-                  </div>
-                  <div className="device-select-text">
-                    <div className="device-select-name">{deviceId}</div>
-                    <div className="device-select-sub">อุปกรณ์ที่เลือก</div>
-                  </div>
-                </div>
-              )}
 
-              {/* การ์ด: งานแจ้งซ่อมล่าสุดของเครื่องนี้ (ช่วยหาเลขคืนถ้าลืม) */}
-              {recentLoading && (
-                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginBottom: 'var(--spacing-md)' }}>
-                  กำลังตรวจสอบประวัติ…
-                </div>
-              )}
-              {!recentLoading && recentTicket && !submitted && (
-                <div style={{
-                  padding: '12px 14px', marginBottom: 'var(--spacing-md)',
-                  background: 'var(--color-info-light)', borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.85rem', color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                    งานแจ้งซ่อมล่าสุดของเครื่องนี้
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <strong style={{ color: 'var(--color-primary)' }}>{recentTicket.ticket_id}</strong>
-                    <span className={`badge badge-${recentTicket.status}`} style={{ fontSize: '0.68rem' }}>
-                      {STATUS_LABELS_TICKET[recentTicket.status] || recentTicket.status}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>
-                    {recentTicket.title || ''}
-                  </div>
-                  <a
-                    href="#"
-                    style={{ display: 'inline-block', marginTop: 8, color: 'var(--color-primary)', fontWeight: 600, fontSize: '0.8rem' }}
-                    onClick={(e) => { e.preventDefault(); window.location.href = `/?ticket=${encodeURIComponent(recentTicket.ticket_id)}`; }}
-                  >
-                    ดูสถานะงานนี้ → (ไม่ต้องเข้าสู่ระบบ)
-                  </a>
-                </div>
-              )}
+            <div className="form-group">
+              <label className="form-label">อาการละเอียด</label>
+              <textarea
+                className="form-textarea"
+                value={form.description}
+                onChange={(e) => setField('description', e.target.value)}
+                placeholder="บรรยายอาการที่เกิดขึ้น…"
+                rows={4}
+              />
+            </div>
 
+            <div className="form-row">
               <div className="form-group">
-                <label className="form-label">
-                  หัวข้อ<span className="required">*</span>
-                </label>
+                <label className="form-label">ชื่อผู้แจ้ง</label>
                 <input
                   type="text"
                   className="form-input"
-                  value={form.title}
-                  onChange={(e) => setField('title', e.target.value)}
-                  placeholder="เช่น จอภาพไม่ติด, Wi-Fi ไม่เข้า"
-                  maxLength={200}
-                  required
+                  value={form.reporter_name}
+                  onChange={(e) => setField('reporter_name', e.target.value)}
+                  placeholder="ชื่อ-นามสกุล"
                 />
               </div>
-
               <div className="form-group">
-                <label className="form-label">อาการละเอียด</label>
-                <textarea
-                  className="form-textarea"
-                  value={form.description}
-                  onChange={(e) => setField('description', e.target.value)}
-                  placeholder="บรรยายอาการที่เกิดขึ้น…"
-                  rows={4}
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">ชื่อผู้แจ้ง</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={form.reporter_name}
-                    onChange={(e) => setField('reporter_name', e.target.value)}
-                    placeholder="ชื่อ-นามสกุล"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">ประเภท</label>
-                  <select
-                    className="form-select"
-                    value={form.reporter_type}
-                    onChange={(e) => setField('reporter_type', e.target.value)}
-                  >
-                    {REPORTER_TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">เบอร์ติดต่อ</label>
-                  <input
-                    type="tel"
-                    className="form-input"
-                    value={form.reporter_phone}
-                    onChange={(e) => setField('reporter_phone', e.target.value)}
-                    placeholder="08xxx xxxx"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">อีเมล (optional)</label>
-                  <input
-                    type="email"
-                    className="form-input"
-                    value={form.reporter_email}
-                    onChange={(e) => setField('reporter_email', e.target.value)}
-                    placeholder="email@example.com"
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">ระดับความเร่งด่วน</label>
+                <label className="form-label">ประเภท</label>
                 <select
                   className="form-select"
-                  value={form.priority}
-                  onChange={(e) => setField('priority', e.target.value)}
+                  value={form.reporter_type}
+                  onChange={(e) => setField('reporter_type', e.target.value)}
                 >
-                  <option value="low">Low — ไม่เร่งด่วน</option>
-                  <option value="normal">Normal — ปกติ</option>
-                  <option value="high">High — ค่อนข้างเร่งด่วน</option>
-                  <option value="critical">Critical — เร่งด่วนมาก</option>
+                  {REPORTER_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
                 </select>
               </div>
+            </div>
 
-              {error && (
-                <div style={{
-                  padding: '10px 14px',
-                  background: 'var(--color-danger-light)',
-                  color: 'var(--color-danger)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8rem',
-                  marginBottom: 'var(--spacing-md)',
-                }}>
-                  {error}
-                </div>
-              )}
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">เบอร์ติดต่อ</label>
+                <input
+                  type="tel"
+                  className="form-input"
+                  value={form.reporter_phone}
+                  onChange={(e) => setField('reporter_phone', e.target.value)}
+                  placeholder="08xxx xxxx"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">อีเมล (optional)</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={form.reporter_email}
+                  onChange={(e) => setField('reporter_email', e.target.value)}
+                  placeholder="email@example.com"
+                />
+              </div>
+            </div>
 
-              <button
-                type="submit"
-                className="btn btn-primary btn-full"
-                style={{ padding: '12px' }}
-                disabled={submitting || !form.title.trim()}
+            <div className="form-group">
+              <label className="form-label">ระดับความเร่งด่วน</label>
+              <select
+                className="form-select"
+                value={form.priority}
+                onChange={(e) => setField('priority', e.target.value)}
               >
-                {submitting ? (
-                  <>
-                    <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                    กำลังส่ง…
-                  </>
-                ) : (
-                  <>ส่งคำร้องแจ้งซ่อม</>
-                )}
-              </button>
-            </form>
-          )}
+                <option value="low">Low — ไม่เร่งด่วน</option>
+                <option value="normal">Normal — ปกติ</option>
+                <option value="high">High — ค่อนข้างเร่งด่วน</option>
+                <option value="critical">Critical — เร่งด่วนมาก</option>
+              </select>
+            </div>
+
+            {error && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'var(--color-danger-light)',
+                color: 'var(--color-danger)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.8rem',
+                marginBottom: 'var(--spacing-md)',
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-full"
+              style={{ padding: '12px' }}
+              disabled={submitting || !form.title.trim()}
+            >
+              {submitting ? (
+                <>
+                  <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
+                  กำลังส่ง…
+                </>
+              ) : (
+                <>ส่งคำร้องแจ้งซ่อม</>
+              )}
+            </button>
+          </form>
         </div>
 
-        {!submitted && (
-          <div className="repair-panel-footer">
-            <button className="btn btn-ghost" onClick={onClose}>
-              ยกเลิก
-            </button>
-          </div>
-        )}
+        <div className="repair-panel-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>ยกเลิก</button>
+        </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -2489,11 +2347,12 @@ function AppInner() {
   const [menu, setMenu] = useState('dashboard');
   const [pageTitle, setPageTitle] = useState('ภาพรวม');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const closeSidebar = React.useCallback(() => setSidebarOpen(false), []);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null);
   const [focusRecord, setFocusRecord] = useState<{ kind: 'devices' | 'tickets'; id: string } | null>(null);
   const [showRepairPanel, setShowRepairPanel] = useState(false);
   const [repairDeviceId, setRepairDeviceId] = useState<string | undefined>();
-  const [ticketSubmitResult, setTicketSubmitResult] = useState<{ success: boolean; ticket_id?: string } | null>(null);
+  const [ticketSubmitResult, setTicketSubmitResult] = useState<{ ticketId?: string } | null>(null);
   
   // Shared data state
   const [stats, setStats] = useState<Stats | null>(null);
@@ -2536,6 +2395,7 @@ function AppInner() {
   useEffect(() => {
     if (!auth.isAuthenticated) {
       ++loadGeneration.current;
+      setTicketSubmitResult(null);
       setStats(null);
       setTickets([]);
       setDevices([]);
@@ -2558,7 +2418,7 @@ function AppInner() {
     const jobParam = params.get('job');
     if (jobParam) {
       setFocusRecord({ kind: 'tickets', id: jobParam });
-      setMenu('tickets');
+      handleMenuChange('tickets', { fromHistory: true });
       window.history.replaceState({}, '', `${window.location.pathname}#/tickets`);
     } else {
       // เปิดแอป/กดรีเฟรชที่ #/devices → กลับไปหน้าเดิม (ตรวจสิทธิ์ใน handleMenuChange)
@@ -2588,9 +2448,10 @@ function AppInner() {
 
   const handleMenuChange = (menu: string, opts: { fromHistory?: boolean } = {}) => {
     // Role guard: ถ้าเมนูไม่ได้รับอนุญาตสำหรับบทบาทนี้ → กลับ Dashboard
-    const allowed = ROLE_MENUS[role] || LEGACY_FALLBACK_MENUS;
+    const allowed = visibleMenusForRole(role, auth.user?.organization_id);
     if (!allowed.includes(menu)) menu = 'dashboard';
     setMenu(menu);
+    setTicketSubmitResult(null);
     // หน้าอยู่ใน URL (#/tickets) — กดรีเฟรชแล้วอยู่หน้าเดิม ปุ่มย้อนกลับของเบราว์เซอร์ใช้ได้
     if (!opts.fromHistory && window.location.hash !== `#/${menu}`) {
       try {
@@ -2629,19 +2490,21 @@ function AppInner() {
     setShowRepairPanel(true);
   };
 
-  const handleTicketSubmit = (result: { success: boolean; ticket_id?: string }) => {
+  const handleTicketSubmit = (ticketId?: string) => {
     setShowRepairPanel(false);
     setRepairDeviceId(undefined);
-    setTicketSubmitResult(result);
+    setTicketSubmitResult({ ticketId });
     // Reload data
     reloadData();
   };
 
   if (auth.isLoading) return (
-    <div className="login-page" style={{ minHeight: '100vh' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div className="spinner" style={{ width: 36, height: 36, margin: '0 auto 16px' }} />
-        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>กำลังโหลด…</span>
+    <div className="boot" role="status">
+      <div className="boot-inner">
+        <img className="boot-logo" src="/logo.jpg" alt="" width="52" height="52" />
+        <span className="boot-name">IWA Smart Classroom Support</span>
+        <span className="boot-spin" aria-hidden="true" />
+        <span className="boot-sub">กำลังเปิดระบบ…</span>
       </div>
     </div>
   );
@@ -2729,7 +2592,7 @@ function AppInner() {
           userName={auth.user?.line_display_name || auth.user?.line_user_id}
           userAvatar={auth.user?.line_picture_url}
           open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          onClose={closeSidebar}
           onLogout={auth.logout}
         />
 
@@ -2738,6 +2601,7 @@ function AppInner() {
             pageTitle={pageTitle}
             user={auth.user}
             onMenuToggle={() => setSidebarOpen(true)}
+            sidebarOpen={sidebarOpen}
             devices={devices}
             tickets={tickets}
             onNavigate={(m) => handleMenuChange(m)}
@@ -2752,6 +2616,18 @@ function AppInner() {
             )}
             {/* key={menu}: เปลี่ยนหน้า = เล่นแอนิเมชันเข้าใหม่ (เฟดขึ้นสั้น ๆ, ปิดเองเมื่อผู้ใช้ลดการเคลื่อนไหว) */}
             <div className="page-content page-enter" key={menu}>
+              {ticketSubmitResult && (
+                <div className="alert alert-success workspace-feedback">
+                  <p role="status">แจ้งซ่อมเรียบร้อยแล้ว {ticketSubmitResult.ticketId && <strong>{ticketSubmitResult.ticketId}</strong>}</p>
+                  <div>
+                    {ticketSubmitResult.ticketId && <button type="button" className="btn btn-secondary" onClick={() => {
+                      setFocusRecord({ kind: 'tickets', id: ticketSubmitResult.ticketId! });
+                      handleMenuChange('tickets');
+                    }}>ดูใบงาน</button>}
+                    <button type="button" className="btn btn-ghost" onClick={() => setTicketSubmitResult(null)}>ปิด</button>
+                  </div>
+                </div>
+              )}
               {dataError && (
                 <div role="alert" className="alert alert-error">
                   โหลดข้อมูลล่าสุดไม่สำเร็จ กรุณาลองอีกครั้ง{' '}
@@ -2763,6 +2639,8 @@ function AppInner() {
                   onOpenRepairPanel={openRepairPanel}
                   onOpenTicket={(id) => { setFocusRecord({ kind: 'tickets', id }); handleMenuChange('tickets'); }}
                   onOpenDevice={(id) => { setFocusRecord({ kind: 'devices', id }); handleMenuChange('devices'); }}
+                  onNavigate={handleMenuChange}
+                  canScan={visibleMenusForRole(role, currentOrgId).includes('scan')}
                   stats={stats}
                   tickets={tickets}
                   devices={devices}

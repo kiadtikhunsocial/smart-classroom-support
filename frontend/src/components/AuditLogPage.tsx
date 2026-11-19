@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import ModalOverlay from './ModalOverlay';
 import { api } from '../api/client';
 import '../styles/audit-log.css';
 
@@ -157,11 +158,11 @@ export default function AuditLogPage({ onBack, userRole }: { onBack: () => void;
         </section>)}
     <div className="audit-pagination"><button className="btn" disabled={page === 0 || loading} onClick={() => setPage(page - 1)}>← ก่อนหน้า</button><span>หน้า {page + 1}</span><button className="btn" disabled={logs.length < PAGE_SIZE || loading} onClick={() => setPage(page + 1)}>ถัดไป →</button></div>
 
-    {detail && <div className="panel-overlay" onClick={() => setDetail(null)}><div className="repair-panel audit-detail" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="audit-detail-title">
+    {detail && <ModalOverlay labelledBy="audit-detail-title" onClose={() => setDetail(null)}><div className="repair-panel audit-detail">
       <div className="repair-panel-header"><h2 className="repair-panel-title" id="audit-detail-title">{ACTIONS[detail.action] || detail.action}</h2><button className="repair-panel-close" onClick={() => setDetail(null)} aria-label="ปิด">×</button></div>
       <div className="repair-panel-body"><dl className="audit-detail-meta"><div><dt>เวลา</dt><dd>{dateTime(detail.created_at)}</dd></div><div><dt>ผู้ใช้</dt><dd>{detail.user_name || (detail.user_id ? `#${detail.user_id}` : 'ระบบ')}</dd></div><div><dt>ข้อมูล</dt><dd>{ENTITY[detail.entity_type || ''] || detail.entity_type || '—'} {detail.entity_id || ''}</dd></div><div><dt>IP</dt><dd>{detail.ip_address || '—'}</dd></div></dl>
         <details><summary>ข้อมูลก่อนแก้ไข</summary><pre>{valueText(detail.old_value)}</pre></details><details><summary>ข้อมูลหลังแก้ไข</summary><pre>{valueText(detail.new_value)}</pre></details>
         <p className="audit-technical">รหัสเหตุการณ์: {detail.action} · ID: {detail.id}</p>
-      </div></div></div>}
+      </div></div></ModalOverlay>}
   </div>;
 }

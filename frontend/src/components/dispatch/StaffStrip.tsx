@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ModalOverlay from '../ModalOverlay';
 import { api } from '../../api/client';
 import type { DispatchStaff, StaffDetail, StaffTicketRow } from '../../types';
 import { ticketDateLong, ticketDetailPriority, ticketDetailStatus, ticketRelative } from '../tickets/ticketLabels';
@@ -112,16 +113,11 @@ function StaffSheet({ userId, onClose, onOpenTicket }: { userId: number; onClose
     api.dispatchStaff(userId).then((x) => alive && setD(x)).catch((e: any) => alive && setError(e?.message || 'โหลดข้อมูลไม่สำเร็จ'));
     return () => { alive = false; };
   }, [userId]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   const l = d?.load;
   return (
-    <div className="panel-overlay" onClick={onClose}>
-      <div className="repair-panel detail-sheet st-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="st-sheet-title">
+    <ModalOverlay labelledBy="st-sheet-title" onClose={onClose}>
+      <div className="repair-panel detail-sheet st-sheet">
         <div className="repair-panel-header">
           <h3 className="repair-panel-title" id="st-sheet-title">รายละเอียดช่าง</h3>
           <button className="repair-panel-close" onClick={onClose} aria-label="ปิด">×</button>
@@ -167,6 +163,6 @@ function StaffSheet({ userId, onClose, onOpenTicket }: { userId: number; onClose
           </>}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

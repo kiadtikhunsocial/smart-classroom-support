@@ -167,7 +167,7 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <h1 className="login-title">สมัครสมาชิก</h1>
+            <h1 className="login-title">ขอเปิดบัญชีเจ้าหน้าที่</h1>
             <p className="login-subtitle">สำหรับเจ้าหน้าที่ — ใช้งานได้เมื่อผู้ดูแลอนุมัติ</p>
           </div>
         </div>

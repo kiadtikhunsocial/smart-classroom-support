@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalOverlay from './ModalOverlay';
 import { api } from '../api/client';
 import '../styles/chatbot-review.css';
 
@@ -227,8 +228,8 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
 
       {/* ─── Panel ดูบทความ (slide จากขวา) ─── */}
       {selected && (
-        <div className="panel-overlay" onClick={() => setSelected(null)}>
-          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="รายละเอียดบทความ" onClose={() => setSelected(null)}>
+          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <div>
                 <h3 className="repair-panel-title">{selected.title}</h3>
@@ -300,13 +301,13 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
               </div>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ─── Panel ฟอร์มเพิ่ม/แก้ไข (slide จากขวา) ─── */}
       {showForm && (
-        <div className="panel-overlay" onClick={() => setShowForm(false)}>
-          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="ข้อมูลบทความ" onClose={() => setShowForm(false)}>
+          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editing ? 'แก้ไขบทความ' : 'เพิ่มบทความใหม่'}</h3>
               <button className="repair-panel-close" onClick={() => setShowForm(false)}>
@@ -346,7 +347,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

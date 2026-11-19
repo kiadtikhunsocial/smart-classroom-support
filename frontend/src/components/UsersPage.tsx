@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalOverlay from './ModalOverlay';
 import { api } from '../api/client';
 import { ASSIGNABLE_ROLES, ROLE_LABEL_FULL_TH, LEGACY_ROLE_LABEL_TH } from '../roleLabels';
 import '../styles/users.css';
@@ -277,8 +278,8 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
       )}
 
       {showForm && (
-        <div className="panel-overlay" onClick={() => setShowForm(false)}>
-          <div className="repair-panel" style={{ width: 500, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="ข้อมูลผู้ใช้งาน" onClose={() => setShowForm(false)}>
+          <div className="repair-panel" style={{ width: 500, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editingId ? `แก้ไขผู้ใช้: ${form.line_user_id}` : 'เพิ่มผู้ใช้ใหม่'}</h3>
               <button className="repair-panel-close" onClick={() => setShowForm(false)} aria-label="ปิด" title="ปิด">
@@ -333,7 +334,7 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
               </form>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       <div className="page-section">
