@@ -26,7 +26,7 @@ export interface ThemePrefs {
  * ค่าเริ่มต้น = โหมดมืด + สีเน้นม่วง — หน้าตาเดียวกับเว็บจริงที่เจ้าของระบบคุ้นเคย
  * ผู้ใช้ยังสลับเป็นโหมดสว่าง/สีอื่นได้ที่ปุ่มธีมหรือหน้าตั้งค่า
  */
-export const DEFAULT_THEME: ThemePrefs = { mode: 'dark', accent: 'purple' };
+export const DEFAULT_THEME: ThemePrefs = { mode: 'light', accent: 'purple' };
 
 export const THEME_MODES: { id: ThemeMode; label: string; hint: string }[] = [
   { id: 'light', label: 'โหมดสว่าง', hint: 'พื้นขาว อ่านง่ายในที่แสงจ้า' },

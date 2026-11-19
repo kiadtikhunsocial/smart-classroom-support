@@ -37,7 +37,7 @@ Each device carries its own QR code, so a report arrives already tied to the exa
 ## Brand Commitments
 
 - Name: Smart Classroom Support (live site iwasmart-service.vercel.app).
-- The dark purple colour theme is binding. Owner rejected a white/orange redesign on 2026-11-19. Layout, spacing, information order, fonts, type sizes, icons and button/menu wording may change; colours may not.
+- The purple accent and the existing light/dark theme tokens are binding; do not invent new colours. Owner rejected a white/orange redesign on 2026-11-19, then (same day) asked for the existing light (white) mode with the purple accent to be the default; dark stays available from the theme toggle. Layout, spacing, information order, fonts, type sizes, icons and button/menu wording may change.
 
 ## Evidence on Hand
 

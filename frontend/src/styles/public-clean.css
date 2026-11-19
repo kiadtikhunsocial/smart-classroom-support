@@ -483,3 +483,9 @@
     height: min(72vh, 560px);
   }
 }
+
+/* ── โหมดสว่าง: สีตัวอักษรในป้ายประกัน/กล่องเตือน ให้อ่านออกบนพื้นอ่อน ───── */
+[data-mode='light'] .pr-warranty-ok { color: #046c4e; border-color: rgb(4 108 78 / 0.35); background: rgb(4 108 78 / 0.08); }
+[data-mode='light'] .pr-warranty-warn { color: #8a4b00; border-color: rgb(138 75 0 / 0.35); background: rgb(199 119 0 / 0.10); }
+[data-mode='light'] .pr-warranty-expired { color: #a3162a; border-color: rgb(163 22 42 / 0.35); background: rgb(220 43 63 / 0.08); }
+[data-mode='light'] .pr-note .pr-label { color: #7a4300; }
