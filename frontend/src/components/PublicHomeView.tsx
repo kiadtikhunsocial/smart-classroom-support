@@ -187,6 +187,14 @@ function ArrowIcon() {
 // ─── ส่วนประกอบย่อยที่ใช้ซ้ำ ────────────────────────────────────────────────
 
 /** จุดเรืองแสงบอกว่าระบบพร้อมรับเรื่อง — ใช้ในแถบบนและใน hero */
+function LivePill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="ph-live">
+      <span className="ph-live-dot" aria-hidden="true" />
+      {children}
+    </span>
+  );
+}
 
 function MetaItem({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
@@ -298,6 +306,7 @@ function WarrantyCard() {
     <section className="ph-card phw-card" id="ph-warranty" aria-labelledby="phw-title">
       <div className="ph-card-head">
         <h2 className="ph-card-title" id="phw-title">ตรวจสอบประกันสินค้า</h2>
+        <span className="ph-card-tag">WARRANTY CHECK</span>
       </div>
 
       <p className="phw-lead">
@@ -564,8 +573,16 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   }, [stepIndex]);
 
   return (
-    <div className="ph-page service-portal">
+    <div className="ph-page">
       {/* ชั้นพื้นหลัง: แสงออโรร่า + เส้นวงจร — ตกแต่งล้วน ไม่รับโฟกัส */}
+      <div className="ph-bg" aria-hidden="true">
+        <span className="ph-bg-aurora ph-bg-aurora-1" />
+        <span className="ph-bg-aurora ph-bg-aurora-2" />
+        <span className="ph-bg-aurora ph-bg-aurora-3" />
+        <span className="ph-bg-grid" />
+        <span className="ph-bg-vignette" />
+      </div>
+
       <header className="ph-topbar">
         <a className="ph-brand" href={staffLoggedIn ? '/' : '/?home=1'}>
           <span className="ph-brand-mark">
@@ -577,41 +594,78 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           </span>
         </a>
         <div className="ph-topbar-right">
-          <a className="ph-staff-entry" href={staffLoggedIn ? '/' : '/?login=1'}>พื้นที่เจ้าหน้าที่</a>
+          <span className="ph-hide-sm"><LivePill>ระบบพร้อมรับแจ้ง</LivePill></span>
+          <a className="ph-customer-link" href={staffLoggedIn ? '/' : '/?login=1'}>พื้นที่เจ้าหน้าที่</a>
           <PublicThemeToggle />
         </div>
       </header>
 
       <main className="ph-main">
-        <section className="service-home" aria-labelledby="service-home-title">
-          <div className="service-home-intro">
-            <h1 id="service-home-title">บริการดูแล<span>อุปกรณ์ห้องเรียน</span></h1>
-            <p>พบปัญหาการใช้งาน สแกน QR บนอุปกรณ์หรือกรอกรหัสเครื่องเพื่อแจ้งซ่อมได้ทันที</p>
-            <a href="/?publicreport=1" className="ph-btn ph-btn-primary service-report-action"><ScanIcon /> แจ้งซ่อมอุปกรณ์ <ArrowIcon /></a>
+        <section className="ph-hero">
+          <div className="ph-hero-grid">
+            <div className="ph-hero-copy">
+              <span className="ph-eyebrow">IWA SMART CLASSROOM SUPPORT</span>
+              <h1 className="ph-hero-title">แจ้งซ่อมและติดตามงาน<br /><span className="ph-hero-accent">อุปกรณ์ห้องเรียน</span></h1>
+              <p className="ph-hero-sub">
+                แจ้งซ่อม ติดตามงาน และตรวจสอบประกันได้ด้วยตัวเอง
+                ไม่ต้องเข้าสู่ระบบ เพียงเลือกงานที่ต้องการด้านล่าง
+              </p>
+              <div className="ph-hero-cta">
+                <a href="/?publicreport=1" className="ph-cta-primary">แจ้งซ่อมอุปกรณ์ <ArrowIcon /></a>
+                <button type="button" className="ph-cta-secondary" onClick={focusTrack}>ติดตามงานซ่อม</button>
+              </div>
+            </div>
+            <div className="ph-hero-panel" aria-label="ขั้นตอนการใช้งาน">
+              <span className="ph-panel-kicker">เริ่มใช้งานง่าย ๆ</span>
+              <h2>จากแจ้งปัญหา<br />ถึงติดตามผล</h2>
+              <ol>
+                <li><strong>01</strong><span>สแกน QR หรือกรอกรหัสอุปกรณ์เพื่อแจ้งปัญหา</span></li>
+                <li><strong>02</strong><span>รับเลขใบงานทันที ใช้ค้นสถานะได้ตลอด</span></li>
+                <li><strong>03</strong><span>ดูความคืบหน้าจากเจ้าหน้าที่ในหน้าเดียว</span></li>
+              </ol>
+            </div>
           </div>
-          <nav className="service-links" aria-label="บริการเพิ่มเติม">
-            <button type="button" className="service-link" onClick={focusTrack}>
-              <span className="service-link-icon"><SearchIcon /></span>
-              <span><strong>ติดตามสถานะงานซ่อม</strong><small>ใช้เลขใบงานหรือรหัสอุปกรณ์</small></span>
+
+          <div className="ph-actions">
+            <a className="ph-action-card ph-action-primary" href="/?publicreport=1">
+              <span className="ph-action-icon"><ScanIcon /></span>
+              <span className="ph-action-body">
+                <strong>แจ้งซ่อม / สแกน QR</strong>
+                <small>สแกนสติกเกอร์ที่อุปกรณ์ หรือกรอกรหัสอุปกรณ์เอง</small>
+              </span>
+              <ArrowIcon />
+            </a>
+            <button type="button" className="ph-action-card" onClick={focusTrack}>
+              <span className="ph-action-icon"><SearchIcon /></span>
+              <span className="ph-action-body">
+                <strong>ติดตามสถานะ</strong>
+                <small>ใช้เลขใบงานที่ได้รับตอนแจ้ง เช่น TK.SCHM01.26.0001-T</small>
+              </span>
               <ArrowIcon />
             </button>
-            <a href="#ph-warranty" className="service-link">
-              <span className="service-link-icon"><ShieldIcon /></span>
-              <span><strong>ตรวจสอบประกัน</strong><small>ดูสถานะและวันหมดประกันของอุปกรณ์</small></span>
+            <a className="ph-action-card" href="#ph-warranty">
+              <span className="ph-action-icon"><ShieldIcon /></span>
+              <span className="ph-action-body">
+                <strong>ตรวจสอบประกัน</strong>
+                <small>กรอกหมายเลขสินค้าของเครื่องที่ซื้อไปแล้ว ดูวันหมดประกันได้ทันที</small>
+              </span>
               <ArrowIcon />
             </a>
-            <a href="/?customer=1" className="service-link">
-              <span className="service-link-icon"><LinkIcon /></span>
-              <span><strong>สอบถามสินค้าและบริการ</strong><small>ฝากข้อมูลให้ทีมงานติดต่อกลับ</small></span>
-              <ArrowIcon />
-            </a>
-          </nav>
+          </div>
+
+        </section>
+
+        <section className="ph-customer-band" aria-labelledby="ph-customer-title">
+          <div><span className="ph-panel-kicker">สำหรับผู้สนใจสินค้าและบริการ</span>
+            <h2 id="ph-customer-title">ให้ทีมงานช่วยเลือกอุปกรณ์ที่เหมาะกับคุณ</h2>
+            <p>ฝากชื่อและช่องทางติดต่อเพื่อขอข้อมูลสินค้า ราคา หรือการสาธิต โดยไม่ต้องสร้างบัญชีเจ้าหน้าที่</p></div>
+          <a href="/?customer=1" className="ph-customer-cta">ฝากข้อมูลให้ติดต่อกลับ <ArrowIcon /></a>
         </section>
 
         <section className="ph-card ph-track-card" ref={trackRef} aria-labelledby="ph-track-title">
           <div className="ph-card-head">
             <h2 className="ph-card-title" id="ph-track-title">ติดตามสถานะใบงาน</h2>
-
+            <span className="ph-card-tag">TICKET TRACKING</span>
           </div>
 
           <form
@@ -621,7 +675,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
               search();
             }}
           >
-            <label className="service-field-label" htmlFor="ph-ticket-input">เลขใบงานหรือรหัสอุปกรณ์</label>
+            <label className="ph-sr-only" htmlFor="ph-ticket-input">เลขใบงาน</label>
             <div className="ph-input-wrap">
               <span className="ph-input-icon" aria-hidden="true"><SearchIcon /></span>
               <input
@@ -634,7 +688,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                 spellCheck={false}
                 value={input}
                 onChange={(e) => setInput(e.target.value.toUpperCase())}
-                placeholder="เช่น TK.SCHM01.26.0001-T"
+                placeholder="เลขใบงาน หรือ รหัสอุปกรณ์"
                 aria-describedby="ph-ticket-hint"
               />
             </div>
@@ -644,7 +698,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
             </button>
           </form>
           <p className="ph-hint" id="ph-ticket-hint">
-            ใช้รหัสบนสติกเกอร์อุปกรณ์เพื่อดูงานล่าสุดของเครื่องนั้น
+            ใส่เลขใบงาน เช่น <code>TK.SCHM01.26.0001-T</code> หรือรหัสบนสติกเกอร์ของเครื่อง ระบบจะเปิดงานล่าสุดของเครื่องนั้นให้
           </p>
 
           {recent.length > 0 && (
@@ -839,7 +893,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         <section className="ph-card ph-help">
           <div className="ph-card-head">
             <h2 className="ph-card-title">หาเลขใบงานไม่เจอ?</h2>
-
+            <span className="ph-card-tag">HELP</span>
           </div>
           <ul className="ph-help-list">
             <li>สแกน QR ที่ติดอยู่กับอุปกรณ์ — ถ้าเครื่องนั้นมีงานค้างอยู่ ระบบจะแสดงเลขใบงานและสถานะให้ทันที</li>

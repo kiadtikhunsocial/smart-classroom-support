@@ -14,12 +14,12 @@
       (function () {
         try {
           var p = JSON.parse(localStorage.getItem('sc_theme_prefs_v2') || 'null');
-          var m = p && p.mode === 'dark' ? 'dark' : 'light';
+          var m = p && p.mode === 'light' ? 'light' : 'dark';
           document.documentElement.setAttribute('data-mode', m);
-          document.documentElement.setAttribute('data-accent', (p && p.accent) || 'navy');
+          document.documentElement.setAttribute('data-accent', (p && p.accent) || 'purple');
         } catch (e) {
-          document.documentElement.setAttribute('data-mode', 'light');
-          document.documentElement.setAttribute('data-accent', 'navy');
+          document.documentElement.setAttribute('data-mode', 'dark');
+          document.documentElement.setAttribute('data-accent', 'purple');
         }
       })();
     </script>
