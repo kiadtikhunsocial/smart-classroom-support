@@ -2879,6 +2879,8 @@ def delete_user(user_id: int, request: Request, db: Session = Depends(get_db), u
         raise HTTPException(status_code=403, detail="ไม่สามารถลบผู้ใช้ Owner ได้")
     if target.role == "owner" and target.id == user.id:
         raise HTTPException(status_code=403, detail="ไม่สามารถลบบัญชี Owner เองได้")
+    if target.role == "super_admin" and user.role != "owner":
+        raise HTTPException(status_code=403, detail="บัญชีผู้ดูแลสูงสุด (Super Admin) ลบไม่ได้")
     # §40: ลบผู้ใช้ = เพิกถอนสิทธิ์ ต้องบันทึกก่อนลบ
     write_audit(
         db, action="user_delete", user=user, entity_type="user", entity_id=user_id,
@@ -2908,6 +2910,16 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
         raise HTTPException(status_code=403, detail="ไม่สามารถแก้ไขบัญชีเจ้าของระบบ (Owner) ได้")
     if user.role != "owner" and data.get("role") == "owner":
         raise HTTPException(status_code=403, detail="ไม่สามารถกำหนดบทบาท Owner ให้ผู้อื่นได้")
+
+    # ── Super Admin = ผู้ดูแลสูงสุด: คนอื่นแก้ไม่ได้ (ยกเว้น Owner)
+    #    เจ้าของบัญชีแก้ได้แค่ชื่อ/อีเมล/รหัสผ่านของตัวเอง — เปลี่ยนบทบาท/ปิดบัญชี/ย้ายสังกัดตัวเองไม่ได้
+    if target.role == "super_admin" and user.role != "owner":
+        if target.id != user.id:
+            raise HTTPException(status_code=403, detail="บัญชีผู้ดูแลสูงสุด (Super Admin) แก้ไขไม่ได้")
+        locked = {k: v for k, v in data.items()
+                  if k in ("role", "is_active", "organization_id") and v != getattr(target, k, None)}
+        if locked:
+            raise HTTPException(status_code=403, detail="Super Admin เปลี่ยนบทบาท สถานะ หรือสังกัดของตัวเองไม่ได้")
 
     # admin_school ไม่สามารถเปลี่ยนบทบาทตัวเอง/ผู้อื่นเป็นบทบาทระดับบริษัท และไม่สามารถย้ายคนข้ามรร
     if user.role == "admin_school":
@@ -3906,6 +3918,9 @@ def update_ticket_status(
     payload_data["from_status"] = current
     payload_data["to_status"] = target
     _notify_n8n("ticket.status_changed", payload_data)
+    _sv = lambda s: getattr(s, "value", s)  # TicketStatus enum หรือ str
+    if _sv(current) in dispatch.ACTIVE_STATUSES and _sv(ticket.status) not in dispatch.ACTIVE_STATUSES:
+        dispatch.kick()  # ช่างอาจว่างแล้ว → มอบงานค้างทันที
     if target in (TicketStatus.RESOLVED, TicketStatus.CLOSED):
         from app.ticket_rating_invite import invite_staff_rating
         invite_staff_rating(db, ticket)
@@ -6325,6 +6340,8 @@ def ticket_decline(ticket_id: str, request: Request, db: Session = Depends(get_d
     db.commit()
     if nxt:
         dispatch.run_in_background(_push_assignment, t.id, nxt.id)
+    # คนที่กดส่งต่อว่างขึ้น → อาจได้งานค้างใบอื่นแทน
+    dispatch.kick()
     return {"ticket_id": t.ticket_id, "status": t.status, "assigned_to": t.assigned_to}
 
 
@@ -6353,6 +6370,23 @@ def dispatch_me(db: Session = Depends(get_db), user: User = Depends(get_current_
         .order_by(RepairTicket.assigned_at)
     ).all()
     load = dispatch.staff_load(db, [user.id])[user.id]
+    # คิวงานค้าง (ทีมไม่ว่าง) ในโรงเรียนที่ช่างดูแล — แสดงเป็นแจ้งเตือนแบบไม่บังคับ รับได้ถ้าสะดวก
+    pool_rows = []
+    if user.role == "it_support" and user.on_duty:
+        pool_conds = [RepairTicket.status == "new", RepairTicket.assigned_user_id.is_(None),
+                      or_(RepairTicket.assigned_to.is_(None), RepairTicket.assigned_to == ""),
+                      RepairTicket.created_at >= datetime.now(timezone.utc) - timedelta(days=dispatch.BACKLOG_DAYS)]
+        if user.organization_id is not None:
+            pool_conds.append(or_(RepairTicket.organization_id == user.organization_id,
+                                  Device.organization_id == user.organization_id))
+        pool_rows = db.execute(
+            select(RepairTicket, Organization, Device)
+            .outerjoin(Device, Device.device_id == RepairTicket.device_id)
+            .outerjoin(Organization, Organization.id == Device.organization_id)
+            .where(*pool_conds)
+            .options(selectinload(Device.room))
+            .order_by(RepairTicket.created_at).limit(10)
+        ).all()
     # หน้าเว็บของช่างถามทุก ~15 วินาที = ช่าง "ออนไลน์" — ระบบเสนองานให้ได้แม้ยังไม่ผูก LINE
     # เขียนอย่างมากนาทีละครั้ง ไม่ให้ทุกการถามกลายเป็นการเขียนฐานข้อมูล
     now = datetime.now(timezone.utc)
@@ -6365,8 +6399,10 @@ def dispatch_me(db: Session = Depends(get_db), user: User = Depends(get_current_
         "on_duty": bool(user.on_duty),
         "line_linked": bool(user.line_push_id),
         "offer_minutes": dispatch.offer_minutes(),
-        "open": load["open"], "done_today": load["done_today"],
+        "open": load["open"], "active": load["active"], "done_today": load["done_today"],
+        "free": dispatch.is_free(load),
         "offers": [_offer_out(t, org, dev) for t, org, dev in rows],
+        "pool": [{**_offer_out(t, org, dev), "expires_at": None} for t, org, dev in pool_rows],
     }
 
 
@@ -6392,6 +6428,8 @@ def set_my_duty(payload: DutyIn, db: Session = Depends(get_db), user: User = Dep
     db.commit()
     for tid, uid in passed:
         dispatch.run_in_background(_push_assignment, tid, uid)
+    if payload.on_duty:
+        dispatch.kick()  # เพิ่งเปิดรับงาน → ถ้าว่างจะได้งานค้างทันที
     return {"on_duty": me.on_duty, "passed_on": len(passed)}
 
 
@@ -6481,17 +6519,28 @@ def dispatch_summary(db: Session = Depends(get_db),
         .where(RepairTicket.status == "assigned", RepairTicket.auto_assigned.is_(True),
                RepairTicket.assigned_user_id.in_([u.id for u in staff] or [-1]))
         .group_by(RepairTicket.assigned_user_id)).all())
+    # งานที่แต่ละคนกำลังทำอยู่ล่าสุด (แสดงใต้รูปในแถบทีมช่าง)
+    current: dict[int, dict] = {}
+    for t in db.execute(
+        select(RepairTicket).where(
+            RepairTicket.assigned_user_id.in_([u.id for u in staff] or [-1]),
+            RepairTicket.status.in_(dispatch.ACTIVE_STATUSES))
+        .order_by(RepairTicket.assigned_at.desc().nullslast())
+    ).scalars():
+        current.setdefault(t.assigned_user_id, {"ticket_id": t.ticket_id, "title": t.title, "status": t.status})
     rows = []
     for u in staff:
         s = load[u.id]
-        state = "off" if not u.on_duty else ("free" if s["open"] == 0 else "busy")
+        state = "off" if not u.on_duty else ("free" if dispatch.is_free(s) else "busy")
         rows.append({
             "id": u.id, "name": u.line_display_name or u.line_user_id, "username": u.line_user_id,
             "organization_id": u.organization_id, "on_duty": bool(u.on_duty),
             "line_linked": bool(u.line_push_id), "state": state,
             # ไม่ผูก LINE และไม่ได้เปิดเว็บใน 10 นาที = ระบบจะไม่เสนองานให้ (กันงานค้างรอคนที่ติดต่อไม่ได้)
             "reachable": dispatch.is_reachable(u),
-            "open": s["open"], "done_today": s["done_today"], "offers": offers.get(u.id, 0),
+            "open": s["open"], "active": s["active"], "done_today": s["done_today"], "offers": offers.get(u.id, 0),
+            "picture_url": u.line_picture_url,
+            "current": current.get(u.id),
         })
     conds = _ticket_filter_conditions(db, user)
     if conds is None:  # ไม่มีโรงเรียนให้เห็น — อย่าตกไปเป็น "ไม่กรอง" (เห็นทุกโรงเรียน)
@@ -6519,6 +6568,71 @@ def dispatch_summary(db: Session = Depends(get_db),
             {**_offer_out(t, org, dev), "tried": len(dispatch._tried(t))}
             for t, dev, org in unclaimed_rows
         ],
+    }
+
+
+@app.get("/api/dispatch/staff/{user_id}")
+def dispatch_staff_detail(user_id: int, db: Session = Depends(get_db),
+                          user: User = Depends(require_roles("owner", "super_admin", "admin", "admin_school"))):
+    """ดูช่างรายคน: สรุปภาระงาน + งานที่ถืออยู่ทั้งหมด + งานที่ปิดล่าสุด (เฉพาะช่างในความดูแลของผู้ดู)"""
+    target = next((u for u in _staff_in_scope(db, user) if u.id == user_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="ไม่พบช่างคนนี้ในความดูแลของคุณ")
+    now = datetime.now(timezone.utc)
+    load = dispatch.staff_load(db, [target.id])[target.id]
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    def ticket_row(t: RepairTicket, dev: Optional[Device], org: Optional[Organization]) -> dict:
+        return {
+            "ticket_id": t.ticket_id, "title": t.title, "status": t.status, "priority": t.priority,
+            "device_id": t.device_id, "device_label": device_display_label(dev) if dev else t.device_id,
+            "organization_name": (org.short_name or org.name) if org else None,
+            "reporter_name": t.reporter_name,
+            "created_at": t.created_at, "assigned_at": t.assigned_at, "resolved_at": t.resolved_at,
+            "closed_at": t.closed_at, "sla_due_at": t.sla_due_at, "rating": t.rating,
+        }
+
+    base = (select(RepairTicket, Device, Organization)
+            .outerjoin(Device, Device.device_id == RepairTicket.device_id)
+            .outerjoin(Organization, Organization.id == Device.organization_id)
+            .options(selectinload(Device.room))
+            .where(RepairTicket.assigned_user_id == target.id))
+    open_rows = db.execute(base.where(RepairTicket.status.in_(dispatch.OPEN_STATUSES))
+                           .order_by(RepairTicket.assigned_at.desc().nullslast())).all()
+    done_rows = db.execute(base.where(RepairTicket.resolved_at.is_not(None))
+                           .order_by(RepairTicket.resolved_at.desc()).limit(10)).all()
+    # ล่าสุดที่ช่างทำอะไรกับใบไหน (บันทึกในประวัติสถานะ)
+    last_note = {}
+    if open_rows:
+        for tu in db.execute(select(TicketUpdate).where(
+                TicketUpdate.ticket_id.in_([t.id for t, _, _ in open_rows]))
+                .order_by(TicketUpdate.created_at.desc())).scalars():
+            last_note.setdefault(tu.ticket_id, {"note": tu.note, "at": tu.created_at, "by": tu.author_name})
+    stats = db.execute(select(
+        func.count().filter(RepairTicket.resolved_at >= week_ago),
+        func.count().filter(RepairTicket.resolved_at >= month_ago),
+        func.avg(func.extract("epoch", RepairTicket.resolved_at - RepairTicket.created_at))
+            .filter(RepairTicket.resolved_at >= month_ago),
+        func.avg(RepairTicket.rating).filter(RepairTicket.rating.is_not(None), RepairTicket.resolved_at >= month_ago),
+        func.count().filter(RepairTicket.sla_met.is_(True), RepairTicket.resolved_at >= month_ago),
+        func.count().filter(RepairTicket.sla_met.is_not(None), RepairTicket.resolved_at >= month_ago),
+    ).where(RepairTicket.assigned_user_id == target.id)).one()
+    org = db.get(Organization, target.organization_id) if target.organization_id else None
+    state = "off" if not target.on_duty else ("free" if dispatch.is_free(load) else "busy")
+    return {
+        "id": target.id, "name": target.line_display_name or target.line_user_id,
+        "username": target.line_user_id, "email": target.line_email,
+        "picture_url": target.line_picture_url,
+        "organization_name": (org.short_name or org.name) if org else "ส่วนกลาง (ดูแลทุกโรงเรียน)",
+        "on_duty": bool(target.on_duty), "line_linked": bool(target.line_push_id),
+        "reachable": dispatch.is_reachable(target), "last_seen_at": target.last_seen_at, "state": state,
+        "load": {**load, "done_7d": stats[0], "done_30d": stats[1],
+                 "avg_hours_30d": round(float(stats[2]) / 3600, 1) if stats[2] else None,
+                 "avg_rating_30d": round(float(stats[3]), 2) if stats[3] else None,
+                 "sla_met_30d": stats[4], "sla_total_30d": stats[5]},
+        "open_tickets": [{**ticket_row(t, d, o), "last_update": last_note.get(t.id)} for t, d, o in open_rows],
+        "recent_done": [ticket_row(t, d, o) for t, d, o in done_rows],
     }
 
 
@@ -6552,7 +6666,12 @@ def ticket_accept(ticket_id: str, request: Request, db: Session = Depends(get_db
     old_status = t.status  # §40: เก็บสถานะเดิมไว้บันทึก Audit Log
     if t.status not in ("assigned", "new"):
         raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": f"สถานะปัจจุบันคือ {t.status} — ไม่สามารถรับงานได้"})
-    # คนกดรับ = ผู้รับผิดชอบ (งานที่ระบบเสนอให้คนอื่นแต่เรากดรับก่อนก็ได้งานไป)
+    # ช่างรับได้เฉพาะงานในคิว (new) หรืองานที่มอบให้ตัวเอง — ไม่แย่งงานที่ระบบเพิ่งมอบให้คนที่ว่าง
+    # (แอดมินยังรับ/ย้ายแทนได้ตามเดิม)
+    if (user.role == "it_support" and t.status == "assigned"
+            and t.assigned_user_id is not None and t.assigned_user_id != user.id):
+        raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": f"งานนี้ถูกมอบให้ {t.assigned_to or 'ช่างคนอื่น'} แล้ว"})
+    # คนกดรับ = ผู้รับผิดชอบ
     t.assigned_to = user.line_display_name or t.assigned_to or "ช่าง"
     t.assigned_user_id = user.id
     t.assigned_at = t.assigned_at or datetime.now(timezone.utc)
@@ -7158,6 +7277,9 @@ def _notify_status_changed(ticket: "RepairTicket", from_status: str) -> None:
     payload["from_status"] = from_status
     payload["to_status"] = ticket.status
     _notify_n8n("ticket.status_changed", payload)
+    # งานหลุดจาก "กำลังทำ" (เสร็จ/ปิด/ยกเลิก/รออะไหล่) → ช่างอาจว่างแล้ว ให้ระบบมอบงานค้างทันที
+    if from_status in dispatch.ACTIVE_STATUSES and ticket.status not in dispatch.ACTIVE_STATUSES:
+        dispatch.kick()
 
 
 def _ticket_event_payload(t: "RepairTicket") -> dict:

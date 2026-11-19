@@ -66,7 +66,7 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
   if (loading) return (
     <div className="loading-state" style={{ minHeight: 200, padding: '40px' }}>
       <div className="spinner" />
-      <span>กำลังโหลดโรงเรียนâ¦</span>
+      <span>กำลังโหลดโรงเรียน…</span>
     </div>
   );
 
@@ -137,7 +137,7 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังเพิ่มâ¦' : 'เพิ่มโรงเรียน'}
+                    {saving ? 'กำลังเพิ่ม…' : 'เพิ่มโรงเรียน'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
                 </div>
@@ -352,7 +352,7 @@ export function SchoolAdminView({ orgId, onBack, canDelete }: {
           {loading ? (
             <div className="loading-state" style={{ padding: '40px' }}>
               <div className="spinner" />
-              <span>กำลังโหลดâ¦</span>
+              <span>กำลังโหลด…</span>
             </div>
           ) : filteredTickets.length === 0 ? (
             <div className="empty-state" style={{ padding: '32px 16px' }}>
@@ -474,7 +474,7 @@ export function SchoolAdminView({ orgId, onBack, canDelete }: {
             {loading ? (
               <div className="loading-state" style={{ padding: '40px' }}>
                 <div className="spinner" />
-                <span>กำลังโหลดâ¦</span>
+                <span>กำลังโหลด…</span>
               </div>
             ) : devices.length === 0 ? (
               <div className="empty-state" style={{ padding: '32px 16px' }}>

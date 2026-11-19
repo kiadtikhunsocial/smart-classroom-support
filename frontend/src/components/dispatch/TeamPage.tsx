@@ -3,10 +3,11 @@ import { api } from '../../api/client';
 import type { DispatchSummary } from '../../types';
 import { ticketDetailPriority } from '../tickets/ticketLabels';
 import '../../styles/dispatch.css';
+import StaffStrip from './StaffStrip';
 
 const REFRESH_MS = 30_000;
 
-const STATE_LABEL: Record<string, string> = { free: 'ว่าง', busy: 'มีงาน', off: 'ปิดรับงาน' };
+const STATE_LABEL: Record<string, string> = { free: 'ว่าง (รับงานอัตโนมัติ)', busy: 'กำลังทำงาน', off: 'ปิดรับงาน' };
 
 function ago(value: string) {
   const mins = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
@@ -89,10 +90,13 @@ export default function TeamPage({ onBack, onOpenTicket }: TeamPageProps) {
         <div className="alert alert-warning dp-alert">ยังไม่ได้ตั้งค่า LINE_CHANNEL_TOKEN — ระบบเสนองานได้ แต่ส่ง LINE ส่วนตัวไม่ได้</div>
       )}
 
+      {/* รูป + ชื่อช่างเรียงกัน: ว่างก่อน กดเพื่อดูว่าใครทำอะไรอยู่ */}
+      <StaffStrip staff={staff} onOpenTicket={onOpenTicket} />
+
       <div className="dp-kpis">
         <div className={`dp-kpi${data && data.tickets.unclaimed > 0 ? ' is-alert' : ''}`}>
           <span className="dp-kpi-num">{data?.tickets.unclaimed ?? '–'}</span>
-          <span className="dp-kpi-label">ยังไม่มีคนรับ</span>
+          <span className="dp-kpi-label">งานค้าง (รอคนว่าง)</span>
         </div>
         <div className="dp-kpi">
           <span className="dp-kpi-num">{data?.tickets.offering ?? '–'}</span>
@@ -141,7 +145,7 @@ export default function TeamPage({ onBack, onOpenTicket }: TeamPageProps) {
         </section>
 
         <section className="page-section dp-panel" aria-labelledby="dp-unclaimed-h">
-          <h2 id="dp-unclaimed-h" className="dp-panel-title">งานที่ยังไม่มีคนรับ</h2>
+          <h2 id="dp-unclaimed-h" className="dp-panel-title">งานค้าง — รอช่างว่าง</h2>
           {data && data.unclaimed.length === 0 && <p className="dp-empty">ไม่มีงานค้าง — ทุกงานมีคนดูแลแล้ว</p>}
           <ul className="dp-unclaimed">
             {data?.unclaimed.map((t) => (
@@ -150,7 +154,7 @@ export default function TeamPage({ onBack, onOpenTicket }: TeamPageProps) {
                   <span className="dp-unclaimed-title">{t.title}</span>
                   <span className="dp-staff-sub">
                     {t.ticket_id} · {t.organization_name || t.device_label} · {ago(t.created_at)}
-                    {t.tried ? ` · เสนอแล้ว ${t.tried} คน ไม่มีใครรับ` : ''}
+                    {t.tried ? ` · ส่งต่อแล้ว ${t.tried} คน` : ''}
                   </span>
                 </button>
                 <span className={`badge badge-priority-${t.priority}`}>{ticketDetailPriority[t.priority] || t.priority}</span>

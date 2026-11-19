@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { ASSIGNABLE_ROLES, ROLE_LABEL_FULL_TH, LEGACY_ROLE_LABEL_TH } from '../roleLabels';
+import '../styles/users.css';
 
 const ROLES = ASSIGNABLE_ROLES;
+/** บทบาทระดับสูงสุด — แยกไว้บนสุดของหน้า และล็อกไม่ให้คนอื่นแก้ (backend บังคับด้วย) */
+const TOP_ROLES = ['owner', 'super_admin'];
 
 // ป้ายชื่อบทบาท: ใช้แหล่งกลางใน roleLabels.ts แทนแผนที่เดิมในไฟล์นี้ที่ drift ไปแล้ว
 // (ของเดิมตั้ง super_admin = 'ผู้ดูแลบริษัท' ซ้ำกับ admin)
@@ -27,6 +30,8 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
   const [form, setForm] = useState({ line_user_id: '', line_display_name: '', line_email: '', organization_id: 0, role: 'it_support', is_active: true, password: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [schoolFilter, setSchoolFilter] = useState(0);
 
   const isSchoolAdmin = currentUserRole === 'admin_school';
   const allowedRoles = creatableRoles(currentUserRole);
@@ -148,6 +153,93 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
     return orgs.find((o) => o.id === id)?.name || `#${id}`;
   };
 
+  // ── จัดกลุ่ม: ผู้ดูแลสูงสุด / ทีมส่วนกลาง / แต่ละโรงเรียน ─────────────────
+  const q = query.trim().toLowerCase();
+  const matches = (u: any) => !q || `${u.line_display_name || ''} ${u.line_user_id || ''} ${u.line_email || ''}`.toLowerCase().includes(q);
+  const ROLE_ORDER: Record<string, number> = { owner: 0, super_admin: 1, admin: 2, admin_school: 3, it_support: 4 };
+  const byRole = (a: any, b: any) => (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9)
+    || String(a.line_display_name || a.line_user_id).localeCompare(String(b.line_display_name || b.line_user_id), 'th');
+  const shown = users.filter(matches);
+  const topAdmins = shown.filter((u) => TOP_ROLES.includes(u.role)).sort(byRole);
+  const central = shown.filter((u) => !TOP_ROLES.includes(u.role) && !u.organization_id).sort(byRole);
+  const schoolGroups = Object.values(
+    users.filter((u) => !TOP_ROLES.includes(u.role) && u.organization_id).reduce((acc: Record<number, any>, u) => {
+      const id = u.organization_id;
+      acc[id] = acc[id] || { id, name: orgName(id), members: [] };
+      acc[id].members.push(u);
+      return acc;
+    }, {}),
+  ).sort((a: any, b: any) => a.name.localeCompare(b.name, 'th')) as { id: number; name: string; members: any[] }[];
+  const visibleSchools = schoolGroups
+    .filter((g) => !schoolFilter || g.id === schoolFilter)
+    .map((g) => ({ ...g, members: g.members.filter(matches).sort(byRole) }))
+    .filter((g) => g.members.length > 0);
+
+  const countLine = (list: any[]) => {
+    const n = (r: string) => list.filter((u) => u.role === r).length;
+    return [
+      n('admin') && `ผู้ดูแลระบบ ${n('admin')}`,
+      n('admin_school') && `ผู้ดูแลโรงเรียน ${n('admin_school')}`,
+      n('it_support') && `เจ้าหน้าที่ IT ${n('it_support')}`,
+    ].filter(Boolean).join(' · ') || `${list.length} คน`;
+  };
+
+  const renderTable = (list: any[]) => (
+    <div className="table-wrap">
+      <table className="data-table us-table">
+        <thead>
+          <tr>
+            <th>ชื่อ</th>
+            <th>ชื่อผู้ใช้</th>
+            <th>บทบาท</th>
+            <th>สถานะ</th>
+            <th>จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((u) => (
+            <tr key={u.id} className={`us-row us-role-${u.role}${u.id === currentUserId ? ' is-me' : ''}`}>
+              <td className="us-name">{u.line_display_name || u.line_user_id}{u.id === currentUserId ? ' (คุณ)' : ''}</td>
+              <td className="us-username">{u.line_user_id}</td>
+              <td>
+                {isSchoolAdmin && !allowedRoles.includes(u.role) ? (
+                  <span className={`us-role-pill us-pill-${u.role}`}>{ROLE_LABELS[u.role] || u.role}</span>
+                ) : (
+                  <select
+                    className="form-select us-role-select"
+                    value={u.role}
+                    disabled={busy === u.id}
+                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                    aria-label={`บทบาทของ ${u.line_display_name || u.line_user_id}`}
+                  >
+                    {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                )}
+              </td>
+              <td>
+                <button
+                  className={`btn btn-sm ${u.is_active ? 'btn-success' : 'btn-ghost'}`}
+                  disabled={busy === u.id}
+                  onClick={() => handleActiveToggle(u.id, !u.is_active)}
+                  style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                >
+                  {u.is_active ? 'ใช้งาน' : 'ปิด'}
+                </button>
+              </td>
+              <td>
+                <button className="btn btn-secondary btn-sm" onClick={() => openEdit(u)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>แก้ไข</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // แก้บัญชีผู้ดูแลสูงสุด (ตัวเอง) → แก้ได้แค่ชื่อ/อีเมล/รหัสผ่าน
+  const editingTarget = users.find((u) => u.id === editingId);
+  const lockedFields = !!editingTarget && TOP_ROLES.includes(editingTarget.role) && currentUserRole !== 'owner';
+
   return (
     <div className="page-content">
       <div className="top-bar">
@@ -216,25 +308,26 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">โรงเรียน {isSchoolAdmin ? '(อัตโนมัติ — รรตัวเอง)' : ''}</label>
-                    <select className="form-select" value={form.organization_id} onChange={(e) => setForm({ ...form, organization_id: Number(e.target.value) })} disabled={isSchoolAdmin}>
+                    <select className="form-select" value={form.organization_id} onChange={(e) => setForm({ ...form, organization_id: Number(e.target.value) })} disabled={isSchoolAdmin || lockedFields}>
                       <option value={0}>— (ไม่สังกัด / super_admin) —</option>
                       {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">บทบาท</label>
-                    <select className="form-select" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                      {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                    <select className="form-select" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} disabled={lockedFields}>
+                      {(lockedFields ? [form.role] : allowedRoles).map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
                     </select>
+                    {lockedFields && <span className="form-hint">ผู้ดูแลสูงสุดเปลี่ยนบทบาท/สังกัดของตัวเองไม่ได้</span>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังบันทึกâ¦' : 'บันทึก'}
+                    {saving ? 'กำลังบันทึก…' : 'บันทึก'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
                 </div>
-                {editingId != null && editingId !== currentUserId && <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+                {editingId != null && editingId !== currentUserId && !lockedFields && <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
                   <button type="button" className="btn btn-danger" disabled={busy === editingId} onClick={() => { const target = users.find((u) => u.id === editingId); if (target) void handleDelete(target); }}>{busy === editingId ? 'กำลังลบ…' : 'ลบบัญชีนี้'}</button>
                 </div>}
               </form>
@@ -248,7 +341,7 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
           {loading ? (
             <div className="loading-state" style={{ padding: '40px' }}>
               <div className="spinner" />
-              <span>กำลังโหลดâ¦</span>
+              <span>กำลังโหลด…</span>
             </div>
           ) : users.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px' }}>
@@ -259,59 +352,83 @@ export default function UsersPage({ onBack, currentUserId, currentUserRole }: { 
               <span className="empty-text">ยังไม่มีผู้ใช้ — กด "เพิ่มผู้ใช้"</span>
             </div>
           ) : (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>ชื่อ</th>
-                    <th>ชื่อผู้ใช้</th>
-                    <th>โรงเรียน</th>
-                    <th>บทบาท</th>
-                    <th>สถานะ</th>
-                    <th>จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id} style={u.id === currentUserId ? { background: 'var(--color-primary-light)' } : undefined}>
-                      <td style={{ fontWeight: 500 }}>{u.line_display_name || u.line_user_id}{u.id === currentUserId ? ' (คุณ)' : ''}</td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>{u.line_user_id}</td>
-                      <td>{orgName(u.organization_id)}</td>
-                      <td>
-                        {isSchoolAdmin && !allowedRoles.includes(u.role) ? (
-                          <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>{ROLE_LABELS[u.role] || u.role}</span>
-                        ) : (
-                          <select
-                            className="form-select"
-                            style={{ width: 170, padding: '5px 8px', fontSize: '0.8rem' }}
-                            value={u.role}
-                            disabled={busy === u.id}
-                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                          >
-                            {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                          </select>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          className={`btn btn-sm ${u.is_active ? 'btn-success' : 'btn-ghost'}`}
-                          disabled={busy === u.id}
-                          onClick={() => handleActiveToggle(u.id, !u.is_active)}
-                          style={{ padding: '4px 10px', fontSize: '0.78rem' }}
-                        >
-                          {u.is_active ? 'ใช้งาน' : 'ปิด'}
-                        </button>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => openEdit(u)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>แก้ไข</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* ค้นหา + เลือกโรงเรียน */}
+              <div className="us-toolbar">
+                <input className="form-input us-search" type="search" value={query}
+                  onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อ / ชื่อผู้ใช้"
+                  aria-label="ค้นหาผู้ใช้" />
+                {!isSchoolAdmin && schoolGroups.length > 1 && (
+                  <select className="form-select us-school-filter" value={schoolFilter}
+                    onChange={(e) => setSchoolFilter(Number(e.target.value))} aria-label="กรองตามโรงเรียน">
+                    <option value={0}>ทุกโรงเรียน ({schoolGroups.length})</option>
+                    {schoolGroups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.members.length})</option>)}
+                  </select>
+                )}
+              </div>
+
+              {/* ── 1) ผู้ดูแลสูงสุด: แยกไว้บนสุด ล็อกไม่ให้แก้ ───────────────── */}
+              {topAdmins.length > 0 && (
+                <section className="us-group us-group-top" aria-labelledby="us-top-h">
+                  <header className="us-group-head">
+                    <h2 id="us-top-h">ผู้ดูแลสูงสุด</h2>
+                    <span className="us-group-note">ล็อกไว้ — แก้ไข เปลี่ยนบทบาท หรือปิดบัญชีไม่ได้</span>
+                  </header>
+                  <ul className="us-top-list">
+                    {topAdmins.map((u) => {
+                      const self = u.id === currentUserId;
+                      const canTouch = currentUserRole === 'owner' && u.role !== 'owner';
+                      return (
+                        <li key={u.id} className="us-top-card">
+                          <span className="us-avatar" aria-hidden="true">{(u.line_display_name || u.line_user_id || '?').slice(0, 1)}</span>
+                          <span className="us-top-main">
+                            <strong>{u.line_display_name || u.line_user_id}{self ? ' (คุณ)' : ''}</strong>
+                            <span>{u.line_user_id}{u.line_email ? ` · ${u.line_email}` : ''}</span>
+                            <span className="us-role-pill is-top">{ROLE_LABELS[u.role] || u.role}</span>
+                          </span>
+                          {canTouch || self ? (
+                            <button className="btn btn-secondary btn-sm" onClick={() => openEdit(u)}>
+                              {self && !canTouch ? 'แก้ข้อมูลส่วนตัว' : 'แก้ไข'}
+                            </button>
+                          ) : (
+                            <span className="us-lock" title="บัญชีผู้ดูแลสูงสุดแก้ไขไม่ได้">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></svg>
+                              ล็อก
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {/* ── 2) ทีมส่วนกลาง (ไม่สังกัดโรงเรียน) ───────────────────────── */}
+              {central.length > 0 && schoolFilter === 0 && (
+                <section className="us-group" aria-labelledby="us-central-h">
+                  <header className="us-group-head">
+                    <h2 id="us-central-h">ทีมส่วนกลาง</h2>
+                    <span className="us-group-note">{countLine(central)} · ดูแลทุกโรงเรียน</span>
+                  </header>
+                  {renderTable(central)}
+                </section>
+              )}
+
+              {/* ── 3) แยกตามโรงเรียน: ผู้ดูแลโรงเรียนขึ้นก่อน ตามด้วยเจ้าหน้าที่ ─── */}
+              {visibleSchools.map((g) => (
+                <details key={g.id} className="us-group us-school" open={visibleSchools.length <= 3 || !!query}>
+                  <summary className="us-group-head">
+                    <h2>{g.name}</h2>
+                    <span className="us-group-note">{countLine(g.members)}</span>
+                  </summary>
+                  {renderTable(g.members)}
+                </details>
+              ))}
+
+              {topAdmins.length + central.length + visibleSchools.length === 0 && (
+                <p className="us-empty">ไม่พบผู้ใช้ที่ตรงกับคำค้น</p>
+              )}
+            </>
           )}
         </div>
       </div>

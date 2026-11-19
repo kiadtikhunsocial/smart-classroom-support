@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 export type ThemeMode = 'light' | 'dark';
-export type AccentId = 'purple' | 'blue' | 'teal' | 'orange' | 'rose';
+export type AccentId = 'navy' | 'purple' | 'blue' | 'teal' | 'orange' | 'rose';
 
 export interface ThemePrefs {
   mode: ThemeMode;
@@ -23,14 +23,12 @@ export interface ThemePrefs {
 }
 
 /**
- * ค่าเริ่มต้น = โหมดมืด + สีเน้นม่วง
- * ทำไมเป็นมืด: หน้าแรกถูกออกแบบเป็น dark navy + neon (dashboard-futuristic.css)
- * ซึ่งเลเยอร์ neon ผูกกับ [data-mode='dark'] → ถ้าเริ่มด้วยสว่างผู้ใช้ใหม่จะเห็น
- * แค่การ์ดแก้วจาง ๆ ไม่ใช่ดีไซน์จริงของระบบ
- * ผู้ใช้เดิมไม่ถูกเขียนทับ: readThemePrefs() อ่านค่าที่บันทึกไว้ก่อนเสมอ
- * และยังสลับกลับเป็นโหมดสว่างได้ที่หน้าตั้งค่า (โหมดสว่างยังรองรับครบ)
+ * ค่าเริ่มต้น = โหมดสว่าง + สีน้ำเงินกรมท่า (ดีไซน์ "Calm / ทางการ")
+ * เหตุผล: ระบบใช้ในสำนักงาน/โรงเรียนช่วงกลางวันเป็นหลัก พื้นสว่างโทนเทาอุ่น
+ * + สีเน้นน้ำเงินเข้มอ่านง่าย ไม่แสบตา และดูเป็นทางการกว่า neon เดิม
+ * ผู้ใช้ยังสลับเป็นโหมดมืด/สีอื่นได้ที่หน้าตั้งค่า
  */
-export const DEFAULT_THEME: ThemePrefs = { mode: 'dark', accent: 'purple' };
+export const DEFAULT_THEME: ThemePrefs = { mode: 'light', accent: 'navy' };
 
 export const THEME_MODES: { id: ThemeMode; label: string; hint: string }[] = [
   { id: 'light', label: 'โหมดสว่าง', hint: 'พื้นขาว อ่านง่ายในที่แสงจ้า' },
@@ -47,7 +45,8 @@ export const ACCENTS: {
   from: string;
   to: string;
 }[] = [
-  { id: 'purple', label: 'ม่วง (ค่าเริ่มต้น)', from: '#4C3FD6', to: '#7B3FD6' },
+  { id: 'navy', label: 'น้ำเงินกรมท่า (ค่าเริ่มต้น)', from: '#1F3F73', to: '#2F5D9E' },
+  { id: 'purple', label: 'ม่วง', from: '#4C3FD6', to: '#7B3FD6' },
   { id: 'blue', label: 'น้ำเงิน', from: '#1E63E9', to: '#38BDF8' },
   { id: 'teal', label: 'เขียวมิ้นต์', from: '#0D9488', to: '#22D3EE' },
   { id: 'orange', label: 'ส้ม', from: '#EA580C', to: '#F59E0B' },
@@ -60,8 +59,8 @@ export const ACCENTS: {
  * (โหมดสว่างใช้สีพื้นของธีม ไม่ใช่สีเน้น เพื่อให้กลืนกับ header สีขาว)
  */
 const CHROME_COLOR: Record<ThemeMode, string> = {
-  dark: '#050B1C',
-  light: '#F7F8FB',
+  dark: '#12161D',
+  light: '#F4F6F9',
 };
 
 function syncBrowserChrome(mode: ThemeMode): void {
@@ -75,7 +74,8 @@ function syncBrowserChrome(mode: ThemeMode): void {
   tag.content = CHROME_COLOR[mode];
 }
 
-const STORAGE_KEY = 'sc_theme_prefs';
+/** v2 = ดีไซน์ Calm — เปลี่ยนคีย์เพื่อให้ผู้ใช้เดิมได้ธีมใหม่หนึ่งครั้ง (เลือกใหม่ได้ที่หน้าตั้งค่า) */
+const STORAGE_KEY = 'sc_theme_prefs_v2';
 /** คีย์เดิมของหน้าตั้งค่ารุ่นก่อน (เก็บเป็นชื่อคลาส เช่น theme-dark) */
 const LEGACY_STORAGE_KEY = 'sc_theme';
 const THEME_EVENT = 'sc:themechange';
@@ -330,4 +330,4 @@ export function chartTokens(): {
     tooltipBorder: cssVar('--color-border', '#E7E7F0'),
     tooltipText: cssVar('--color-text', '#15151D'),
   };
-}
+}

@@ -231,8 +231,13 @@ export interface DispatchMe {
   line_linked: boolean;
   offer_minutes: number;
   open: number;
+  /** งานที่กำลังทำ (assigned/in_progress) — ใช้ตัดสินว่าว่างหรือยุ่ง */
+  active?: number;
   done_today: number;
+  free?: boolean;
   offers: DispatchOffer[];
+  /** งานค้างของทีม (ทุกคนยุ่ง) — แจ้งเตือนแบบไม่บังคับ รับได้ถ้าสะดวก */
+  pool?: DispatchOffer[];
 }
 
 export interface DispatchStaff {
@@ -248,6 +253,26 @@ export interface DispatchStaff {
   open: number;
   done_today: number;
   offers: number;
+  active?: number;
+  picture_url?: string | null;
+  /** งานที่กำลังทำล่าสุด */
+  current?: { ticket_id: string; title: string; status: string } | null;
+}
+export interface StaffTicketRow {
+  ticket_id: string; title: string; status: string; priority: string;
+  device_id: string; device_label: string; organization_name: string | null; reporter_name: string | null;
+  created_at: string; assigned_at: string | null; resolved_at: string | null; closed_at: string | null;
+  sla_due_at: string | null; rating: number | null;
+  last_update?: { note: string | null; at: string; by: string | null } | null;
+}
+export interface StaffDetail {
+  id: number; name: string; username: string; email: string | null; picture_url: string | null;
+  organization_name: string; on_duty: boolean; line_linked: boolean; reachable: boolean;
+  last_seen_at: string | null; state: 'free' | 'busy' | 'off';
+  load: { open: number; active: number; done_today: number; done_7d: number; done_30d: number;
+    avg_hours_30d: number | null; avg_rating_30d: number | null; sla_met_30d: number; sla_total_30d: number };
+  open_tickets: StaffTicketRow[];
+  recent_done: StaffTicketRow[];
 }
 
 export interface DispatchSummary {

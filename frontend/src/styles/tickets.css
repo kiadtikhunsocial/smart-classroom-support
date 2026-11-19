@@ -272,3 +272,23 @@
   .tk-skeleton-row { animation: none; }
   .tk-results { transition: none; }
 }
+
+/* ── แถบสีความเร่งด่วน (หน้าแถว/การ์ด) ───────────────────────────────────
+   สีเดียวกับ badge ความเร่งด่วน: เร่งด่วนมาก=แดง สูง=ส้ม ปกติ=ฟ้า ต่ำ=เขียว
+   เร่งด่วนมาก/สูง มีพื้นแถวจาง ๆ ให้สะดุดตาเวลาไล่ดูรายการ */
+.tk-prio-critical { --tk-prio: var(--color-danger, #dc2b3f); }
+.tk-prio-high     { --tk-prio: var(--color-warning, #d97706); }
+.tk-prio-normal   { --tk-prio: var(--color-info, #0b84d6); }
+.tk-prio-low      { --tk-prio: var(--color-success, #0f9d6e); }
+
+.data-table tr.tk-prio > td:first-child { box-shadow: inset 5px 0 0 var(--tk-prio, transparent); padding-inline-start: 18px; }
+.data-table tr.tk-prio-critical > td { background: color-mix(in srgb, var(--tk-prio) 9%, transparent); }
+.data-table tr.tk-prio-high > td { background: color-mix(in srgb, var(--tk-prio) 6%, transparent); }
+
+.tk-card.tk-prio { border-inline-start: 5px solid var(--tk-prio, transparent); }
+.tk-card.tk-prio-critical { background: color-mix(in srgb, var(--tk-prio) 8%, var(--color-surface)); }
+.tk-card.tk-prio-high { background: color-mix(in srgb, var(--tk-prio) 5%, var(--color-surface)); }
+
+.tk-prio-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; padding: 0; list-style: none; color: var(--color-text-secondary); font-size: .78rem; }
+.tk-prio-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.tk-prio-legend li::before { content: ''; width: 5px; height: 14px; border-radius: 2px; background: var(--tk-prio); }

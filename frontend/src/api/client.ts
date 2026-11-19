@@ -1,5 +1,5 @@
 import { User } from '../types/user';
-import type { DispatchMe, DispatchSummary, PublicOptions, PublicTicketStatus, Ticket } from '../types';
+import type { DispatchMe, DispatchSummary, StaffDetail, PublicOptions, PublicTicketStatus, Ticket } from '../types';
 
 // ─── API base URL ───────────────────────────────────────────────────────
 // ลำดับ: ค่าที่ฝังตอน build (__VITE_API_URL__) → import.meta.env → same-origin '/api'
@@ -415,6 +415,7 @@ export const api = {
     lineLinkCode: () => request<{ code: string; expires_at: string; message: string }>('/me/line-link-code', { method: 'POST' }),
     unlinkLine: () => request<{ line_linked: boolean }>('/me/line-link', { method: 'DELETE' }),
     dispatchSummary: () => request<DispatchSummary>('/dispatch/summary'),
+  dispatchStaff: (userId: number) => request<StaffDetail>(`/dispatch/staff/${userId}`),
     setStaffDuty: (userId: number, on_duty: boolean) =>
       request<{ id: number; on_duty: boolean }>(`/staff/${userId}/duty`, { method: 'PATCH', body: JSON.stringify({ on_duty }) }),
     resolveTicket: (ticketId: string, data: any) =>

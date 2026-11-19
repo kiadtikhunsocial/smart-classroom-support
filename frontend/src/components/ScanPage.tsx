@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
+import { startQrCamera, scanQrFromFile } from '../lib/qrCamera';
 
 /**
  * หน้าสแกน QR — ใช้กล้องจริง (html5-qrcode) + ช่องกรอกรหัสสำรอง
@@ -14,7 +15,7 @@ export default function ScanPage({ onScanDevice, onBack }: {
   onBack: () => void;
 }) {
   const videoRef = useRef<HTMLDivElement>(null);
-  const scannerRef = useRef<any>(null);
+  const scannerRef = useRef<(() => Promise<void>) | null>(null);
   const [scanning, setScanning] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [status, setStatus] = useState<string>('พร้อมสแกน — เปิดกล้องเพื่อสแกน QR หรือกรอกรหัสอุปกรณ์');
@@ -85,7 +86,7 @@ export default function ScanPage({ onScanDevice, onBack }: {
     setOpenTicketWarn(null);
     // ถ้าเป็น QR token (ไม่เข้ารูปรหัสอุปกรณ์) → resolve ผ่าน /qr/resolve
     if (isToken(code)) {
-      setStatus('พบ QR token — กำลังตรวจสอบอุปกรณ์â¦');
+      setStatus('พบ QR token — กำลังตรวจสอบอุปกรณ์…');
       try {
         const resp = await api.qrResolve(code);
         const device = resp?.device;
@@ -99,7 +100,7 @@ export default function ScanPage({ onScanDevice, onBack }: {
       return;
     }
     // กรณีเป็น device_id ตรงๆ
-    setStatus(`พบอุปกรณ์ ${code} — กำลังโหลดข้อมูลâ¦`);
+    setStatus(`พบอุปกรณ์ ${code} — กำลังโหลดข้อมูล…`);
     try {
       const device = await api.getDevice(code);
       setStatus(`${device.device_id} (${device.device_type}) — ${device.room_name || 'ไม่ระบุห้อง'}`);
@@ -112,51 +113,41 @@ export default function ScanPage({ onScanDevice, onBack }: {
 
   const startScan = async () => {
     setError(null);
-    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setError('เบราว์เซอร์ไม่อนุญาตให้ใช้กล้องในหน้านี้ — ใช้ HTTPS หรือ localhost แล้วลองอีกครั้ง');
-      return;
-    }
     setScanning(true);
     try {
-      const Html5Qrcode = (await import('html5-qrcode')).Html5Qrcode;
-      const cameras = await Html5Qrcode.getCameras();
-      if (!cameras.length) throw new Error('NO_CAMERA');
-      // Desktop/laptop often has only a front camera; facingMode: environment
-      // fails there even though a usable camera exists.
-      const preferred = cameras.find((camera: { label: string }) => /back|rear|environment|หลัง/i.test(camera.label)) || cameras[0];
-      const scanner = new Html5Qrcode('qr-reader');
-      scannerRef.current = scanner;
-      await scanner.start(
-        preferred.id,
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText: string) => {
-          // สแกนเจอแล้ว — หยุดก่อน แล้วค่อยประมวลผล
-          scanner.stop().then(() => {
-            setScanning(false);
-            handleRaw(decodedText);
-          }).catch(() => {});
-        },
-        () => { /* frame ไม่มี QR — ข้าม */ }
-      );
+      // เจอ QR แล้ว helper ปิดกล้องให้ก่อน แล้วค่อยเรียก callback นี้
+      scannerRef.current = await startQrCamera('qr-reader', (decodedText) => {
+        scannerRef.current = null;
+        setScanning(false);
+        handleRaw(decodedText);
+      });
       setStatus('กำลังสแกน — เล็ง QR ไปที่กล้อง');
     } catch (e: any) {
       setScanning(false);
       scannerRef.current = null;
-      const message = String(e?.message || e || '');
-      setError(/NO_CAMERA|NotFound/i.test(message)
-        ? 'ไม่พบกล้องที่ใช้งานได้บนเครื่องนี้ — ต่อกล้องหรือกรอกรหัสอุปกรณ์แทน'
-        : /NotAllowed|Permission|denied/i.test(message)
-          ? 'ยังไม่ได้อนุญาตใช้กล้อง — กดไอคอนกล้อง/แม่กุญแจข้าง URL เพื่ออนุญาต แล้วลองอีกครั้ง'
-          : 'เปิดกล้องไม่สำเร็จ — ตรวจว่ากล้องไม่ได้ถูกแอปอื่นใช้อยู่ หรือกรอกรหัสอุปกรณ์แทน');
+      setError(e?.message || 'เปิดกล้องไม่สำเร็จ');
     }
   };
 
   const stopScan = async () => {
-    if (scannerRef.current) {
-      try { await scannerRef.current.stop(); } catch {}
-      scannerRef.current = null;
-    }
+    const stop = scannerRef.current;
+    scannerRef.current = null;
+    if (stop) await stop();
     setScanning(false);
+  };
+
+  /** ถ่ายรูป/เลือกรูป QR — ใช้ได้แม้หน้าเว็บไม่ใช่ HTTPS */
+  const scanPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    await stopScan();
+    setError(null);
+    setStatus('กำลังอ่าน QR จากรูป...');
+    try {
+      handleRaw(await scanQrFromFile(file, 'qr-file-reader'));
+    } catch (e: any) {
+      setError(e?.message || 'อ่าน QR จากรูปไม่สำเร็จ');
+      setStatus('พร้อมสแกนอีกครั้ง');
+    }
   };
 
   useEffect(() => {
@@ -224,6 +215,18 @@ export default function ScanPage({ onScanDevice, onBack }: {
           {scanning && (
             <button className="btn btn-ghost" onClick={stopScan}>หยุดสแกน</button>
           )}
+
+          <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              onChange={(e) => { scanPhoto(e.target.files?.[0]); e.target.value = ''; }}
+            />
+            ถ่ายรูป QR / เลือกรูป
+          </label>
+          <div id="qr-file-reader" hidden />
 
           {/* กรอกรหัสสำรอง */}
           <div style={{ width: '100%', maxWidth: 360, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>

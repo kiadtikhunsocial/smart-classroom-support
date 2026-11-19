@@ -19,7 +19,7 @@ export default function TicketCard({ ticket, onOpen }: TicketCardProps) {
   const where = [ticket.organization_name, ticket.reporter_name].filter(Boolean).join(' · ');
   return (
     <li>
-      <button type="button" className="tk-card" onClick={() => onOpen(ticket)}
+      <button type="button" className={`tk-card tk-prio tk-prio-${ticket.priority}`} onClick={() => onOpen(ticket)}
         aria-label={`ดูรายละเอียดใบงาน ${ticket.ticket_id}`}>
         <span className="tk-card-top">
           <span className={`badge badge-${ticket.status}`}>{status}</span>

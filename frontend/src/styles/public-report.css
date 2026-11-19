@@ -132,6 +132,17 @@
   font-size: 0.92rem;
 }
 
+.pr-btn-photo {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 20px;
+}
+
+.pr-btn-photo.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .pr-btn-full {
   width: 100%;
 }

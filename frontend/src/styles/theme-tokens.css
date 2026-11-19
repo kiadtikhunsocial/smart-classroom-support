@@ -958,14 +958,16 @@
   color: var(--badge-success-text);
 }
 
+/* ความเร่งด่วนเรียงสีตามความแรง: ต่ำ=เขียว ปกติ=ฟ้า สูง=ส้ม เร่งด่วนมาก=แดง
+   (เดิม ปกติ=เหลืองส้ม สูง=ม่วง ทำให้ "ปกติ" ดูเหมือนคำเตือน) — ตรงกับแถบสีหน้าแถวในหน้า Tickets */
 .badge-priority-normal {
-  background: var(--color-warning-light);
-  color: var(--badge-warning-text);
+  background: var(--color-info-light);
+  color: var(--badge-info-text);
 }
 
 .badge-priority-high {
-  background: var(--color-primary-light);
-  color: var(--color-primary-dark);
+  background: var(--color-warning-light);
+  color: var(--badge-warning-text);
 }
 
 .badge-priority-critical {

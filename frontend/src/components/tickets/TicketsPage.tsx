@@ -254,6 +254,13 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
               </div>
             ) : (
               <>
+              {/* คำอธิบายแถบสีหน้าแถว = ความเร่งด่วน */}
+              <ul className="tk-prio-legend" aria-label="แถบสีหน้าแถวบอกความเร่งด่วน">
+                <li className="tk-prio-critical">เร่งด่วนมาก</li>
+                <li className="tk-prio-high">สูง</li>
+                <li className="tk-prio-normal">ปกติ</li>
+                <li className="tk-prio-low">ต่ำ</li>
+              </ul>
               {/* จอเล็กแสดงการ์ด จอใหญ่แสดงตาราง — สลับด้วย CSS จากข้อมูลชุดเดียวกัน */}
               <ul className="tk-cards">
                 {items.map((ticket) => (
@@ -275,7 +282,7 @@ export default function TicketsPage({ onBack, onTicketsChanged, canManage, focus
                   </thead>
                   <tbody>
                     {items.map((ticket) => (
-                      <tr key={ticket.ticket_id} className="clickable-data-row" tabIndex={0}
+                      <tr key={ticket.ticket_id} className={`clickable-data-row tk-prio tk-prio-${ticket.priority}`} tabIndex={0}
                         aria-label={`ดูรายละเอียดใบงาน ${ticket.ticket_id}`}
                         onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a, select, input')) setOpenTicket({ id: ticket.ticket_id, initial: ticket }); }}
                         onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpenTicket({ id: ticket.ticket_id, initial: ticket }); } }}>

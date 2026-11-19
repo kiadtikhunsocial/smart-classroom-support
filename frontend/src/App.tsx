@@ -13,7 +13,7 @@ import PublicHomeView from './components/PublicHomeView';
 import DevicesPage from './components/DevicesPage';
 import DetailField from './components/DetailField';
 import TicketsPage from './components/tickets/TicketsPage';
-import { STATUS_LABELS_TICKET } from './components/tickets/ticketLabels';
+import { STATUS_LABELS_TICKET, ticketDetailPriority, ticketDetailStatus } from './components/tickets/ticketLabels';
 import TeamPage from './components/dispatch/TeamPage';
 import { saveRecent } from './publicRecent';
 import DispatchOfferPopup from './components/dispatch/DispatchOfferPopup';
@@ -35,9 +35,8 @@ import { roleLabel } from './roleLabels';
 import { REPORTER_TYPE_OPTIONS, DEFAULT_REPORTER_TYPE } from './reporterTypes';
 import { useThemeVersion, themeColor, themeTint, cssVar } from './theme';
 import './styles/dashboard.css';
-// เลเยอร์ธีม futuristic ของหน้าแรก — ต้องโหลด "หลัง" dashboard.css เพื่อทับค่าเดิมได้
-// โดยไม่ใช้ !important (ทุก selector สโคปอยู่ใต้ .dsh-page จึงไม่กระทบหน้าอื่น)
-import './styles/dashboard-futuristic.css';
+// ดีไซน์ Calm: เลิกใช้เลเยอร์ neon/futuristic ของหน้าแรก (dashboard-futuristic.css)
+// เพื่อให้สบายตาและเป็นทางการ — ไฟล์ยังเก็บไว้ ถ้าต้องการกลับมาใช้ให้ import คืน
 
 /** กราฟ Dashboard โหลดแยกก้อน — recharts + d3 ราว 86 kB gzip
  *  หน้าอื่น (login / แจ้งซ่อมสาธารณะ / สแกน QR) จึงไม่ต้องดาวน์โหลดไลบรารีกราฟเลย
@@ -318,7 +317,7 @@ function LoginPage({ onLogin, onPrivacy }: { onLogin: (u: User) => void; onPriva
             {loading ? (
               <>
                 <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                กำลังเข้าสู่ระบบâ¦
+                กำลังเข้าสู่ระบบ…
               </>
             ) : (
               <>เข้าสู่ระบบ</>
@@ -684,8 +683,10 @@ function AppHeader({ pageTitle, user, onMenuToggle, devices, tickets, onNavigate
 }
 
 // ─── Dashboard Content ─────────────────────────────────────────────────────
-function DashboardContent({ 
+function DashboardContent({
   onOpenRepairPanel,
+  onOpenTicket,
+  onOpenDevice,
   stats,
   tickets,
   devices,
@@ -695,6 +696,10 @@ function DashboardContent({
   userRole,
 }: { 
   onOpenRepairPanel: (deviceId?: string) => void;
+  /** กดแถวใบงานบน Dashboard → เปิดใบงานนั้นในหน้า Tickets */
+  onOpenTicket?: (ticketId: string) => void;
+  /** ปุ่ม "ดูรายละเอียด" บนการ์ดอุปกรณ์ → เปิดเครื่องนั้นในหน้าอุปกรณ์ */
+  onOpenDevice?: (deviceId: string) => void;
   stats: Stats | null;
   tickets: Ticket[];
   devices: DeviceInfo[];
@@ -866,7 +871,7 @@ function DashboardContent({
   if (loading) return (
     <div className="dsh-loading" role="status" aria-live="polite">
       <div className="spinner" />
-      <span>กำลังโหลดข้อมูลâ¦</span>
+      <span>กำลังโหลดข้อมูล…</span>
     </div>
   );
 
@@ -942,7 +947,7 @@ function DashboardContent({
                         </td>
                         <td>
                           <span className={`badge badge-priority-${ticket.priority}`}>
-                            {ticket.priority}
+                            {ticketDetailPriority[ticket.priority] || ticket.priority}
                           </span>
                         </td>
                         <td className="dsh-td-muted">
@@ -1108,7 +1113,10 @@ function DashboardContent({
                 </thead>
                 <tbody>
                   {filteredTicketsEntities.slice(0, 10).map((ticket) => (
-                    <tr key={ticket.ticket_id}>
+                    <tr key={ticket.ticket_id} className="dsh-row-link" tabIndex={0}
+                      aria-label={`เปิดใบงาน ${ticket.ticket_id}`}
+                      onClick={() => onOpenTicket?.(ticket.ticket_id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') onOpenTicket?.(ticket.ticket_id); }}>
                       <td className="dsh-td-id">{ticket.ticket_id}</td>
                       <td>
                         <span style={{ fontWeight: 500 }}>{ticket.device_id}</span>
@@ -1116,12 +1124,12 @@ function DashboardContent({
                       <td className="dsh-td-wrap">{ticket.title}</td>
                       <td>
                         <span className={`badge badge-${ticket.status}`}>
-                          {ticket.status.replace(/_/g, ' ')}
+                          {ticketDetailStatus(ticket.status)}
                         </span>
                       </td>
                       <td>
                         <span className={`badge badge-priority-${ticket.priority}`}>
-                          {ticket.priority}
+                          {ticketDetailPriority[ticket.priority] || ticket.priority}
                         </span>
                       </td>
                       <td className="dsh-td-muted">
@@ -1216,10 +1224,13 @@ function DashboardContent({
                         </div>
                         <div className="device-card-bottom">
                           <div className="device-card-actions">
-                            <button className="btn btn-primary btn-sm">
+                            <button type="button" className="btn btn-primary btn-sm"
+                              onClick={(e) => { e.stopPropagation(); onOpenRepairPanel(device.device_id); }}>
                               แจ้งซ่อม
                             </button>
-                            <button className="btn btn-secondary btn-sm">
+                            {/* เดิมปุ่มนี้เปิดฟอร์มแจ้งซ่อมเหมือนปุ่มแรก — ตอนนี้เปิดข้อมูลเครื่องในหน้าอุปกรณ์ */}
+                            <button type="button" className="btn btn-secondary btn-sm"
+                              onClick={(e) => { e.stopPropagation(); (onOpenDevice ?? onOpenRepairPanel)(device.device_id); }}>
                               ดูรายละเอียด
                             </button>
                           </div>
@@ -1359,7 +1370,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
               {/* การ์ด: งานแจ้งซ่อมล่าสุดของเครื่องนี้ (ช่วยหาเลขคืนถ้าลืม) */}
               {recentLoading && (
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginBottom: 'var(--spacing-md)' }}>
-                  กำลังตรวจสอบประวัติâ¦
+                  กำลังตรวจสอบประวัติ…
                 </div>
               )}
               {!recentLoading && recentTicket && !submitted && (
@@ -1412,7 +1423,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
                   className="form-textarea"
                   value={form.description}
                   onChange={(e) => setField('description', e.target.value)}
-                  placeholder="บรรยายอาการที่เกิดขึ้นâ¦"
+                  placeholder="บรรยายอาการที่เกิดขึ้น…"
                   rows={4}
                 />
               </div>
@@ -1501,7 +1512,7 @@ function RepairPanel({ deviceId, onClose, onSubmit }: {
                 {submitting ? (
                   <>
                     <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                    กำลังส่งâ¦
+                    กำลังส่ง…
                   </>
                 ) : (
                   <>ส่งคำร้องแจ้งซ่อม</>
@@ -1573,7 +1584,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
   const requestScanLocation = () => {
     if (!navigator.geolocation) { setLocationStatus('เบราว์เซอร์นี้ไม่รองรับตำแหน่ง'); return; }
     setLocationBusy(true);
-    setLocationStatus('กำลังขออนุญาตตำแหน่งâ¦');
+    setLocationStatus('กำลังขออนุญาตตำแหน่ง…');
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setScanLocation({ lat: position.coords.latitude, lng: position.coords.longitude,
@@ -1823,7 +1834,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
             {deviceLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 16, background: 'var(--color-surface-secondary)', borderRadius: 'var(--radius-md)' }}>
                 <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>กำลังโหลดข้อมูลอุปกรณ์â¦</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>กำลังโหลดข้อมูลอุปกรณ์…</span>
               </div>
             ) : device ? (
               <div className="device-select-card" style={{ marginBottom: 16 }}>
@@ -1919,7 +1930,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                       onClick={handleAddNote}
                       disabled={noteSending || !noteText.trim()}
                     >
-                      {noteSending ? 'กำลังส่งâ¦' : 'ส่งข้อมูลเพิ่มเข้า Ticket เดิม'}
+                      {noteSending ? 'กำลังส่ง…' : 'ส่งข้อมูลเพิ่มเข้า Ticket เดิม'}
                     </button>
                     <div style={{ fontSize: '0.72rem', marginTop: 6, opacity: 0.9 }}>
                       ระบบไม่สร้าง Ticket ซ้ำ — ข้อมูลที่ส่งจะเข้าไปในงานเดิมให้ช่างเห็นตามลำดับเวลา
@@ -1936,7 +1947,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
             {/* งานแจ้งซ่อมล่าสุดของเครื่องนี้ (ช่วยผู้ใช้ที่ลืมเลขหาเลขคืน) */}
             {recentLoading && (
               <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
-                กำลังตรวจสอบประวัติการแจ้งซ่อมâ¦
+                กำลังตรวจสอบประวัติการแจ้งซ่อม…
               </div>
             )}
             {!recentLoading && recentTicket && !blocking && !submitted && (
@@ -1977,7 +1988,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
               <div className="form-group" style={{ padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: 10 }}>
                 <div className="form-label">ตำแหน่งขณะสแกน QR (ไม่บังคับ)</div>
                 <p style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>กดอนุญาตเพื่อให้เจ้าหน้าที่เห็นพิกัดใน Ticket ถ้าไม่สะดวก สามารถแจ้งซ่อมโดยไม่ส่งตำแหน่งได้</p>
-                <button type="button" className="btn btn-secondary" onClick={requestScanLocation} disabled={locationBusy}>{locationBusy ? 'กำลังระบุตำแหน่งâ¦' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}</button>
+                <button type="button" className="btn btn-secondary" onClick={requestScanLocation} disabled={locationBusy}>{locationBusy ? 'กำลังระบุตำแหน่ง…' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}</button>
                 {locationStatus && <div role="status" style={{ fontSize: '0.75rem', marginTop: 8 }}>{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</div>}
               </div>
               <div className="form-group">
@@ -1999,7 +2010,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                   className="form-textarea"
                   value={form.description}
                   onChange={(e) => setField('description', e.target.value)}
-                  placeholder="บรรยายอาการที่เกิดขึ้นâ¦ (เช่น เปิดเครื่องแล้วจอไม่ติด ไฟไม่เข้า)"
+                  placeholder="บรรยายอาการที่เกิดขึ้น… (เช่น เปิดเครื่องแล้วจอไม่ติด ไฟไม่เข้า)"
                   rows={3}
                 />
               </div>
@@ -2094,7 +2105,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                   {diagLoading ? (
                     <>
                       <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                      กำลังวิเคราะห์อาการâ¦
+                      กำลังวิเคราะห์อาการ…
                     </>
                   ) : diag ? (
                     <>
@@ -2172,7 +2183,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                   disabled={uploading || attachments.length >= 3}
                   style={{ padding: 8, fontSize: '0.8rem' }}
                 />
-                {uploading && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>กำลังอัปโหลดâ¦</div>}
+                {uploading && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 4 }}>กำลังอัปโหลด…</div>}
                 {attachments.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                     {attachments.map((u, i) => (
@@ -2210,7 +2221,7 @@ function PublicReportView({ deviceId }: { deviceId: string }) {
                 {submitting ? (
                   <>
                     <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderWidth: 2, display: 'inline-block' }} />
-                    กำลังส่งâ¦
+                    กำลังส่ง…
                   </>
                 ) : (
                   <>ส่งคำร้องแจ้งซ่อม</>
@@ -2476,7 +2487,7 @@ export default function App() {
 function AppInner() {
   const auth = useAuth();
   const [menu, setMenu] = useState('dashboard');
-  const [pageTitle, setPageTitle] = useState('Dashboard');
+  const [pageTitle, setPageTitle] = useState('ภาพรวม');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null);
   const [focusRecord, setFocusRecord] = useState<{ kind: 'devices' | 'tickets'; id: string } | null>(null);
@@ -2589,18 +2600,18 @@ function AppInner() {
     if (menu === 'dashboard') reloadData();  // กลับหน้า Dashboard → ดึงข้อมูลใหม่เสมอ (ไม่ต้อง hard refresh)
     if (menu !== 'schools') setSelectedSchoolId(null);
     const titles: Record<string, string> = {
-      dashboard: 'Dashboard',
+      dashboard: 'ภาพรวม',
       devices: 'อุปกรณ์',
       scan: 'สแกน QR',
-      tickets: 'Tickets',
+      tickets: 'งานแจ้งซ่อม',
       team: 'ทีมช่าง',
       kb: 'ฐานความรู้',
       chatbot: 'จัดการ AI / LINE OA',
       ratings: 'ผลประเมินลูกค้า',
       qrbatch: 'พิมพ์ QR',
       pm: 'บำรุงรักษา (PM)',
-      users: 'Users',
-      reports: 'Reports',
+      users: 'ผู้ใช้งาน',
+      reports: 'รายงาน',
       audit: 'ประวัติการใช้งาน',
       sales: 'ลูกค้าและการขาย',
       registrations: 'อนุมัติเจ้าหน้าที่',
@@ -2630,7 +2641,7 @@ function AppInner() {
     <div className="login-page" style={{ minHeight: '100vh' }}>
       <div style={{ textAlign: 'center' }}>
         <div className="spinner" style={{ width: 36, height: 36, margin: '0 auto 16px' }} />
-        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>กำลังโหลดâ¦</span>
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>กำลังโหลด…</span>
       </div>
     </div>
   );
@@ -2750,6 +2761,8 @@ function AppInner() {
               {menu === 'dashboard' && (
                 <DashboardContent
                   onOpenRepairPanel={openRepairPanel}
+                  onOpenTicket={(id) => { setFocusRecord({ kind: 'tickets', id }); handleMenuChange('tickets'); }}
+                  onOpenDevice={(id) => { setFocusRecord({ kind: 'devices', id }); handleMenuChange('devices'); }}
                   stats={stats}
                   tickets={tickets}
                   devices={devices}

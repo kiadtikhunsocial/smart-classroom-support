@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { startQrCamera, scanQrFromFile } from '../lib/qrCamera';
 import { saveRecent } from '../publicRecent';
 import { REPORTER_TYPE_OPTIONS, DEFAULT_REPORTER_TYPE } from '../reporterTypes';
 import '../styles/public-home.css';
@@ -127,7 +128,7 @@ export default function PublicNoLoginReportView() {
   const [resolving, setResolving] = useState(false);
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
-  const scannerRef = useRef<any>(null);
+  const scannerRef = useRef<(() => Promise<void>) | null>(null);
 
   // ช่องทางสำรองเมื่อกล้องใช้ไม่ได้ / สติกเกอร์ QR เสียหาย: พิมพ์โค้ดหรือลิงก์ใต้ QR
   const [manualCode, setManualCode] = useState('');
@@ -243,43 +244,46 @@ export default function PublicNoLoginReportView() {
 
   const startScan = async () => {
     setScanError(null);
-    setScanStatus('กำลังเปิดกล้องâ¦');
+    setScanStatus('กำลังเปิดกล้อง…');
     setScanning(true);
     try {
-      const Html5Qrcode = (await import('html5-qrcode')).Html5Qrcode;
-      const scanner = new Html5Qrcode('public-qr-reader');
-      scannerRef.current = scanner;
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText: string) => {
-          // เจอ QR แล้ว — ปิดกล้องก่อนค่อยยิง API
-          const finish = () => {
-            scannerRef.current = null;
-            setScanning(false);
-            applyQrDevice(decodedText);
-          };
-          scanner.stop().then(finish).catch(finish);
-        },
-        () => { /* เฟรมที่ยังไม่เจอ QR — ข้าม */ }
-      );
+      // เจอ QR แล้ว helper ปิดกล้องให้ก่อน แล้วค่อยเรียก callback นี้
+      scannerRef.current = await startQrCamera('public-qr-reader', (decodedText) => {
+        scannerRef.current = null;
+        setScanning(false);
+        applyQrDevice(decodedText);
+      });
       setScanStatus('เล็ง QR บนอุปกรณ์ให้อยู่ในกรอบ');
-    } catch {
+    } catch (err: any) {
       scannerRef.current = null;
       setScanning(false);
       setScanStatus(null);
-      setScanError('เปิดกล้องไม่สำเร็จ — ต้องเปิดผ่าน HTTPS (หรือ localhost) และอนุญาตให้ใช้กล้อง');
+      setScanError(err?.message || 'เปิดกล้องไม่สำเร็จ');
     }
   };
 
   const stopScan = async () => {
-    const scanner = scannerRef.current;
+    const stop = scannerRef.current;
     scannerRef.current = null;
-    if (scanner) {
-      try { await scanner.stop(); } catch { /* ปิดไปแล้ว — ไม่ต้องทำอะไร */ }
-    }
+    if (stop) await stop();
     setScanning(false);
     setScanStatus(null);
+  };
+
+  /** ถ่ายรูป/เลือกรูป QR — ใช้ได้แม้หน้าเว็บไม่ใช่ HTTPS เพราะแอปกล้องของเครื่องเป็นคนถ่าย */
+  const scanPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    await stopScan();
+    setScanError(null);
+    setScanStatus('กำลังอ่าน QR จากรูป...');
+    try {
+      const text = await scanQrFromFile(file, 'public-qr-file-reader');
+      setScanStatus(null);
+      applyQrDevice(text);
+    } catch (err: any) {
+      setScanStatus(null);
+      setScanError(err?.message || 'อ่าน QR จากรูปไม่สำเร็จ');
+    }
   };
 
   /** เริ่มใหม่: สแกนอุปกรณ์อื่น */
@@ -316,9 +320,9 @@ export default function PublicNoLoginReportView() {
   // ปิดกล้องเสมอเมื่อออกจากหน้า (ไม่งั้นไฟกล้องค้าง)
   useEffect(() => {
     return () => {
-      const scanner = scannerRef.current;
+      const stop = scannerRef.current;
       scannerRef.current = null;
-      if (scanner) scanner.stop().catch(() => {});
+      if (stop) stop().catch(() => {});
     };
   }, []);
 
@@ -329,7 +333,7 @@ export default function PublicNoLoginReportView() {
   const requestScanLocation = () => {
     if (!navigator.geolocation) { setLocationStatus('เบราว์เซอร์นี้ไม่รองรับตำแหน่ง'); return; }
     setLocationBusy(true);
-    setLocationStatus('กำลังขออนุญาตตำแหน่งâ¦');
+    setLocationStatus('กำลังขออนุญาตตำแหน่ง…');
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setScanLocation({ lat: position.coords.latitude, lng: position.coords.longitude,
@@ -619,6 +623,20 @@ export default function PublicNoLoginReportView() {
               style={{ display: scanning ? 'block' : 'none' }}
             />
 
+            {/* ถ่ายรูป QR: ทางสำรองที่ใช้ได้เสมอบนมือถือ แม้เบราว์เซอร์บล็อกกล้องสด */}
+            <label className={`ph-btn pr-btn-photo${resolving ? ' is-disabled' : ''}`}>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                disabled={resolving}
+                onChange={(e) => { scanPhoto(e.target.files?.[0]); e.target.value = ''; }}
+              />
+              <span>ถ่ายรูป QR / เลือกรูป</span>
+            </label>
+            <div id="public-qr-file-reader" hidden />
+
             <div aria-live="polite">
               {scanStatus && <div className="ph-alert ph-alert-info">{scanStatus}</div>}
               {scanError && (
@@ -659,7 +677,7 @@ export default function PublicNoLoginReportView() {
                   onClick={() => applyQrDevice(manualCode)}
                   disabled={resolving || manualCode.trim().length < 4}
                 >
-                  {resolving ? 'กำลังตรวจสอบâ¦' : 'ใช้โค้ดนี้'}
+                  {resolving ? 'กำลังตรวจสอบ…' : 'ใช้โค้ดนี้'}
                 </button>
               </div>
               <p className="ph-hint">
@@ -713,7 +731,7 @@ export default function PublicNoLoginReportView() {
             {openTicketLoading && !blocking && (
               <p className="pr-checking" aria-live="polite">
                 <span className="ph-spinner" aria-hidden="true" />
-                กำลังตรวจสอบงานค้างของอุปกรณ์นี้â¦
+                กำลังตรวจสอบงานค้างของอุปกรณ์นี้…
               </p>
             )}
 
@@ -769,7 +787,7 @@ export default function PublicNoLoginReportView() {
                           disabled={noteSending}
                         >
                           {noteSending ? <span className="ph-spinner" aria-hidden="true" /> : <SendIcon />}
-                          <span>{noteSending ? 'กำลังส่งâ¦' : 'ส่งข้อมูลเพิ่มเข้าใบเดิม'}</span>
+                          <span>{noteSending ? 'กำลังส่ง…' : 'ส่งข้อมูลเพิ่มเข้าใบเดิม'}</span>
                         </button>
                         {photos.length > 0 && (
                           <p className="pr-note-hint">
@@ -793,7 +811,7 @@ export default function PublicNoLoginReportView() {
                 <span className="pr-label">ตำแหน่งขณะสแกน QR (ไม่บังคับ)</span>
                 <p className="pr-note-hint">อนุญาตเฉพาะเมื่อต้องการให้เจ้าหน้าที่เห็นพิกัดขณะกรอกฟอร์ม ไม่ใช่หลักฐานยืนยันที่ตั้งอุปกรณ์</p>
                 <button type="button" className="ph-btn" onClick={requestScanLocation} disabled={locationBusy}>
-                  {locationBusy ? 'กำลังระบุตำแหน่งâ¦' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}
+                  {locationBusy ? 'กำลังระบุตำแหน่ง…' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}
                 </button>
                 {locationStatus && <p className="pr-note-hint" role="status">{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</p>}
               </div>
@@ -941,7 +959,7 @@ export default function PublicNoLoginReportView() {
                 disabled={submitting}
               >
                 {submitting ? <span className="ph-spinner" aria-hidden="true" /> : <SendIcon />}
-                <span>{submitting ? 'กำลังส่งâ¦' : 'ส่งคำร้องแจ้งซ่อม'}</span>
+                <span>{submitting ? 'กำลังส่ง…' : 'ส่งคำร้องแจ้งซ่อม'}</span>
               </button>
             </form>
 

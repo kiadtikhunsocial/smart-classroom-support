@@ -15,6 +15,8 @@ def world(tag, monkeypatch):
     ช่าง it_support อื่นในฐานข้อมูลถูกปิดรับงานชั่วคราวแล้วคืนค่าตอนจบ"""
     from app.main import create_token
     monkeypatch.setenv("AUTO_ASSIGN_ENABLED", "1")
+    # kick() จริง = sweep ทั้งฐานข้อมูล จะไปมอบงาน demo ให้ช่างทดสอบ — เทสต์เรียก sweep(only_ids=...) เอง
+    monkeypatch.setattr(dispatch, "kick", lambda: None)
     db = SessionLocal()
     others = {u.id: u.on_duty for u in db.execute(select(User).where(User.role == "it_support")).scalars()}
     for u in db.execute(select(User).where(User.id.in_(list(others) or [-1]))).scalars():
@@ -124,7 +126,7 @@ def test_skip_passes_to_next_then_back_to_new_when_everyone_skipped(client, worl
     client.post(f"/api/tickets/{t.ticket_id}/decline", headers=w["h"](second_user))
     f = w["fresh"](t)
     assert f.status == "new" and f.assigned_user_id is None and f.assigned_to is None
-    assert sorted(json.loads(f.offer_tried)) == sorted([w["a"].id, w["b"].id])
+    assert sorted(dispatch._offer_state(f)["declined"]) == sorted([w["a"].id, w["b"].id])
     # sweep รอบต่อไปไม่เสนอให้คนเดิมวนซ้ำ
     dispatch.sweep(only_ids=[t.id])
     assert w["fresh"](t).status == "new"
@@ -152,18 +154,22 @@ def test_admin_manual_assignment_is_never_moved_by_sweep(client, world, admin_he
     assert f.assigned_user_id == w["a"].id and not f.auto_assigned
 
 
-def test_whoever_accepts_holds_the_ticket_and_sees_it_in_my_work(client, world):
+def test_assigned_tech_accepts_and_others_cannot_snatch_it(client, world):
     w = world
     t = w["ticket"]()
     dispatch.dispatch_ticket(t.id)
     offered_to = w["fresh"](t).assigned_user_id
-    other = w["b"] if offered_to == w["a"].id else w["a"]
-    r = client.post(f"/api/tickets/{t.ticket_id}/accept", headers=w["h"](other))
+    holder = w["a"] if offered_to == w["a"].id else w["b"]
+    other = w["b"] if holder is w["a"] else w["a"]
+    # งานที่ระบบมอบให้คนว่างแล้ว ช่างคนอื่นกดรับแทนไม่ได้
+    assert client.post(f"/api/tickets/{t.ticket_id}/accept", headers=w["h"](other)).status_code == 409
+    r = client.post(f"/api/tickets/{t.ticket_id}/accept", headers=w["h"](holder))
     assert r.status_code == 200, r.text
     f = w["fresh"](t)
-    assert f.status == "in_progress" and f.assigned_user_id == other.id and not f.auto_assigned
+    assert f.status == "in_progress" and f.assigned_user_id == holder.id and not f.auto_assigned
     # รับซ้ำ → 409
-    assert client.post(f"/api/tickets/{t.ticket_id}/accept", headers=w["h"](other)).status_code == 409
+    assert client.post(f"/api/tickets/{t.ticket_id}/accept", headers=w["h"](holder)).status_code == 409
+    other = holder
 
     mine = client.get("/api/tickets", params={"mine": "true"}, headers=w["h"](other))
     assert [x["ticket_id"] for x in mine.json()] == [t.ticket_id]
@@ -285,3 +291,127 @@ def test_line_offer_links_to_the_staff_app_not_the_public_tracking_page(world):
     with SessionLocal() as s:
         msg = dispatch.offer_message(s, s.get(RepairTicket, t.id))
     assert f"/?job={t.ticket_id}" in msg and "?ticket=" not in msg
+
+
+# ─── v2: คนว่างได้งานทันที / ทีมยุ่ง = งานค้าง + แจ้งเตือน / ว่างแล้วได้งานค้าง ─────────
+
+def test_busy_staff_are_not_auto_assigned_ticket_goes_to_backlog_and_team_is_alerted(world, monkeypatch):
+    w = world
+    w["ticket"]("in_progress", assigned_user_id=w["a"].id, assigned_to="ช่างA")
+    w["ticket"]("in_progress", assigned_user_id=w["b"].id, assigned_to="ช่างB")
+    alerted = []
+    monkeypatch.setattr(dispatch, "push_backlog_alert", lambda db, t, u: alerted.append(u.id) or True)
+    t = w["ticket"]()
+    assert dispatch.dispatch_ticket(t.id) is None
+    f = w["fresh"](t)
+    assert f.status == "new" and f.assigned_user_id is None
+    assert sorted(alerted) == sorted([w["a"].id, w["b"].id])  # C ปิดรับงาน, D คนละโรงเรียน
+    with SessionLocal() as s:
+        notes = [u.note for u in s.query(TicketUpdate).filter(TicketUpdate.ticket_id == t.id)]
+    assert any("งานค้าง" in n for n in notes)
+
+
+def test_waiting_for_parts_does_not_count_as_busy(world):
+    w = world
+    w["ticket"]("waiting_parts", assigned_user_id=w["a"].id, assigned_to="ช่างA")
+    w["ticket"]("in_progress", assigned_user_id=w["b"].id, assigned_to="ช่างB")
+    with SessionLocal() as s:
+        assert dispatch.pick_staff(s, w["org1"].id).id == w["a"].id
+
+
+def test_busy_tech_sees_backlog_in_pool_and_can_claim_it(client, world):
+    w = world
+    w["ticket"]("in_progress", assigned_user_id=w["a"].id, assigned_to="ช่างA")
+    w["ticket"]("in_progress", assigned_user_id=w["b"].id, assigned_to="ช่างB")
+    t = w["ticket"]()
+    dispatch.dispatch_ticket(t.id)
+    me = client.get("/api/dispatch/me", headers=w["h"](w["a"])).json()
+    assert me["free"] is False and me["active"] == 1
+    assert t.ticket_id in [p["ticket_id"] for p in me["pool"]]
+    assert me["offers"] == []
+    r = client.post(f"/api/tickets/{t.ticket_id}/accept", headers=w["h"](w["a"]))
+    assert r.status_code == 200, r.text
+    assert w["fresh"](t).assigned_user_id == w["a"].id
+    # อีกโรงเรียนไม่เห็นคิวนี้
+    other = client.get("/api/dispatch/me", headers=w["h"](w["d"])).json()
+    assert t.ticket_id not in [p["ticket_id"] for p in other["pool"]]
+
+
+def test_backlog_goes_to_whoever_frees_up_first_oldest_job_first(client, world, monkeypatch):
+    w = world
+    kicks = []
+    # kick จริงจะ sweep ทั้งฐานข้อมูล (รวมข้อมูล demo) — ในเทสต์จำกัดเฉพาะใบของเรา
+    monkeypatch.setattr(dispatch, "kick", lambda: kicks.append(1))
+    job_a = w["ticket"]("in_progress", assigned_user_id=w["a"].id, assigned_to="ช่างA")
+    w["ticket"]("in_progress", assigned_user_id=w["b"].id, assigned_to="ช่างB")
+    old, newer = w["ticket"](), w["ticket"]()
+    for t in (old, newer):
+        dispatch.dispatch_ticket(t.id)
+    assert w["fresh"](old).status == w["fresh"](newer).status == "new"
+    # A ปิดงานเดิม → ว่าง → ระบบมอบงานค้างใบที่เก่าสุดให้ A ทันที (kick) ใบเดียว
+    r = client.post(f"/api/tickets/{job_a.ticket_id}/resolve", json={"solution": "เปลี่ยนสาย"}, headers=w["h"](w["a"]))
+    assert r.status_code == 200, r.text
+    assert kicks, "ปิดงานแล้วต้องสั่งให้ระบบมอบงานค้างทันที"
+    dispatch.sweep(only_ids=[old.id, newer.id])
+    fo, fn = w["fresh"](old), w["fresh"](newer)
+    assert fo.status == "assigned" and fo.assigned_user_id == w["a"].id and fo.auto_assigned
+    assert fn.status == "new" and fn.assigned_user_id is None
+
+
+def test_tech_who_does_not_answer_is_not_repinged_until_cooldown_or_app_opened(client, world):
+    w = world
+    w["ticket"]("in_progress", assigned_user_id=w["b"].id, assigned_to="ช่างB")  # เหลือ A ว่างคนเดียว
+    t, other = w["ticket"](), w["ticket"]()
+    dispatch.dispatch_ticket(t.id)
+    assert w["fresh"](t).assigned_user_id == w["a"].id
+    later = datetime.now(timezone.utc) + timedelta(minutes=dispatch.offer_minutes() + 1)
+    dispatch.sweep(now=later, only_ids=[t.id, other.id])
+    f = w["fresh"](t)
+    # ไม่มีคนว่างอื่น → กลับเข้าคิวงานค้าง และไม่เด้งกลับไปหา A ทันที (ไม่ว่าใบไหน)
+    assert f.status == "new" and f.assigned_user_id is None
+    assert w["fresh"](other).assigned_user_id is None
+    # sweep อีกรอบระหว่างช่วงพัก → ยังไม่เด้งซ้ำ
+    dispatch.sweep(now=later + timedelta(minutes=10), only_ids=[t.id, other.id])
+    assert w["fresh"](t).assigned_user_id is None
+    # พ้นช่วงพัก → A ได้งานค้างใบเก่าสุดอีกครั้ง
+    after = later + timedelta(minutes=dispatch.timeout_cooldown_minutes() + 1)
+    dispatch.sweep(now=after, only_ids=[t.id, other.id])
+    assert w["fresh"](t).assigned_user_id == w["a"].id
+
+
+def test_tech_who_reopens_the_app_gets_backlog_again_before_cooldown(client, world):
+    w = world
+    w["ticket"]("in_progress", assigned_user_id=w["b"].id, assigned_to="ช่างB")
+    t = w["ticket"]()
+    dispatch.dispatch_ticket(t.id)
+    timeout_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+    with SessionLocal() as s:  # ทำให้ข้อเสนอหมดเวลาไปแล้วตอนนี้
+        s.get(RepairTicket, t.id).assigned_at = timeout_at - timedelta(minutes=dispatch.offer_minutes() + 1)
+        s.commit()
+    dispatch.sweep(now=timeout_at, only_ids=[t.id])
+    assert w["fresh"](t).assigned_user_id is None
+    # A เปิดแอป (หน้าเว็บถาม /api/dispatch/me) หลังหมดเวลา → กลับมาพร้อมแล้ว
+    with SessionLocal() as s:
+        s.get(User, w["a"].id).last_seen_at = None
+        s.commit()
+    client.get("/api/dispatch/me", headers=w["h"](w["a"]))
+    dispatch.sweep(only_ids=[t.id])
+    assert w["fresh"](t).assigned_user_id == w["a"].id
+
+def test_staff_detail_shows_load_open_jobs_and_is_scoped(client, world, admin_headers):
+    w = world
+    job = w["ticket"]("in_progress", assigned_user_id=w["a"].id, assigned_to="ช่างA",
+                      assigned_at=datetime.now(timezone.utc))
+    w["ticket"]("resolved", assigned_user_id=w["a"].id, resolved_at=datetime.now(timezone.utc))
+    body = client.get(f"/api/dispatch/staff/{w['a'].id}", headers=admin_headers)
+    assert body.status_code == 200, body.text
+    d = body.json()
+    assert d["state"] == "busy" and d["load"]["active"] == 1 and d["load"]["done_7d"] == 1
+    assert [t["ticket_id"] for t in d["open_tickets"]] == [job.ticket_id]
+    assert len(d["recent_done"]) == 1
+    summary = client.get("/api/dispatch/summary", headers=admin_headers).json()
+    a_row = next(s for s in summary["staff"] if s["id"] == w["a"].id)
+    assert a_row["current"]["ticket_id"] == job.ticket_id and "picture_url" in a_row
+    # แอดมินโรงเรียน 2 ดูช่างโรงเรียน 1 ไม่ได้ / ช่างดูไม่ได้
+    assert client.get(f"/api/dispatch/staff/{w['a'].id}", headers=w["h"](w["sch"])).status_code == 404
+    assert client.get(f"/api/dispatch/staff/{w['a'].id}", headers=w["h"](w["b"])).status_code == 403

@@ -295,7 +295,7 @@ export default function AIChatWidget() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder="พิมพ์ข้อความâ¦"
+              placeholder="พิมพ์ข้อความ…"
               aria-label="พิมพ์ข้อความถึงผู้ช่วย AI"
               style={{
                 flex: 1,

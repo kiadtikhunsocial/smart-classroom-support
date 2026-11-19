@@ -58,3 +58,45 @@
   .detail-sheet-field.is-wide { grid-column: auto; }
   .detail-sheet-footer { padding: 12px 20px; }
 }
+
+/* ── ใบงาน: ผู้แจ้ง / สินค้า / ไทม์ไลน์ (TicketDetailSheet) ───────────────── */
+.detail-sheet .tk-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; }
+.detail-sheet .tk-chips .badge { font-size: .74rem; }
+.detail-sheet .tk-chip-late { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--color-danger, #ef4444) 16%, transparent); color: var(--color-danger, #ef4444); font-size: .74rem; font-weight: 700; }
+.detail-sheet .tk-identity-date { margin: 12px 0 0; color: var(--detail-muted); font-size: .84rem; }
+.detail-sheet .tk-identity-date strong { color: var(--detail-ink); font-weight: 700; }
+
+.detail-sheet .tk-contact { display: grid; gap: 12px; padding: 14px 16px; border: 1px solid var(--detail-line); border-radius: 12px; background: var(--detail-soft); }
+.detail-sheet .tk-contact-name strong { display: block; color: var(--detail-ink); font-size: 1.02rem; line-height: 1.4; }
+.detail-sheet .tk-contact-name span { color: var(--detail-muted); font-size: .8rem; }
+.detail-sheet .tk-contact-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.detail-sheet .tk-contact-list li { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 32px; }
+.detail-sheet .tk-contact-label { color: var(--detail-muted); font-size: .76rem; }
+.detail-sheet .tk-contact-value { color: var(--detail-ink); font-size: .92rem; font-weight: 700; overflow-wrap: anywhere; }
+.detail-sheet a.tk-contact-value { text-decoration: none; }
+.detail-sheet a.tk-contact-value:hover { text-decoration: underline; }
+.detail-sheet .tk-contact-value.is-plain { font-weight: 600; font-size: .85rem; grid-column: 2 / -1; }
+.detail-sheet .tk-contact-none { color: var(--detail-muted); font-size: .82rem; grid-column: 2 / -1; }
+.detail-sheet .tk-copy { padding: 4px 10px; border: 1px solid var(--detail-line); border-radius: 8px; background: var(--color-surface); color: var(--detail-ink); font: inherit; font-size: .72rem; cursor: pointer; }
+.detail-sheet .tk-copy:hover { border-color: var(--detail-muted); }
+
+.detail-sheet .tk-warranty { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+.detail-sheet .tk-warranty.is-ok { background: color-mix(in srgb, var(--color-success, #10b981) 16%, transparent); color: var(--color-success, #10b981); }
+.detail-sheet .tk-warranty.is-out { background: color-mix(in srgb, var(--color-danger, #ef4444) 14%, transparent); color: var(--color-danger, #ef4444); }
+
+.detail-sheet .tk-timeline { display: grid; gap: 0; margin: 0 0 14px; padding: 0; list-style: none; }
+.detail-sheet .tk-timeline li { position: relative; display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 0 7px 22px; font-size: .84rem; }
+.detail-sheet .tk-timeline li::before { content: ''; position: absolute; left: 4px; top: 13px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--detail-line); background: var(--color-surface); }
+.detail-sheet .tk-timeline li::after { content: ''; position: absolute; left: 8px; top: 24px; bottom: -6px; width: 2px; background: var(--detail-line); }
+.detail-sheet .tk-timeline li:last-child::after { display: none; }
+.detail-sheet .tk-timeline li.is-done::before { border-color: var(--color-success, #10b981); background: var(--color-success, #10b981); }
+.detail-sheet .tk-timeline-label { color: var(--detail-ink); font-weight: 700; }
+.detail-sheet .tk-timeline li.is-todo .tk-timeline-label,
+.detail-sheet .tk-timeline li.is-todo .tk-timeline-at { color: var(--detail-muted); font-weight: 500; }
+.detail-sheet .tk-timeline-at { color: var(--detail-ink); }
+
+@media (max-width: 620px) {
+  .detail-sheet .tk-timeline li { grid-template-columns: 1fr; gap: 0; }
+  .detail-sheet .tk-contact-list li { grid-template-columns: 52px minmax(0, 1fr) auto; }
+}
+.detail-sheet .tk-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 12px; }

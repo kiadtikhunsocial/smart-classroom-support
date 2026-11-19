@@ -5,8 +5,28 @@ import ConfirmDialog from '../ConfirmDialog';
 import DetailField from '../DetailField';
 import { actionsFor, validateActionInput, type TicketAction } from './ticketActions';
 import {
-  ticketDetailChannel, ticketDetailDate, ticketDetailPriority, ticketDetailStatus,
+  formatThaiPhone, ticketDateLong, ticketDetailChannel, ticketDetailDate, ticketDetailPriority, ticketDetailStatus, ticketRelative,
 } from './ticketLabels';
+import { reporterTypeLabel } from '../../reporterTypes';
+
+const ticketDateShort = (v: string) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v
+    : d.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+/** ปุ่มคัดลอกเบอร์/อีเมล — ช่างกดแล้ววางใน LINE/โทรศัพท์ได้เลย */
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button type="button" className="tk-copy" aria-label={`คัดลอก ${text}`}
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(() => { setDone(true); window.setTimeout(() => setDone(false), 1500); }).catch(() => {});
+      }}>
+      {done ? 'คัดลอกแล้ว' : 'คัดลอก'}
+    </button>
+  );
+}
 
 export interface TicketDetailSheetProps {
   ticketId: string;
@@ -24,6 +44,7 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
   const [history, setHistory] = useState<any[]>([]);
   const [comments, setComments] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [device, setDevice] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -45,7 +66,12 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
       api.listTicketComments(ticketId), api.listTicketAttachments(ticketId),
     ]);
     if (id !== requestId.current) return;
-    if (full.status === 'fulfilled') setTicket(full.value);
+    if (full.status === 'fulfilled') {
+      setTicket(full.value);
+      // ข้อมูลเครื่องเต็ม (ซีเรียล อาคาร ชั้น ประกัน) — โหลดไม่ได้ก็ยังแสดงจาก device_info ในใบงาน
+      const deviceId = full.value?.device_id;
+      if (deviceId) api.getDevice(deviceId).then((d) => { if (id === requestId.current) setDevice(d); }).catch(() => {});
+    }
     else setError(initial ? 'โหลดรายละเอียดล่าสุดไม่สำเร็จ กำลังแสดงข้อมูลจากรายการ' : 'โหลดใบงานนี้ไม่สำเร็จ');
     setHistory(hist.status === 'fulfilled' ? hist.value : []);
     setComments(comm.status === 'fulfilled' ? comm.value : []);
@@ -107,6 +133,33 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
   const actions = ticket ? actionsFor(ticket.status, canManage) : [];
 
   const t = ticket;
+  const dev = device;
+  const location = dev
+    ? [dev.organization_name, dev.building && `อาคาร ${dev.building}`.replace('อาคาร อาคาร', 'อาคาร'),
+       dev.floor && `ชั้น ${dev.floor}`, dev.room_name].filter(Boolean).join(' · ')
+    : (t?.device_info?.room_name ? [t.device_info.organization_name, t.device_info.room_name].filter(Boolean).join(' · ') : null);
+  const warranty = dev?.warranty_until
+    ? (new Date(dev.warranty_until).getTime() >= Date.now()
+        ? <span className="tk-warranty is-ok">อยู่ในประกัน ถึง {ticketDateShort(dev.warranty_until)}</span>
+        : <span className="tk-warranty is-out">หมดประกันแล้ว ({ticketDateShort(dev.warranty_until)})</span>)
+    : (dev ? 'ไม่มีข้อมูลประกัน' : null);
+  const slaLate = !!(t?.sla_due_at && !t.resolved_at && !['closed', 'cancelled', 'resolved'].includes(t.status)
+    && new Date(t.sla_due_at).getTime() < Date.now());
+  // เวลาแต่ละขั้นเอาจากประวัติสถานะ (ครั้งแรกที่เข้าแต่ละสถานะ) เสริมด้วยฟิลด์ในใบงาน
+  // /history ส่งมาแบบใหม่สุดก่อน → หาเวลาที่ "เร็วที่สุด" ของแต่ละสถานะเอง ไม่พึ่งลำดับ
+  const firstAt = (status: string): string | undefined => history
+    .filter((h) => h.to_status === status && h.from_status !== status && h.created_at)
+    .map((h) => h.created_at as string)
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
+  const timeline: { label: string; at?: string; hint?: string }[] = t ? [
+    { label: 'แจ้งซ่อม', at: t.created_at },
+    { label: 'มอบหมายช่าง', at: t.assigned_at || firstAt('assigned') },
+    { label: 'เริ่มซ่อม', at: firstAt('in_progress') },
+    { label: 'ซ่อมเสร็จ', at: t.resolved_at || firstAt('resolved') },
+    t.status === 'cancelled'
+      ? { label: 'ยกเลิก', at: firstAt('cancelled') }
+      : { label: 'ปิดงาน', at: t.closed_at || firstAt('closed'), hint: t.status === 'resolved' ? 'รอผู้แจ้งยืนยัน' : undefined },
+  ] : [];
   return (
     <div className="panel-overlay" onClick={onClose}>
       <div className="repair-panel detail-sheet tk-sheet" onClick={(e) => e.stopPropagation()}
@@ -120,33 +173,76 @@ export default function TicketDetailSheet({ ticketId, initial, canManage, onClos
           {error && <p className="detail-sheet-warning" role="alert">{error}</p>}
           {t && !loading && <>
             <div className="detail-sheet-identity">
-              <p className="detail-sheet-kicker">ใบงาน {t.ticket_id}</p>
+              <p className="detail-sheet-kicker">ใบงาน <span className="tk-mono">{t.ticket_id}</span></p>
               <h4 className="detail-sheet-name">{t.title || 'ไม่ได้ระบุหัวข้อ'}</h4>
-              <div className="detail-sheet-statuses">
-                <span>{ticketDetailStatus(t.status)}</span>
-                <span>ความเร่งด่วน {ticketDetailPriority[t.priority] || t.priority || '—'}</span>
+              <div className="tk-chips">
+                <span className={`badge badge-${t.status}`}>{ticketDetailStatus(t.status)}</span>
+                <span className={`badge badge-priority-${t.priority}`}>ความเร่งด่วน: {ticketDetailPriority[t.priority] || t.priority || '—'}</span>
+                {slaLate && <span className="tk-chip-late">เกินกำหนด SLA</span>}
               </div>
+              <p className="tk-identity-date">
+                แจ้งเมื่อ <strong>{ticketDateLong(t.created_at)}</strong>
+                <span> ({ticketRelative(t.created_at)})</span>
+              </p>
             </div>
 
-            <section className="detail-sheet-section"><h4>สถานะและเวลา</h4>
+            {/* ── ผู้แจ้ง / ลูกค้า: ชื่อ + ช่องทางติดต่อกดได้ทันที ───────────────── */}
+            <section className="detail-sheet-section tk-block"><h4>ผู้แจ้ง / ลูกค้า</h4>
+              <div className="tk-contact">
+                <div className="tk-contact-name">
+                  <strong>{t.reporter_name || 'ไม่ระบุชื่อ'}</strong>
+                  <span>{[reporterTypeLabel(t.reporter_type), t.organization_name].filter((x) => x && x !== '-').join(' · ')}</span>
+                </div>
+                <ul className="tk-contact-list">
+                  <li>
+                    <span className="tk-contact-label">โทร</span>
+                    {t.reporter_phone
+                      ? <><a href={`tel:${String(t.reporter_phone).replace(/[^\d+]/g, '')}`} className="tk-contact-value">{formatThaiPhone(t.reporter_phone)}</a>
+                          <CopyButton text={t.reporter_phone} /></>
+                      : <span className="tk-contact-none">ไม่ได้ให้ไว้</span>}
+                  </li>
+                  <li>
+                    <span className="tk-contact-label">อีเมล</span>
+                    {t.reporter_email
+                      ? <><a href={`mailto:${t.reporter_email}?subject=${encodeURIComponent(`ใบงาน ${t.ticket_id}`)}`} className="tk-contact-value">{t.reporter_email}</a>
+                          <CopyButton text={t.reporter_email} /></>
+                      : <span className="tk-contact-none">ไม่ได้ให้ไว้</span>}
+                  </li>
+                  <li>
+                    <span className="tk-contact-label">ช่องทาง</span>
+                    <span className="tk-contact-value is-plain">{ticketDetailChannel[t.channel] || t.channel || '—'}</span>
+                  </li>
+                </ul>
+              </div>
+            </section>
+
+            {/* ── รายละเอียดสินค้า/อุปกรณ์: แยกทีละช่อง ยี่ห้อ รุ่น ซีเรียล ที่ตั้ง ประกัน ── */}
+            <section className="detail-sheet-section tk-block"><h4>สินค้า / อุปกรณ์ที่แจ้งซ่อม</h4>
               <dl className="detail-sheet-grid">
-                <DetailField label="สถานะ" value={ticketDetailStatus(t.status)} />
-                <DetailField label="ความเร่งด่วน" value={ticketDetailPriority[t.priority] || t.priority} />
-                <DetailField label="แจ้งเมื่อ" value={ticketDetailDate(t.created_at)} />
-                <DetailField label="อัปเดตล่าสุด" value={ticketDetailDate(t.updated_at)} />
-                <DetailField label="กำหนด SLA" value={ticketDetailDate(t.sla_due_at)} />
-                <DetailField label="ช่องทาง" value={ticketDetailChannel[t.channel] || t.channel} />
+                <DetailField label="ประเภท" value={dev?.device_type || t.device_type || t.device_info?.device_type} />
+                <DetailField label="ยี่ห้อ" value={dev?.brand || t.device_info?.brand} />
+                <DetailField label="รุ่น" value={dev?.model || t.device_info?.model} />
+                <DetailField label="หมายเลขเครื่อง (S/N)" value={dev?.serial_number} mono />
+                <DetailField label="รหัสอุปกรณ์" value={t.device_id} mono />
+                <DetailField label="ที่ตั้ง" value={location} />
+                <DetailField label="การรับประกัน" value={warranty} />
+                <DetailField label="วันที่ซื้อ" value={dev?.purchase_date ? ticketDateShort(dev.purchase_date) : null} />
               </dl>
             </section>
 
-            <section className="detail-sheet-section"><h4>อุปกรณ์และผู้เกี่ยวข้อง</h4>
-              <dl className="detail-sheet-grid">
-                <DetailField label="อุปกรณ์" value={t.device_label || t.device_id} wide />
-                <DetailField label="รหัสอุปกรณ์" value={t.device_id} mono />
-                <DetailField label="โรงเรียน" value={t.organization_name} />
-                <DetailField label="ผู้แจ้ง" value={t.reporter_name} />
-                <DetailField label="เบอร์ติดต่อ" value={t.reporter_phone} />
+            {/* ── วันเวลาทุกขั้นตอน ───────────────────────────────────────── */}
+            <section className="detail-sheet-section tk-block"><h4>วันเวลา</h4>
+              <ol className="tk-timeline">
+                {timeline.map((s, i) => (
+                  <li key={s.label} className={s.at ? 'is-done' : 'is-todo'}>
+                    <span className="tk-timeline-label">{s.label}</span>
+                    <span className="tk-timeline-at">{s.at ? ticketDateLong(s.at) : (s.hint || (timeline.slice(i + 1).some((x) => x.at) ? 'ไม่มีบันทึกเวลา' : 'ยังไม่ถึงขั้นนี้'))}</span>
+                  </li>
+                ))}
+              </ol>
+              <dl className="detail-sheet-grid tk-after-timeline">
                 <DetailField label="ผู้รับผิดชอบ" value={t.assigned_to} />
+                <DetailField label="กำหนดเสร็จ (SLA)" value={t.sla_due_at ? `${ticketDateLong(t.sla_due_at)}${slaLate ? ' — เกินกำหนดแล้ว' : ''}` : null} />
               </dl>
             </section>
 

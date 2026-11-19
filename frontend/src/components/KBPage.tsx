@@ -143,7 +143,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
           </div>
         </div>
         <div className="top-bar-actions">
-          <input className="form-input" style={{ width: 200 }} placeholder="ค้นหาบทความâ¦" value={q}
+          <input className="form-input" style={{ width: 200 }} placeholder="ค้นหาบทความ…" value={q}
             onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
           <button className="btn btn-secondary btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -342,7 +342,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
                 </label>
                 <div style={{ flex: 1 }} />
                 <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'กำลังบันทึกâ¦' : (editing ? 'บันทึก' : 'เพิ่ม')}</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'กำลังบันทึก…' : (editing ? 'บันทึก' : 'เพิ่ม')}</button>
               </div>
             </form>
           </div>

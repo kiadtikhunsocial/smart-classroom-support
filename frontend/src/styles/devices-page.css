@@ -67,3 +67,95 @@
 @media (max-width: 768px) {
   .devices-page .page-section { padding: 10px; }
 }
+
+/* ============================================================================
+   หน้าอุปกรณ์ (ออกแบบใหม่): การ์ดสรุป → ค้นหา/ตัวกรอง → ชิปหมวดหมู่ → ตาราง/การ์ด
+   ใช้ token ของธีมทั้งหมด → อ่านออกทั้งโหมดมืดและสว่าง
+   ========================================================================== */
+.devices-page .dv-actions { display: flex; gap: 8px; align-items: center; }
+.dv-more { position: relative; }
+.dv-more-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 250px; padding: 6px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: 0 18px 40px -18px rgba(0,0,0,.5); }
+.dv-more-menu button { display: block; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--color-text); font: inherit; font-size: .86rem; text-align: start; cursor: pointer; }
+.dv-more-menu button:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+
+.dv-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.dv-kpi { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--color-border); border-inline-start: 4px solid var(--dv-k, var(--color-border)); border-radius: 12px; background: var(--color-surface); color: var(--color-text); font: inherit; text-align: start; cursor: pointer; transition: border-color .15s ease, transform .15s ease; }
+.dv-kpi:hover { transform: translateY(-1px); }
+.dv-kpi strong { font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.dv-kpi span { color: var(--color-text-secondary); font-size: .78rem; }
+.dv-kpi.is-all { --dv-k: var(--color-primary, #7c4dff); }
+.dv-kpi.is-open { --dv-k: var(--color-info, #0b84d6); }
+.dv-kpi.is-expiring { --dv-k: var(--color-warning, #d97706); }
+.dv-kpi.is-expired { --dv-k: var(--color-danger, #dc2b3f); }
+.dv-kpi.is-inactive { --dv-k: var(--color-text-tertiary, #9ca3af); }
+.dv-kpi.is-on { border-color: var(--dv-k); background: color-mix(in srgb, var(--dv-k) 10%, var(--color-surface)); }
+
+.dv-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.dv-toolbar .form-select { width: auto; min-width: 150px; flex: 0 1 190px; }
+.dv-search { flex: 1 1 220px; display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 42px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text-secondary); }
+.dv-search:focus-within { border-color: var(--color-primary, #7c4dff); }
+.dv-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; font-size: .9rem; }
+.dv-view { display: inline-flex; border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; }
+.dv-view button { display: grid; place-items: center; width: 42px; height: 40px; border: 0; background: var(--color-surface); color: var(--color-text-secondary); cursor: pointer; }
+.dv-view button.is-on { background: var(--color-primary, #7c4dff); color: #fff; }
+
+.dv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.dv-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface); color: var(--color-text); font: inherit; font-size: .8rem; cursor: pointer; }
+.dv-chip em { font-style: normal; color: var(--color-text-secondary); font-size: .74rem; font-variant-numeric: tabular-nums; }
+.dv-chip.is-on { border-color: var(--color-primary, #7c4dff); background: color-mix(in srgb, var(--color-primary, #7c4dff) 14%, var(--color-surface)); }
+.dv-chip.is-on em { color: var(--color-text); }
+
+.dv-resultbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 2px 10px; color: var(--color-text-secondary); font-size: .82rem; }
+.dv-clear { border: 0; background: transparent; color: var(--color-primary, #7c4dff); font: inherit; font-weight: 600; cursor: pointer; }
+
+/* ตาราง */
+.dv-table td { vertical-align: middle; }
+.dv-table tr.has-ticket > td:first-child { box-shadow: inset 4px 0 0 var(--color-info, #0b84d6); }
+.dv-cell-device { display: flex; align-items: center; gap: 12px; }
+.dv-glyph-box { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: color-mix(in srgb, var(--color-primary, #7c4dff) 12%, transparent); color: var(--color-primary, #7c4dff); }
+.dv-cell-main { display: grid; gap: 1px; min-width: 0; }
+.dv-cell-main strong { color: var(--color-text); font-size: .88rem; }
+.dv-cell-main span { color: var(--color-text-secondary); font-size: .76rem; }
+.dv-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .76rem; color: var(--color-text-secondary); }
+.dv-sub { display: block; margin-top: 3px; color: var(--color-text-secondary); font-size: .72rem; }
+.dv-demo { margin-inline-start: 6px; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--color-warning, #d97706) 18%, transparent); color: var(--color-warning, #d97706); font-size: .66rem; font-weight: 700; }
+.dv-warranty { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: .76rem; font-weight: 700; white-space: nowrap; }
+.dv-warranty::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.dv-warranty.is-active { background: color-mix(in srgb, var(--color-success, #15803d) 14%, transparent); color: var(--color-success, #15803d); }
+.dv-warranty.is-expiring { background: color-mix(in srgb, var(--color-warning, #b45309) 16%, transparent); color: var(--color-warning, #b45309); }
+.dv-warranty.is-expired { background: color-mix(in srgb, var(--color-danger, #b91c1c) 14%, transparent); color: var(--color-danger, #b91c1c); }
+.dv-warranty.is-unknown { background: color-mix(in srgb, var(--color-text) 7%, transparent); color: var(--color-text-secondary); }
+.dv-ticket-flag { display: inline-block; margin-inline-start: 6px; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--color-info, #0b84d6) 16%, transparent); color: var(--color-info, #0b84d6); font-size: .7rem; font-weight: 700; }
+.dv-row-actions { white-space: nowrap; text-align: end; }
+.dv-icon-btn { display: inline-grid; place-items: center; width: 32px; height: 32px; margin-inline-start: 4px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text-secondary); cursor: pointer; }
+.dv-icon-btn:hover { color: var(--color-text); border-color: var(--color-text-secondary); }
+.dv-chev { display: inline-block; margin-inline-start: 10px; color: var(--color-text-tertiary, #9ca3af); font-size: 1.2rem; vertical-align: middle; }
+
+/* การ์ด */
+.dv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.dv-card { display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); cursor: pointer; transition: transform .15s ease, border-color .15s ease; }
+.dv-card:hover, .dv-card:focus-visible { transform: translateY(-2px); border-color: var(--color-primary, #7c4dff); outline: none; }
+.dv-card.has-ticket { border-inline-start: 4px solid var(--color-info, #0b84d6); }
+.dv-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.dv-card-type { color: var(--color-text); font-size: .95rem; }
+.dv-card-model { color: var(--color-text-secondary); font-size: .8rem; }
+.dv-card-loc { color: var(--color-text-secondary); font-size: .76rem; }
+.dv-card-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 8px; }
+.dv-card-foot .dv-ticket-flag { margin: 0; }
+.dv-card-actions { display: flex; gap: 6px; padding-top: 8px; border-top: 1px solid var(--color-border); margin-top: 8px; }
+
+.dv-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px 0 4px; color: var(--color-text-secondary); font-size: .85rem; }
+
+@media (max-width: 1100px) { .dv-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .dv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dv-kpi strong { font-size: 1.2rem; }
+  .dv-toolbar .form-select { flex: 1 1 100%; }
+  .dv-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .dv-chip { flex: none; }
+}
+
+/* สถานะเครื่อง: ใช้งาน=เขียว พัก=เหลือง ปลดระวาง=เทา */
+.devices-page .badge-active { background: color-mix(in srgb, var(--color-success, #15803d) 14%, transparent); color: var(--color-success, #15803d); }
+.devices-page .badge-inactive { background: color-mix(in srgb, var(--color-warning, #b45309) 16%, transparent); color: var(--color-warning, #b45309); }
+.devices-page .badge-decommissioned { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-text-secondary); }

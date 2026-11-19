@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 /** URL ที่ชี้กลับมาเครื่องของผู้ใช้เอง — ใช้ได้แค่ตอน dev ห้ามฝังลง production build */
 function isLoopback(url: string): boolean {
@@ -38,7 +39,9 @@ export default defineConfig(({ mode }) => {
       // ค่าว่าง = ไม่ได้ระบุ → client.ts fallback เป็น '/api' (ดู resolveApiBase)
       __VITE_API_URL__: JSON.stringify(apiUrl),
     },
-    plugins: [react()],
+    // DEV_HTTPS=1 → dev server เสิร์ฟ https ด้วย cert ชั่วคราว
+    // จำเป็นตอนทดสอบสแกน QR จากมือถือผ่าน IP ในวง LAN: เบราว์เซอร์เปิดกล้องให้เฉพาะ HTTPS/localhost
+    plugins: process.env.DEV_HTTPS === '1' && !isProd ? [react(), basicSsl()] : [react()],
     build: {
       rollupOptions: {
         output: {

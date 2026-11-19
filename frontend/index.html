@@ -6,41 +6,43 @@
     <link rel="apple-touch-icon" href="/logo.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="ระบบจัดการแจ้งซ่อมอุปกรณ์ห้องเรียนอัจฉริยะ — แจ้งซ่อม ติดตามสถานะ และดูแลอุปกรณ์ในที่เดียว" />
-    <!-- ธีมของแอปถูกเลือกจากหน้าตั้งค่า (theme.ts) ไม่ใช่จาก prefers-color-scheme
-         ของ OS จึงตั้ง theme-color เป็น navy ค่าเดียวให้ตรงกับค่าเริ่มต้น (dark)
-         ถ้าผู้ใช้สลับเป็นโหมดสว่าง applyThemePrefs() จะอัปเดต tag นี้ตอน runtime -->
-    <meta name="theme-color" content="#050B1C" />
-    <meta name="color-scheme" content="dark light" />
-    <!-- พื้นก่อน CSS ภายนอกโหลดเสร็จ — กันจอขาวกระพริบหนึ่งเฟรมตอนเปิดแอป
-         (initTheme() ใน main.tsx ทำงานหลัง bundle โหลด ซึ่งช้ากว่า paint ครั้งแรก)
-         html:not([data-mode]) = ช่วงก่อน initTheme() ทาธีม → ใช้ navy ตามค่าเริ่มต้น
-         หลัง initTheme() attribute ถูกตั้ง → กฎด้านล่างเข้าคุม จึงไม่มี navy
-         โผล่ที่ขอบล่างเมื่อผู้ใช้เลือกโหมดสว่างและเนื้อหาสั้นกว่าจอ -->
+    <!-- ค่าเริ่มต้น = โหมดสว่าง (ดีไซน์ Calm) — สคริปต์ด้านล่างอ่านโหมดที่ผู้ใช้เลือกไว้
+         แล้วทาลง <html> ก่อน paint แรก จอจึงไม่กระพริบสลับสี -->
+    <meta name="theme-color" content="#F4F6F9" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var p = JSON.parse(localStorage.getItem('sc_theme_prefs_v2') || 'null');
+          var m = p && p.mode === 'dark' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-mode', m);
+          document.documentElement.setAttribute('data-accent', (p && p.accent) || 'navy');
+        } catch (e) {
+          document.documentElement.setAttribute('data-mode', 'light');
+          document.documentElement.setAttribute('data-accent', 'navy');
+        }
+      })();
+    </script>
     <style>
-      html,
-      body {
-        margin: 0;
-      }
-      html:not([data-mode]),
-      html[data-mode='dark'] {
-        background-color: #050b1c;
-      }
-      html[data-mode='light'] {
-        background-color: #f7f8fb;
-      }
+      html, body { margin: 0; }
+      html, html[data-mode='light'] { background-color: #f4f6f9; }
+      html[data-mode='dark'] { background-color: #12161d; }
       /* หน้าโหลดแรก (ก่อน React พร้อม) — React แทนที่ทั้งก้อนเมื่อ render ครั้งแรก
          หน่วง 150ms ก่อนโผล่: เน็ตเร็วจะไม่เห็นมันกระพริบเลย */
-      .boot { position: fixed; inset: 0; display: grid; place-items: center; font-family: 'Noto Sans Thai', system-ui, sans-serif; color: #c9d3ee; }
-      html[data-mode='light'] .boot { color: #33405c; }
-      .boot-inner { display: grid; justify-items: center; gap: 14px; animation: boot-in 300ms ease-out 150ms both; }
-      .boot-logo { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; box-shadow: 0 8px 30px rgb(0 0 0 / 0.25); }
-      .boot-name { font-size: 15px; font-weight: 600; }
-      .boot-bar { position: relative; width: 140px; height: 3px; overflow: hidden; border-radius: 3px; background: rgb(127 140 180 / 0.25); }
-      .boot-bar::after { content: ''; position: absolute; inset: 0; width: 40%; border-radius: 3px; background: #7c6cff; animation: boot-slide 1.1s ease-in-out infinite; }
+      .boot { position: fixed; inset: 0; display: grid; place-items: center; font-family: 'Noto Sans Thai', system-ui, sans-serif; color: #1b2333; }
+      html[data-mode='dark'] .boot { color: #e4e8ee; }
+      .boot-inner { display: grid; justify-items: center; gap: 12px; padding: 32px 40px; animation: boot-in 280ms ease-out 150ms both; }
+      .boot-logo { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 1px solid #e1e6ed; background: #fff; }
+      html[data-mode='dark'] .boot-logo { border-color: #2a313d; }
+      .boot-name { font-size: 15px; font-weight: 600; letter-spacing: 0; }
+      .boot-sub { font-size: 13px; color: #6b7686; }
+      html[data-mode='dark'] .boot-sub { color: #8a93a2; }
+      .boot-spin { width: 22px; height: 22px; margin-top: 6px; border-radius: 50%; border: 2.5px solid #e1e6ed; border-top-color: #24497f; animation: boot-spin 0.8s linear infinite; }
+      html[data-mode='dark'] .boot-spin { border-color: #2a313d; border-top-color: #8faedb; }
       .boot-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-      @keyframes boot-in { from { opacity: 0; transform: translateY(6px); } }
-      @keyframes boot-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
-      @media (prefers-reduced-motion: reduce) { .boot-inner, .boot-bar::after { animation: none; } }
+      @keyframes boot-in { from { opacity: 0; transform: translateY(4px); } }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .boot-inner { animation: none; } .boot-spin { animation-duration: 2.4s; } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -54,9 +56,10 @@
     <div id="root">
       <div class="boot" role="status" aria-live="polite">
         <div class="boot-inner">
-          <img class="boot-logo" src="/logo.jpg" alt="" width="64" height="64" fetchpriority="high" />
+          <img class="boot-logo" src="/logo.jpg" alt="" width="56" height="56" fetchpriority="high" />
           <span class="boot-name">IWA Smart Classroom Support</span>
-          <span class="boot-bar" aria-hidden="true"></span>
+          <span class="boot-sub">ระบบแจ้งซ่อมและดูแลอุปกรณ์ห้องเรียน</span>
+          <span class="boot-spin" aria-hidden="true"></span>
           <span class="boot-sr">กำลังโหลด…</span>
         </div>
       </div>

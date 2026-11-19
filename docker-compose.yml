@@ -139,6 +139,8 @@ services:
     environment:
       # ใช้ตอน "รัน" โดย server.proxy / preview.proxy ใน vite.config.ts — ชื่อ service ในเครือข่าย compose
       API_PROXY_TARGET: http://backend:8000
+      # FRONTEND_DEV_HTTPS=1 → https://<IP เครื่อง>:5173 ให้มือถือในวง LAN เปิดกล้องสแกน QR ได้
+      DEV_HTTPS: ${FRONTEND_DEV_HTTPS:-0}
       # bind mount จาก Windows/macOS ไม่ส่งอีเวนต์ inotify เข้าคอนเทนเนอร์ → HMR ไม่ทำงาน
       # ค่านี้สั่งให้ vite วนเช็คไฟล์เอง (ดู server.watch ใน vite.config.ts)
       CHOKIDAR_USEPOLLING: "true"

@@ -145,7 +145,7 @@ export default function AuditLogPage({ onBack, userRole }: { onBack: () => void;
 
     {error && <p className="audit-error" role="alert">{error}</p>}
     <div className="audit-list-head"><strong>เหตุการณ์ {logs.length} รายการ</strong><span>หน้า {page + 1}</span></div>
-    {loading ? <div className="loading-state"><div className="spinner" />กำลังโหลดâ¦</div>
+    {loading ? <div className="loading-state"><div className="spinner" />กำลังโหลด…</div>
       : logs.length === 0 ? <div className="audit-empty">ไม่พบเหตุการณ์ในช่วงเวลาหรือเงื่อนไขที่เลือก</div>
         : groups.map((group) => <section className="audit-day" key={group.key} aria-label={group.label}>
           <h2>{group.label}</h2><div className="audit-events">{group.rows.map((row) => <article className="audit-event" key={row.id}>
