@@ -78,7 +78,7 @@
   cursor: pointer;
 }
 .pc-lang select:focus { outline: none; }
-.pc-lang:focus-within { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+.pc-lang:focus-within { outline: none; }
 .pc-lang select option { color: #1d1b29; background: #fff; }
 
 /* ── เลย์เอาต์หลัก ──────────────────────────────────────────────────────── */
@@ -553,3 +553,43 @@
 .pc-mode-btn:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
 .pc-home { --font-display: var(--font-sans); }
 .pc-home .pc-title { font-weight: 700; }
+
+/* ── ปุ่มภาษา: ทุกภาษาเรียงในแถบเดียว แตะครั้งเดียวเปลี่ยน ─────────────── */
+.pc-lang.pc-lang {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  min-height: 38px;
+  padding: 3px;
+  border: 1px solid var(--pc-line);
+  border-radius: 10px;
+  background: var(--pc-surface);
+  cursor: default;
+}
+.pc-lang-btn {
+  min-width: 38px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--pc-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.pc-lang-btn:hover { color: var(--pc-ink); background: var(--pc-sunken); }
+.pc-lang-btn.is-on { background: var(--pc-brand); color: var(--pc-brand-ink); }
+.pc-lang-btn:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 1px; }
+
+@media (max-width: 640px) {
+  /* มือถือ: ซ่อนชื่อระบบไว้เหลือโลโก้ เพื่อให้ปุ่มภาษาครบทุกภาษาในแถวเดียว */
+  .pc-home .pc-topbar .ph-brand-text { display: none; }
+  .pc-lang-btn { min-width: 34px; padding: 0 6px; font-size: 0.78rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-lang-btn { transition: none; }
+}
+.pc-chat-restart { white-space: nowrap; flex: 0 0 auto; }
