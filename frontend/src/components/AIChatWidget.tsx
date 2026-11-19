@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 
 // ใช้ base เดียวกับ client.ts เพื่อไม่ให้สองไฟล์ resolve URL คนละแบบ
 import { API_BASE as BASE } from '../api/client';
+import { useLang } from '../publicI18n';
 
 type Msg = { role: 'user' | 'bot'; text: string };
 
@@ -21,23 +22,20 @@ function resolveSessionId(): string {
   });
 }
 
-/** คำถามเริ่มต้น — แตะแล้วส่งทันที ช่วยให้ผู้ใช้เริ่มเล่าอาการได้โดยไม่ต้องคิดคำ */
-const STARTERS = ['จอไม่ติด ทำยังไงดี', 'เครื่องไม่มีเสียง', 'ทัชสกรีนกดไม่ได้', 'ต่ออินเทอร์เน็ตไม่ได้'];
-
-const GREETING =
-  'สวัสดีค่ะ เล่าอาการของอุปกรณ์มาได้เลย ผู้ช่วยจะถามทีละข้อและแนะนำวิธีแก้เบื้องต้น ' +
-  'ถ้าลองแล้วยังไม่หาย กด "แจ้งซ่อม" ด้านล่างได้ทันทีค่ะ';
 
 /**
  * inline=true: ปุ่มเปิดเป็นแถบในหน้า (อยู่คู่กับปุ่มแจ้งซ่อม/สแกน QR) แทนปุ่มลอยมุมจอ
  */
-export default function AIChatWidget({ inline = false }: { inline?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Msg[]>([]);
+export default function AIChatWidget({ inline = false, embedded = false }: { inline?: boolean; embedded?: boolean }) {
+  // embedded=true: แผงแชตฝังอยู่ในหน้า เปิดค้างไว้ตลอด (หน้าแรกสาธารณะ)
+  const { t } = useLang();
+  const starters = [t('ai_s1'), t('ai_s2'), t('ai_s3'), t('ai_s4')];
+  const [open, setOpen] = useState(embedded);
+  const [messages, setMessages] = useState<Msg[]>(() => (embedded ? [{ role: 'bot', text: t('ai_greeting') }] : []));
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [sessionId] = useState<string>(resolveSessionId);
-  const [greeted, setGreeted] = useState(false);
+  const [greeted, setGreeted] = useState(embedded);
   const bodyRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -46,10 +44,7 @@ export default function AIChatWidget({ inline = false }: { inline?: boolean }) {
   // ข้อความต้อนรับตอนเปิดครั้งแรก
   useEffect(() => {
     if (open && !greeted) {
-      setMessages((m) => [
-        ...m,
-        { role: 'bot', text: GREETING },
-      ]);
+      setMessages((m) => (m.length === 0 ? [{ role: 'bot', text: t('ai_greeting') }] : m));
       setGreeted(true);
     }
   }, [open, greeted]);
@@ -62,8 +57,19 @@ export default function AIChatWidget({ inline = false }: { inline?: boolean }) {
   }, [messages, typing, open]);
 
   useEffect(() => {
-    if (open) closeRef.current?.focus();
-  }, [open]);
+    if (open && !embedded) closeRef.current?.focus();
+  }, [open, embedded]);
+
+  const restart = () => {
+    setMessages([{ role: 'bot', text: t('ai_greeting') }]);
+    setInput('');
+  };
+
+  // เปลี่ยนภาษาตอนยังไม่ได้คุย → เปลี่ยนข้อความต้อนรับตามภาษาใหม่
+  const greetingNow = t('ai_greeting');
+  useEffect(() => {
+    setMessages((m) => (m.length === 1 && m[0].role === 'bot' ? [{ role: 'bot', text: greetingNow }] : m));
+  }, [greetingNow]);
 
   const close = () => {
     setOpen(false);
@@ -88,17 +94,17 @@ export default function AIChatWidget({ inline = false }: { inline?: boolean }) {
         }),
       });
       if (!res.ok) {
-        throw new Error(res.status === 429 ? 'ส่งข้อความเร็วเกินไป กรุณารอสักครู่' : 'ระบบผู้ช่วยยังไม่พร้อม กรุณาลองใหม่อีกครั้ง');
+        throw new Error(res.status === 429 ? t('ai_err_rate') : t('ai_err'));
       }
       const data = await res.json();
       setMessages((m) => [
         ...m,
-        { role: 'bot', text: data?.reply || 'ขออภัย ไม่ได้คำตอบจากผู้ช่วยค่ะ ลองใหม่อีกครั้งนะคะ' },
+        { role: 'bot', text: data?.reply || t('ai_empty') },
       ]);
     } catch (e: any) {
       setMessages((m) => [
         ...m,
-          { role: 'bot', text: e?.message || 'ติดต่อผู้ช่วยไม่ได้ในขณะนี้ กรุณาลองใหม่ค่ะ' },
+          { role: 'bot', text: e?.message || t('ai_err_net') },
       ]);
     } finally {
       setTyping(false);
@@ -111,6 +117,62 @@ export default function AIChatWidget({ inline = false }: { inline?: boolean }) {
       send();
     }
   };
+
+  if (embedded) {
+    const lastBot = messages.reduce((idx, m, i) => (m.role === 'bot' && i > 0 ? i : idx), -1);
+    return (
+      <section className="pc-chat" aria-labelledby={`${panelId}-title`}>
+        <header className="pc-chat-head">
+          <span className="pc-chat-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.4-3.5A7.5 7.5 0 1 1 20 11.5Z" />
+              <path d="M9 10h6m-6 3h4" />
+            </svg>
+          </span>
+          <div className="pc-chat-titles">
+            <h2 id={`${panelId}-title`}>{t('ai_title')}</h2>
+            <p>{t('ai_sub')}</p>
+          </div>
+          <button type="button" className="pc-chat-restart" onClick={restart} disabled={typing}>{t('ai_restart')}</button>
+        </header>
+
+        <div className="pc-chat-body" ref={bodyRef} aria-live="polite">
+          {messages.map((m, i) => (
+            <div key={i} className={`pc-msg pc-msg-${m.role}`}>
+              <p>{m.text}</p>
+              {i === lastBot && (
+                <a className="pc-msg-link" href="/?publicreport=1">{t('ai_still')}</a>
+              )}
+            </div>
+          ))}
+          {messages.length <= 1 && !typing && (
+            <div className="pc-ai-starters" role="group" aria-label={t('ai_starters')}>
+              {starters.map((s) => (
+                <button key={s} type="button" className="pc-ai-starter" onClick={() => send(s)}>{s}</button>
+              ))}
+            </div>
+          )}
+          {typing && <div className="pc-msg pc-msg-bot pc-msg-typing"><p>{t('ai_typing')}</p></div>}
+        </div>
+
+        <form className="pc-chat-input" onSubmit={(e) => { e.preventDefault(); send(); }}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKey}
+            placeholder={t('ai_ph')}
+            aria-label={t('ai_ph')}
+            maxLength={500}
+          />
+          <button type="submit" disabled={typing || !input.trim()} aria-label={t('ai_send')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
+        </form>
+      </section>
+    );
+  }
 
   return (
     <>
@@ -283,8 +345,8 @@ export default function AIChatWidget({ inline = false }: { inline?: boolean }) {
             )}
 
             {messages.length <= 1 && !typing && (
-              <div className="pc-ai-starters" role="group" aria-label="คำถามที่พบบ่อย แตะเพื่อถาม">
-                {STARTERS.map((s) => (
+              <div className="pc-ai-starters" role="group" aria-label={t('ai_starters')}>
+                {starters.map((s) => (
                   <button key={s} type="button" className="pc-ai-starter" onClick={() => send(s)}>{s}</button>
                 ))}
               </div>

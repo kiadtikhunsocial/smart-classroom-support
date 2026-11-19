@@ -1610,8 +1610,16 @@ function AppInner() {
 
   if (!auth.isAuthenticated) {
     // เปิดหน้า นโยบายความเป็นส่วนตัว ได้โดยไม่ต้อง login
-    if (menu === 'privacy') {
-      return <PrivacyPage onBack={() => setMenu('dashboard')} />;
+    if (menu === 'privacy' || qrParams.get('privacy') !== null) {
+      // ?privacy=1 มาจากลิงก์ท้ายหน้าแรกสาธารณะ → กดกลับแล้วไปหน้าแรก
+      return (
+        <PrivacyPage
+          onBack={() => {
+            if (qrParams.get('privacy') !== null) window.location.href = '/?home=1';
+            else setMenu('dashboard');
+          }}
+        />
+      );
     }
     // หน้าเข้าสู่ระบบเจ้าหน้าที่แยกเป็นอีกหน้า — เข้าถึงด้วย /?login=1 เท่านั้น
     // ?job= มาจากข้อความ LINE ของช่าง — ยังไม่ล็อกอินก็พาไปหน้าเข้าสู่ระบบ (URL คงไว้ เข้าแล้วเปิดใบงานต่อ)

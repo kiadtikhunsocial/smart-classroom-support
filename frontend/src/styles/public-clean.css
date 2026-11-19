@@ -1,306 +1,424 @@
 /* ============================================================================
-   public-clean.css — เลย์เอาต์ใหม่ของหน้าแรกสาธารณะ (pc-*)
+   public-clean.css — หน้าสาธารณะแบบใหม่ (pc-*) ตามแบบ design/download.png
    ----------------------------------------------------------------------------
-   - ไม่เพิ่มสีใหม่: ทุกสีมาจาก --ph-* (public-theme.css) ซึ่งผูกกับธีมม่วงเดิม
-   - หน้าแรกเหลือทางเข้าเดียวต่องาน: ปุ่มแจ้งซ่อมหนึ่งปุ่ม + ช่องติดตามงานในจอแรก
-   - หัวข้อใช้ --font-display (Prompt), เนื้อหาใช้ --font-sans (Noto Sans Thai)
+   หน้าแรก: ซ้าย = หัวเรื่อง + ปุ่มแจ้งซ่อม + ติดตามงาน, ขวา = ผู้ช่วย AI ฝังในหน้า
+   ล่าง = ลิงก์ประกัน/สอบถาม, ขั้นตอน, คำถามที่พบบ่อย
+   หัวข้อ --font-display (Prompt), เนื้อหา --font-sans (Noto Sans Thai)
    ========================================================================== */
 
-.pc-home {
-  --pc-radius: 16px;
-  --pc-radius-sm: 12px;
-  --pc-gap: clamp(16px, 2.4vw, 24px);
+.pc-home,
+.pc-form-page {
+  --pc-radius: 12px;
+  --pc-ink: var(--ph-text);
+  --pc-muted: var(--ph-text-2);
+  --pc-faint: var(--ph-text-3);
+  --pc-line: var(--ph-line);
+  --pc-surface: var(--ph-glass-strong);
+  --pc-sunken: var(--ph-surface-soft);
+  --pc-brand: #b9a8e6;
+  --pc-brand-ink: #15111f;
+  --pc-brand-soft: rgb(185 168 230 / 0.12);
   font-family: var(--font-sans);
 }
 
-/* พื้นหลัง: แสงม่วงชั้นเดียว ไม่ขยับ */
-.pc-home .ph-bg-aurora-1 { animation: none; opacity: 0.35; }
+[data-mode='light'] .pc-home,
+[data-mode='light'] .pc-form-page {
+  --pc-bg: #f6f6f9;
+  --pc-ink: #1d1b29;
+  --pc-muted: #57546a;
+  --pc-faint: #75728a;
+  --pc-line: #e2e0ea;
+  --pc-surface: #ffffff;
+  --pc-sunken: #f3f1f8;
+  --pc-brand: #4e3d6e;
+  --pc-brand-ink: #ffffff;
+  --pc-brand-soft: rgb(78 61 110 / 0.08);
+}
 
-.pc-home ::selection { background: rgb(var(--ph-accent-rgb) / 0.35); color: var(--ph-text); }
+[data-mode='light'] .pc-home { background: var(--pc-bg); }
+.pc-home .ph-bg { display: none; }
+.pc-home ::selection { background: var(--pc-brand-soft); color: var(--pc-ink); }
 
-.pc-main {
+/* ── แถบบน ─────────────────────────────────────────────────────────────── */
+
+.pc-topbar.ph-topbar {
+  padding: 14px clamp(16px, 6.5vw, 84px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-mode='light'] .pc-home .pc-topbar { background: #ffffff; border-bottom: 1px solid var(--pc-line); }
+.pc-topbar .ph-brand { gap: 10px; }
+.pc-logo { width: 36px; height: 36px; border-radius: 6px; object-fit: contain; flex: 0 0 auto; }
+.pc-topbar .ph-brand-text strong { font-size: 1rem; color: var(--pc-ink); }
+.pc-topbar .ph-brand-text small { font-size: 0.74rem; color: var(--pc-muted); }
+
+.pc-lang {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  cursor: pointer;
+}
+.pc-lang select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.pc-lang select:focus { outline: none; }
+.pc-lang:focus-within { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+.pc-lang select option { color: #1d1b29; background: #fff; }
+
+/* ── เลย์เอาต์หลัก ──────────────────────────────────────────────────────── */
+
+.pc-main.ph-main {
   width: 100%;
-  max-width: 1120px;
+  max-width: 1112px;
   margin: 0 auto;
-  padding: clamp(28px, 5vw, 64px) 16px 88px; /* เว้นที่ให้ปุ่มแชต AI ไม่ทับเนื้อหาท้ายหน้า */
+  padding: clamp(24px, 4vw, 36px) 16px 40px;
   box-sizing: border-box;
   display: grid;
-  gap: var(--pc-gap);
   grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
 }
 
-.pc-h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--ph-text);
-}
+.pc-left { display: grid; gap: 0; align-content: start; min-width: 0; }
+.pc-right { min-width: 0; }
 
-.pc-muted { margin: 2px 0 0; color: var(--ph-text-2); font-size: 0.9rem; line-height: 1.5; }
+.pc-h2 { margin: 0; font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; line-height: 1.35; color: var(--pc-ink); }
+.pc-h3 { margin: 0 0 10px; font-family: var(--font-display); font-size: 0.98rem; font-weight: 600; color: var(--pc-ink); }
+.pc-muted { margin: 2px 0 0; font-size: 0.8rem; color: var(--pc-muted); line-height: 1.5; }
+.pc-hint { margin: 10px 0 0; font-size: 0.76rem; color: var(--pc-faint); }
+.pc-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--pc-muted); }
 
-/* ── จอแรก ─────────────────────────────────────────────────────────────── */
-
-.pc-hero { display: grid; gap: 18px; align-content: start; }
-
+/* หัวเรื่อง */
+.pc-hero { padding: 10px 0 24px; border-bottom: 1px solid var(--pc-line); }
 .pc-title {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: clamp(1.9rem, 4.4vw, 3.2rem);
-  line-height: 1.22;
+  font-size: clamp(2rem, 4.3vw, 2.85rem);
+  line-height: 1.32;
   letter-spacing: -0.01em;
-  color: var(--ph-text);
+  color: var(--pc-ink);
   text-wrap: balance;
 }
+.pc-title-accent { color: var(--pc-brand); }
+.pc-lead { margin: 14px 0 0; max-width: 34em; font-size: 0.98rem; line-height: 1.65; color: var(--pc-muted); }
 
-.pc-title-accent { color: var(--ph-accent-text); }
-
-.pc-lead { margin: -6px 0 4px; color: var(--ph-text-2); font-size: 1rem; }
-
-.pc-report {
-  display: flex;
+.pc-cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 22px; }
+.pc-cta {
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
-  min-height: 76px;
-  padding: 14px 18px;
-  border-radius: var(--pc-radius);
-  background: var(--ph-blue);
-  color: #fff;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: var(--pc-brand);
+  color: var(--pc-brand-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
   text-decoration: none;
-  box-shadow: 0 10px 28px rgb(var(--ph-accent-rgb) / 0.32);
+  box-shadow: 0 6px 16px rgb(78 61 110 / 0.22);
   transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms ease;
 }
-.pc-report:hover { transform: translateY(-1px); box-shadow: 0 14px 34px rgb(var(--ph-accent-rgb) / 0.4); }
-.pc-report:active { transform: translateY(0); }
-.pc-report:focus-visible { outline: 3px solid var(--ph-text); outline-offset: 3px; }
+.pc-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgb(78 61 110 / 0.28); }
+.pc-cta:focus-visible { outline: 3px solid var(--pc-brand); outline-offset: 3px; }
+.pc-cta-note { font-size: 0.78rem; color: var(--pc-muted); }
 
-.pc-report-icon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  background: rgb(255 255 255 / 0.18);
+/* ติดตามงานซ่อม */
+.pc-track { padding-top: 22px; min-width: 0; }
+.pc-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 14px; }
+.pc-input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 1rem;
 }
-
-.pc-report-text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
-.pc-report-text strong { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; line-height: 1.3; }
-.pc-report-text small { font-size: 0.86rem; opacity: 0.92; line-height: 1.4; }
-.pc-report .ph-action-arrow { flex: 0 0 auto; }
-
-.pc-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.pc-input::placeholder { color: var(--pc-faint); }
+.pc-input:focus { outline: none; border-color: var(--pc-brand); box-shadow: 0 0 0 3px var(--pc-brand-soft); }
+.pc-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.pc-steps li {
-  display: grid;
-  gap: 6px;
-  align-content: start;
-  padding: 10px 12px;
-  border-radius: var(--pc-radius-sm);
-  border: 1px solid var(--ph-line);
-  background: var(--ph-surface-soft);
-  font-size: 0.82rem;
-  line-height: 1.4;
-  color: var(--ph-text-2);
-}
-.pc-steps b {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgb(var(--ph-accent-rgb) / 0.18);
-  color: var(--ph-accent-text);
-  font-size: 0.76rem;
-  font-variant-numeric: tabular-nums;
-}
+.pc-btn-outline:hover:not(:disabled) { border-color: var(--pc-brand); color: var(--pc-brand); }
+.pc-btn-outline:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+.pc-btn-outline:disabled { opacity: 0.6; cursor: progress; }
 
-/* ── แผงเนื้อหา ───────────────────────────────────────────────────────── */
+.pc-track .ph-mine { margin-top: 18px; }
+.pc-track .ph-mine-forget { display: grid; place-items: center; }
 
-.pc-panel {
-  padding: clamp(16px, 2.6vw, 24px);
+/* ── ผู้ช่วย AI ฝังในหน้า ───────────────────────────────────────────────── */
+
+.pc-chat {
+  display: flex;
+  flex-direction: column;
+  height: clamp(380px, 56vh, 424px);
+  border: 1px solid var(--pc-line);
   border-radius: var(--pc-radius);
-  border: 1px solid var(--ph-line);
-  background: var(--ph-glass-strong);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
-  min-width: 0;
+  background: var(--pc-surface);
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgb(29 27 41 / 0.05);
 }
+.pc-chat-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--pc-line); }
+.pc-chat-icon { display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 8px; background: var(--pc-sunken); color: var(--pc-brand); }
+.pc-chat-titles { flex: 1 1 auto; min-width: 0; }
+.pc-chat-titles h2 { margin: 0; font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--pc-ink); }
+.pc-chat-titles p { margin: 0; font-size: 0.74rem; color: var(--pc-muted); }
+.pc-chat-restart { border: 0; background: none; color: var(--pc-muted); font: inherit; font-size: 0.76rem; cursor: pointer; padding: 6px; border-radius: 6px; }
+.pc-chat-restart:hover:not(:disabled) { color: var(--pc-brand); }
+.pc-chat-restart:focus-visible { outline: 2px solid var(--pc-brand); }
 
-.pc-panel-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
-.pc-panel-icon {
+.pc-chat-body { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; background: var(--pc-sunken); }
+.pc-msg { max-width: 86%; padding: 10px 12px; border-radius: 8px; font-size: 0.86rem; line-height: 1.6; }
+.pc-msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pc-msg-bot { align-self: flex-start; background: rgb(78 61 110 / 0.07); color: var(--pc-ink); }
+[data-mode='dark'] .pc-msg-bot { background: rgb(255 255 255 / 0.06); }
+.pc-msg-user { align-self: flex-end; background: var(--pc-brand); color: var(--pc-brand-ink); font-weight: 600; }
+.pc-msg-typing { color: var(--pc-muted); font-style: italic; }
+.pc-msg-link { display: inline-block; margin-top: 6px; color: var(--pc-brand); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+.pc-ai-starters { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-ai-starter {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.pc-ai-starter:hover { border-color: var(--pc-brand); color: var(--pc-brand); }
+.pc-ai-starter:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+
+.pc-chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--pc-line); background: var(--pc-surface); }
+.pc-chat-input input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 2px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 1rem;
+}
+.pc-chat-input input:focus { outline: none; border-color: var(--pc-brand); }
+.pc-chat-input button {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  background: rgb(var(--ph-accent-rgb) / 0.14);
-  color: var(--ph-accent-text);
+  width: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pc-brand);
+  color: var(--pc-brand-ink);
+  cursor: pointer;
 }
+.pc-chat-input button:disabled { opacity: 0.45; cursor: not-allowed; }
+.pc-chat-input button:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
 
-/* ฟอร์มค้นหาในแผง: ช่องกรอกกับปุ่มอยู่แถวเดียวบนจอกว้าง */
-.pc-panel .ph-track-form,
-.pc-panel .phw-form {
+/* ── ลิงก์ประกัน / สอบถาม ───────────────────────────────────────────────── */
+
+.pc-links {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  margin: 0;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
+  overflow: hidden;
 }
-.pc-panel .ph-input { min-height: 48px; font-size: 1rem; }
-.pc-panel .ph-btn-primary { min-height: 48px; padding-inline: 18px; white-space: nowrap; }
-.pc-panel .ph-hint { margin: 8px 0 0; font-size: 0.82rem; color: var(--ph-text-3); }
-.pc-panel .ph-hint code { font-size: 0.8rem; }
-
-.pc-panel .ph-mine { margin-top: 16px; }
-.pc-panel .ph-mine-forget { display: grid; place-items: center; }
-
-/* ── ส่วนรอง: ประกัน + คำถาม ───────────────────────────────────────────── */
-
-.pc-more { display: grid; gap: var(--pc-gap); grid-template-columns: minmax(0, 1fr); }
-
-.pc-help .pc-h2 { margin-bottom: 8px; }
-.pc-help details { border-top: 1px solid var(--ph-line); }
-.pc-help details:first-of-type { border-top: 0; }
-.pc-help summary {
+.pc-link-cell {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  min-height: 48px;
+  min-height: 62px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--pc-ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pc-link-cell + .pc-link-cell { border-top: 1px solid var(--pc-line); }
+.pc-link-cell:hover { background: var(--pc-sunken); }
+.pc-link-cell:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: -2px; }
+.pc-link-icon { display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px; background: var(--pc-sunken); color: var(--pc-brand); }
+.pc-link-text { display: grid; gap: 1px; flex: 1 1 auto; min-width: 0; }
+.pc-link-text strong { font-size: 0.92rem; font-weight: 600; }
+.pc-link-text small { font-size: 0.74rem; color: var(--pc-muted); }
+.pc-arrow { flex: 0 0 auto; color: var(--pc-muted); }
+
+/* แผงประกัน (เปิดจากปุ่ม) */
+.pc-sheet { padding: 18px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius); background: var(--pc-surface); }
+.pc-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pc-icon-btn { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: none; color: var(--pc-muted); cursor: pointer; }
+.pc-icon-btn:hover { background: var(--pc-sunken); color: var(--pc-ink); }
+.pc-icon-btn:focus-visible { outline: 2px solid var(--pc-brand); }
+
+/* ── ขั้นตอน + คำถามที่พบบ่อย ──────────────────────────────────────────── */
+
+.pc-flow { padding-bottom: 18px; border-bottom: 1px solid var(--pc-line); }
+.pc-flow ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.pc-flow li { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--pc-muted); }
+.pc-flow b {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.pc-faq details { border-top: 1px solid var(--pc-line); }
+.pc-faq summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
   cursor: pointer;
   list-style: none;
-  font-weight: 500;
-  color: var(--ph-text);
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--pc-ink);
 }
-.pc-help summary::-webkit-details-marker { display: none; }
-.pc-help summary::after {
+.pc-faq summary::-webkit-details-marker { display: none; }
+.pc-faq summary::before {
   content: '';
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--ph-text-3);
-  border-bottom: 2px solid var(--ph-text-3);
-  transform: rotate(45deg) translateY(-2px);
+  width: 0;
+  height: 0;
+  border-left: 6px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
   transition: transform 160ms ease;
 }
-.pc-help details[open] summary::after { transform: rotate(-135deg) translateY(-2px); }
-.pc-help summary:focus-visible { outline: 2px solid var(--ph-accent-text); outline-offset: 2px; border-radius: 6px; }
-.pc-help details p { margin: 0 0 14px; color: var(--ph-text-2); font-size: 0.92rem; line-height: 1.6; }
+.pc-faq details[open] summary::before { transform: rotate(90deg); }
+.pc-faq summary:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; border-radius: 4px; }
+.pc-faq details p { margin: 0 0 14px 14px; font-size: 0.88rem; line-height: 1.65; color: var(--pc-muted); }
 
-.pc-lead-link {
+/* ── ท้ายหน้า ───────────────────────────────────────────────────────────── */
+
+.pc-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
-  border-radius: var(--pc-radius);
-  border: 1px dashed var(--ph-line-strong);
-  color: var(--ph-text);
-  text-decoration: none;
+  gap: 10px 20px;
+  margin-top: auto;
+  padding: 16px clamp(16px, 6.5vw, 84px);
+  border-top: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+  font-size: 0.76rem;
+  color: var(--pc-muted);
 }
-.pc-lead-link span { display: grid; gap: 2px; }
-.pc-lead-link small { color: var(--ph-text-2); font-size: 0.86rem; }
-.pc-lead-link:hover { background: var(--ph-surface-soft); }
-.pc-lead-link:focus-visible { outline: 2px solid var(--ph-accent-text); outline-offset: 2px; }
+.pc-footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.pc-footer a { display: inline-flex; align-items: center; gap: 5px; color: var(--pc-muted); text-decoration: none; }
+.pc-footer a:hover { color: var(--pc-brand); text-decoration: underline; }
+.pc-footer a:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
 
-/* ── จอกว้าง: จอแรกซ้าย, ติดตามงานขวา ─────────────────────────────────── */
+/* ── ผลการติดตามงาน: แบนราบ ไม่ซ้อนการ์ด ─────────────────────────────── */
 
-@media (min-width: 960px) {
-  .pc-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); column-gap: 40px; align-items: start; }
-  .pc-hero { padding-top: 8px; }
-  .pc-more { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .pc-lead-link { grid-column: 1 / -1; }
-}
-
-@media (max-width: 420px) {
-  .pc-panel .ph-track-form,
-  .pc-panel .phw-form { grid-template-columns: minmax(0, 1fr); }
-  .pc-steps li { padding: 9px 10px; font-size: 0.78rem; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pc-report, .pc-help summary::after { transition: none; }
-}
-
-/* โหมดมืด: --ph-blue เป็นม่วงอ่อน ตัวอักษรขาวอ่านยาก จึงใช้ตัวอักษรสีพื้นหลังเข้มแทน */
-[data-mode='dark'] .pc-report { color: var(--ph-bg); }
-[data-mode='dark'] .pc-report-icon { background: rgb(7 11 22 / 0.14); }
-
-/* ── ผลการติดตามงาน: แบนราบในแผงเดียว ไม่ซ้อนการ์ด ───────────────────── */
-
-.pc-home .pc-panel .ph-result {
+.pc-home .pc-track .ph-result {
   margin-top: 20px;
   padding: 20px 0 0;
   border: 0;
-  border-top: 1px solid var(--ph-line);
+  border-top: 1px solid var(--pc-line);
   border-radius: 0;
   background: none;
   box-shadow: none;
 }
-
-.pc-home .pc-panel .ph-result-no-label,
-.pc-home .pc-panel .ph-meta-label {
-  letter-spacing: 0;
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-.pc-home .pc-panel .ph-result-no strong {
-  font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.pc-home .pc-panel .ph-result-title { font-size: 1.05rem; font-weight: 600; margin: 8px 0 16px; }
-
-/* ขั้นตอน 5 ขั้นอยู่แถวเดียวเสมอ แม้จอแคบ */
-.pc-home .pc-panel .ph-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
-.pc-home .pc-panel .ph-step-label { font-size: 0.74rem; line-height: 1.3; }
-.pc-home .pc-panel .ph-step-time { font-size: 0.68rem; }
-
-/* รายละเอียดเป็นรายการ ป้าย-ค่า ไม่ใช่กล่องละช่อง */
-.pc-home .pc-panel .ph-meta-grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  margin-top: 20px;
-  border-top: 1px solid var(--ph-line);
-}
-.pc-home .pc-panel .ph-meta {
+.pc-home .pc-track .ph-result-no-label,
+.pc-home .pc-track .ph-meta-label { letter-spacing: 0; font-size: 0.8rem; font-weight: 500; }
+.pc-home .pc-track .ph-result-no strong { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.pc-home .pc-track .ph-result-title { font-size: 1.05rem; font-weight: 600; margin: 8px 0 16px; }
+.pc-home .pc-track .ph-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.pc-home .pc-track .ph-step-label { font-size: 0.74rem; line-height: 1.3; }
+.pc-home .pc-track .ph-step-time { font-size: 0.68rem; }
+.pc-home .pc-track .ph-meta-grid { grid-template-columns: minmax(0, 1fr); gap: 0; margin-top: 20px; border-top: 1px solid var(--pc-line); }
+.pc-home .pc-track .ph-meta {
   display: grid;
   grid-template-columns: 7.5em minmax(0, 1fr);
   column-gap: 12px;
   row-gap: 2px;
   padding: 10px 0;
   border: 0;
-  border-bottom: 1px solid var(--ph-line);
+  border-bottom: 1px solid var(--pc-line);
   border-radius: 0;
   background: none;
   box-shadow: none;
 }
-.pc-home .pc-panel .ph-meta-label { grid-row: span 2; color: var(--ph-text-3); }
-.pc-home .pc-panel .ph-meta-value { font-size: 0.92rem; }
-.pc-home .pc-panel .ph-meta-sub { grid-column: 2; font-size: 0.8rem; color: var(--ph-text-3); }
+.pc-home .pc-track .ph-meta-label { grid-row: span 2; color: var(--pc-faint); }
+.pc-home .pc-track .ph-meta-value { font-size: 0.92rem; }
+.pc-home .pc-track .ph-meta-sub { grid-column: 2; font-size: 0.8rem; color: var(--pc-faint); }
+.pc-home .pc-track .ph-mine-list { display: grid; grid-auto-flow: row; overflow: visible; gap: 8px; }
+.pc-home .pc-track .ph-mine-list li { width: auto; min-width: 0; }
+.pc-home .pc-track .ph-result-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; }
+.pc-home .pc-track .ph-result-actions .ph-btn { min-height: 44px; }
+.pc-home.pc-home .ph-result-region:focus-visible { outline: none; }
 
-/* งานที่ฉันแจ้งไว้: รายการแนวตั้ง ไม่เลื่อนแนวนอน */
-.pc-home .pc-panel .ph-mine-list { display: grid; grid-auto-flow: row; overflow: visible; gap: 8px; }
-.pc-home .pc-panel .ph-mine-list li { width: auto; min-width: 0; }
+/* ── จอกว้าง ────────────────────────────────────────────────────────────── */
 
-.pc-home .pc-panel .ph-result-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; }
-.pc-home .pc-panel .ph-result-actions .ph-btn { min-height: 44px; }
-
-@media (min-width: 960px) {
-  .pc-home .pc-panel .ph-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+@media (min-width: 880px) {
+  .pc-main.ph-main { grid-template-columns: minmax(0, 1fr) minmax(0, 0.88fr); column-gap: 44px; row-gap: 24px; }
+  .pc-left, .pc-right { grid-row: 1; }
+  .pc-right { position: sticky; top: 84px; align-self: start; }
+  .pc-links, .pc-sheet, .pc-flow, .pc-faq { grid-column: 1 / -1; }
+  .pc-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pc-link-cell + .pc-link-cell { border-top: 0; border-left: 1px solid var(--pc-line); }
+  .pc-flow ol { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pc-home .pc-track .ph-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
 }
 
-/* กล่องผลลัพธ์รับโฟกัสด้วยสคริปต์เพื่อให้โปรแกรมอ่านจอประกาศ ไม่ต้องวาดกรอบ */
-.pc-home.pc-home .ph-result-region:focus-visible { outline: none; }
+@media (max-width: 420px) {
+  .pc-search { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-cta, .pc-faq summary::before { transition: none; }
+}
 
 /* ── ฟอร์มแจ้งซ่อม (PublicNoLoginReportView) ───────────────────────────── */
 
@@ -413,79 +531,25 @@
 }
 .pc-home .pc-report .ph-action-arrow { color: inherit; opacity: 0.85; stroke: currentColor; }
 
-/* ── ผู้ช่วย AI: แถบคู่กับปุ่มแจ้งซ่อม (แทนปุ่มลอยมุมจอ) ─────────────────── */
-
-.pc-ai {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  min-height: 64px;
-  margin-top: -8px;
-  padding: 10px 18px;
-  border-radius: var(--pc-radius);
-  border: 1px solid var(--ph-line-strong);
-  background: rgb(var(--ph-accent-rgb) / 0.10);
-  color: var(--ph-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease;
-}
-.pc-ai:hover { background: rgb(var(--ph-accent-rgb) / 0.18); }
-.pc-ai[aria-expanded='true'] { border-color: var(--ph-accent-text); }
-.pc-ai:focus-visible { outline: 3px solid var(--ph-accent-text); outline-offset: 3px; }
-.pc-ai-icon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 46px;
-  height: 40px;
-  border-radius: 12px;
-  background: rgb(var(--ph-accent-rgb) / 0.18);
-  color: var(--ph-accent-text);
-}
-.pc-ai-text { display: grid; gap: 2px; min-width: 0; }
-.pc-ai-text strong { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; line-height: 1.3; }
-.pc-ai-text small { color: var(--ph-text-2); font-size: 0.84rem; line-height: 1.4; }
-
-.pc-ai-starters { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 36px; }
-.pc-ai-starter {
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border, rgb(255 255 255 / 0.14));
-  background: var(--color-surface, transparent);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 0.84rem;
-  cursor: pointer;
-}
-.pc-ai-starter:hover { border-color: var(--chat-emphasis); }
-.pc-ai-report {
-  display: block;
-  padding: 10px 14px;
-  border-top: 1px solid var(--color-border, rgb(255 255 255 / 0.14));
-  background: var(--color-surface);
-  color: var(--chat-emphasis);
-  font-weight: 600;
-  font-size: 0.9rem;
-  text-align: center;
-  text-decoration: none;
-}
-.pc-ai-report:hover { text-decoration: underline; }
-
-/* แผงแชตบนมือถือ: เต็มความกว้างจากขอบล่าง อ่านง่ายและพิมพ์สะดวก */
-@media (max-width: 640px) {
-  .pc-home .public-chat-panel {
-    inset: auto 8px 8px 8px;
-    width: auto;
-    height: min(72vh, 560px);
-  }
-}
-
 /* ── โหมดสว่าง: สีตัวอักษรในป้ายประกัน/กล่องเตือน ให้อ่านออกบนพื้นอ่อน ───── */
 [data-mode='light'] .pr-warranty-ok { color: #046c4e; border-color: rgb(4 108 78 / 0.35); background: rgb(4 108 78 / 0.08); }
 [data-mode='light'] .pr-warranty-warn { color: #8a4b00; border-color: rgb(138 75 0 / 0.35); background: rgb(199 119 0 / 0.10); }
 [data-mode='light'] .pr-warranty-expired { color: #a3162a; border-color: rgb(163 22 42 / 0.35); background: rgb(220 43 63 / 0.08); }
 [data-mode='light'] .pr-note .pr-label { color: #7a4300; }
+
+/* ปุ่มสลับสว่าง/มืด + ฟอนต์หัวข้อตามแบบ (Noto Sans Thai หนา) */
+.pc-mode-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  cursor: pointer;
+}
+.pc-mode-btn:hover { border-color: var(--pc-brand); color: var(--pc-brand); }
+.pc-mode-btn:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+.pc-home { --font-display: var(--font-sans); }
+.pc-home .pc-title { font-weight: 700; }

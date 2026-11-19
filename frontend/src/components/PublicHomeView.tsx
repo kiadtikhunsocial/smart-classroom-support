@@ -5,44 +5,21 @@ import '../styles/public-home.css';
 import '../styles/public-theme.css';
 // การ์ดตรวจสอบประกัน — ใช้ตัวแปร --ph-* จึงต้องมาหลังไฟล์ธีมข้างบน
 import '../styles/public-warranty.css';
-// เลเยอร์ยกระดับดีไซน์ (glassmorphism + neon) — ต้องโหลดท้ายสุดเพื่อทับของเดิม
 import '../styles/public-premium.css';
 import '../styles/public-refresh.css';
-// เลย์เอาต์ใหม่ (pc-*) — คงสีเดิมทั้งหมด ใช้ตัวแปร --ph-* จากไฟล์ธีม จึงต้องโหลดท้ายสุด
+// เลย์เอาต์ใหม่ (pc-*) ตามแบบที่เจ้าของงานส่งมา — โหลดท้ายสุด
 import '../styles/public-clean.css';
-import PublicThemeToggle from './PublicThemeToggle';
+import ThemeModeButton from './ThemeModeButton';
+import LanguageSwitcher from './LanguageSwitcher';
 import AIChatWidget from './AIChatWidget';
 import { forgetRecent, loadRecent, looksLikeTicketNo, saveRecent } from '../publicRecent';
+import { useLang } from '../publicI18n';
 import type { PublicTicketStatus } from '../types';
 
-/** ป้ายสถานะภาษาไทย — ใช้ชุดเดียวกับหน้าอื่น เพื่อไม่ให้ผู้แจ้งเห็นคำเรียกต่างกัน */
-const STATUS_LABELS: Record<string, string> = {
-  new: 'รอรับเรื่อง',
-  assigned: 'มอบหมายช่างแล้ว',
-  in_progress: 'กำลังดำเนินการ',
-  pending: 'รออะไหล่ / รอภายนอก',
-  waiting_parts: 'รออะไหล่',
-  waiting_user: 'รอข้อมูลจากผู้แจ้ง',
-  resolved: 'ซ่อมเสร็จ รอยืนยัน',
-  closed: 'ปิดงานแล้ว',
-  cancelled: 'ยกเลิก',
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  critical: 'เร่งด่วนมาก',
-  high: 'เร่งด่วน',
-  normal: 'ปกติ',
-  low: 'ไม่เร่งด่วน',
-};
+type T = (key: string, vars?: Record<string, string | number>) => string;
 
 /** ขั้นตอนหลักที่ผู้แจ้งเข้าใจได้ — สถานะย่อย (รออะไหล่/รอผู้ใช้) นับอยู่ในขั้น "กำลังซ่อม" */
-const STEPS: { key: string; label: string }[] = [
-  { key: 'new', label: 'รับเรื่อง' },
-  { key: 'assigned', label: 'มอบหมายช่าง' },
-  { key: 'in_progress', label: 'กำลังซ่อม' },
-  { key: 'resolved', label: 'ซ่อมเสร็จ' },
-  { key: 'closed', label: 'ปิดงาน' },
-];
+const STEP_KEYS = ['new', 'assigned', 'in_progress', 'resolved', 'closed'];
 
 const STEP_INDEX: Record<string, number> = {
   new: 0,
@@ -56,12 +33,8 @@ const STEP_INDEX: Record<string, number> = {
   cancelled: -1,
 };
 
-/** สถานะย่อยที่ต้องอธิบายเพิ่ม เพราะ stepper แสดงเป็น "กำลังซ่อม" เหมือนกันหมด */
-const SUB_STATUS_NOTE: Record<string, string> = {
-  pending: 'งานหยุดรออะไหล่หรือรอผู้ให้บริการภายนอก เจ้าหน้าที่จะดำเนินการต่อทันทีที่พร้อม',
-  waiting_parts: 'รออะไหล่เข้า — เมื่ออะไหล่มาถึงจะกลับมาซ่อมต่อ',
-  waiting_user: 'รอข้อมูลเพิ่มจากผู้แจ้ง กรุณาติดต่อเจ้าหน้าที่หรือแจ้งอาการเพิ่มเติม',
-};
+const KNOWN_STATUS = new Set(['new', 'assigned', 'in_progress', 'pending', 'waiting_parts', 'waiting_user', 'resolved', 'closed', 'cancelled']);
+const KNOWN_PRIORITY = new Set(['critical', 'high', 'normal', 'low']);
 
 /** งานที่ยังไม่จบ — หน้าติดตามรีเฟรชสถานะเองทุก 60 วินาที */
 const LIVE_REFRESH_MS = 60_000;
@@ -77,49 +50,59 @@ function stepTimes(history: any[]): Record<number, string> {
   return out;
 }
 
-function shortTime(v?: string | null): string {
+function shortTime(v: string | null | undefined, locale: string): string {
   if (!v) return '';
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return '';
-  const today = new Date();
-  const sameDay = d.toDateString() === today.toDateString();
-  return sameDay
-    ? d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? time : d.toLocaleDateString(locale, { day: 'numeric', month: 'short' }) + ' ' + time;
 }
 
-function fmtDateTime(v?: string | null): string {
+function fmtDateTime(v: string | null | undefined, locale: string): string {
   if (!v) return '-';
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v);
-  return d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+  return d.toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** วันที่แบบไม่มีเวลา — ข้อมูลประกันเป็นระดับวัน */
+function fmtDate(v: string | null | undefined, locale: string): string {
+  if (!v) return '-';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString(locale, { dateStyle: 'medium' });
 }
 
 /** ระยะเวลาตั้งแต่แจ้ง — ช่วยให้ผู้แจ้งเห็นว่าเรื่องค้างมานานเท่าไหร่ */
-function sinceText(v?: string | null): string {
+function sinceText(v: string | null | undefined, t: T): string {
   if (!v) return '';
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return '';
   const mins = Math.floor((Date.now() - d.getTime()) / 60000);
   if (mins < 0) return '';
-  if (mins < 60) return `${mins} นาทีที่ผ่านมา`;
+  if (mins < 60) return t('since_min', { n: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} ชั่วโมงที่ผ่านมา`;
-  const days = Math.floor(hrs / 24);
-  return `${days} วันที่ผ่านมา`;
+  if (hrs < 24) return t('since_hour', { n: hrs });
+  return t('since_day', { n: Math.floor(hrs / 24) });
 }
 
-function statusLabelOf(t: any): string {
-  if (!t) return '';
-  if (t.finding_technician) return 'กำลังจัดหาช่าง';
-  return STATUS_LABELS[t.status] || t.status_label || t.status || '';
+function statusText(status: string | undefined, fallback: string | undefined, t: T): string {
+  if (status && KNOWN_STATUS.has(status)) return t(`st_${status}`);
+  return fallback || status || '';
+}
+
+function statusLabelOf(tk: any, t: T): string {
+  if (!tk) return '';
+  if (tk.finding_technician) return t('st_finding');
+  return statusText(tk.status, tk.status_label, t);
 }
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
 function ScanIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
       <path d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3" />
       <path d="M3 12h18" />
     </svg>
@@ -145,9 +128,18 @@ function CheckIcon() {
 
 function ShieldIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <path d="M12 3l7 3v5.5c0 4.4-2.9 8.2-7 9.5-4.1-1.3-7-5.1-7-9.5V6l7-3z" />
       <path d="M9.5 12.2l1.9 1.9 3.6-3.7" />
+    </svg>
+  );
+}
+
+function HeadsetIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 14v-2a8 8 0 0116 0v2" />
+      <path d="M4 14h3v5H5a1 1 0 01-1-1v-4zM20 14h-3v5h2a1 1 0 001-1v-4z" />
     </svg>
   );
 }
@@ -180,29 +172,17 @@ function PlusIcon() {
 
 function ArrowIcon() {
   return (
-    <svg className="ph-action-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <svg className="pc-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M5 12h14M13 6l6 6-6 6" />
     </svg>
   );
 }
 
-// ─── ส่วนประกอบย่อยที่ใช้ซ้ำ ────────────────────────────────────────────────
-
-/** จุดเรืองแสงบอกว่าระบบพร้อมรับเรื่อง — ใช้ในแถบบนและใน hero */
 function CloseIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
       <path d="M6 6l12 12M18 6L6 18" />
     </svg>
-  );
-}
-
-function LivePill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="ph-live">
-      <span className="ph-live-dot" aria-hidden="true" />
-      {children}
-    </span>
   );
 }
 
@@ -217,32 +197,8 @@ function MetaItem({ label, value, sub }: { label: string; value: React.ReactNode
 }
 
 /**
- * หน้าแรกสาธารณะ (ไม่ต้องเข้าสู่ระบบ)
- * - ติดตามสถานะใบงานด้วยเลข Ticket: แถบความคืบหน้า + ข้อมูลอุปกรณ์ + ไทม์ไลน์
- * - ทางเข้าแจ้งซ่อม/สแกน QR
- * - หน้าเข้าสู่ระบบเจ้าหน้าที่แยกไปที่ /?login=1
- */
-/** สถานะประกัน -> ป้าย + โทนสีของการ์ดผลลัพธ์ */
-const WARRANTY_TONE: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' | 'muted' }> = {
-  active: { label: 'อยู่ในระยะประกัน', tone: 'ok' },
-  expiring: { label: 'ใกล้หมดประกัน', tone: 'warn' },
-  expired: { label: 'หมดประกันแล้ว', tone: 'danger' },
-  unknown: { label: 'ไม่มีข้อมูลประกัน', tone: 'muted' },
-};
-
-/** วันที่แบบไม่มีเวลา — ข้อมูลประกันเป็นระดับวัน เวลาไม่มีความหมายกับผู้ใช้ */
-function fmtDate(v?: string | null): string {
-  if (!v) return '-';
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return String(v);
-  return d.toLocaleDateString('th-TH', { dateStyle: 'medium' });
-}
-
-/**
  * เลื่อนผลลัพธ์ขึ้นมาให้เห็นและย้ายโฟกัสไปที่ผลลัพธ์ ทุกครั้งที่ `tick` เปลี่ยน
- * (ค้นเสร็จ — เจอ/ไม่เจอ/ผิดพลาด) — บนมือถือผลลัพธ์อยู่ใต้ขอบจอ ถ้าไม่เลื่อน
- * ผู้ใช้จะรู้สึกว่ากดแล้วไม่มีอะไรเกิดขึ้น
- * ทำใน effect เพื่อให้รันหลัง React วาดผลลัพธ์ลง DOM แล้ว
+ * บนมือถือผลลัพธ์อยู่ใต้ขอบจอ ถ้าไม่เลื่อน ผู้ใช้จะรู้สึกว่ากดแล้วไม่มีอะไรเกิดขึ้น
  */
 function useRevealResult(ref: React.RefObject<HTMLElement>, tick: number) {
   useEffect(() => {
@@ -253,12 +209,19 @@ function useRevealResult(ref: React.RefObject<HTMLElement>, tick: number) {
   }, [tick, ref]);
 }
 
+const WARRANTY_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'muted'> = {
+  active: 'ok',
+  expiring: 'warn',
+  expired: 'danger',
+  unknown: 'muted',
+};
+
 /**
- * การ์ด "ตรวจสอบประกันสินค้า" — กรอกหมายเลขสินค้าของเครื่องที่ซื้อไปแล้ว
- * แล้วดูสถานะประกันได้เอง ไม่ต้องล็อกอินและไม่ต้องมีเลขใบงาน
- * (endpoint รับรหัสอุปกรณ์ของโรงเรียนและ QR token ได้ด้วย)
+ * แผง "ตรวจสอบประกัน" — เปิดจากปุ่มในแถวลิงก์ใต้ติดตามงาน
+ * กรอกหมายเลขสินค้า (หรือรหัสอุปกรณ์) แล้วดูสถานะประกันได้เอง ไม่ต้องล็อกอิน
  */
-function WarrantyCard() {
+function WarrantyCard({ onClose }: { onClose: () => void }) {
+  const { t, locale } = useLang();
   const [code, setCode] = useState('');
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -269,149 +232,115 @@ function WarrantyCard() {
   const [revealTick, setRevealTick] = useState(0);
   useRevealResult(resultRef, revealTick);
 
-  const lookup = useCallback(
-    async (raw?: string) => {
-      const q = (raw ?? code).trim();
-      if (!q) {
-        setError('กรุณากรอกหมายเลขสินค้า (Serial Number) ที่อยู่บนตัวเครื่อง');
-        setData(null);
-        setSearched(false);
-        serialRef.current?.focus();
-        return;
-      }
-      setLoading(true);
-      setError(null);
+  useEffect(() => {
+    serialRef.current?.focus();
+  }, []);
+
+  const lookup = useCallback(async () => {
+    const q = code.trim();
+    if (!q) {
+      setError(t('w_empty'));
       setData(null);
       setSearched(false);
-      try {
-        const r: any = await api.checkWarranty(q);
-        setData(r);
-      } catch (err: any) {
-        setError(err?.message || 'ไม่พบหมายเลขสินค้านี้ในระบบ');
-      } finally {
-        setLoading(false);
-        setSearched(true);
-        setRevealTick((n) => n + 1);
-      }
-    },
-    [code],
-  );
+      serialRef.current?.focus();
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setSearched(false);
+    try {
+      setData(await api.checkWarranty(q));
+    } catch (err: any) {
+      setError(err?.message || t('w_not_found'));
+    } finally {
+      setLoading(false);
+      setSearched(true);
+      setRevealTick((n) => n + 1);
+    }
+  }, [code, t]);
 
   const status: string = typeof data?.warranty_status === 'string' ? data.warranty_status : 'unknown';
-  const tone = WARRANTY_TONE[status] ?? WARRANTY_TONE.unknown;
+  const tone = WARRANTY_TONE[status] ?? 'muted';
+  const statusLabel = WARRANTY_TONE[status] ? t(`w_${status}`) : (data?.warranty_status_label || t('w_unknown'));
   const daysLeft: number | null = typeof data?.days_left === 'number' ? data.days_left : null;
-
-  const daysText = useMemo(() => {
-    if (!data) return '';
-    if (daysLeft === null) return 'ยังไม่บันทึกวันสิ้นสุดประกันของเครื่องนี้';
-    if (daysLeft < 0) return `หมดประกันมาแล้ว ${Math.abs(daysLeft)} วัน`;
-    if (daysLeft === 0) return 'ประกันหมดวันนี้';
-    return `เหลือเวลาประกันอีก ${daysLeft} วัน`;
-  }, [data, daysLeft]);
+  const daysText = !data
+    ? ''
+    : daysLeft === null
+      ? t('w_days_none')
+      : daysLeft < 0
+        ? t('w_days_past', { n: Math.abs(daysLeft) })
+        : daysLeft === 0
+          ? t('w_days_today')
+          : t('w_days_left', { n: daysLeft });
 
   const openTicket = data?.open_ticket ?? null;
   const openTicketNo: string = openTicket?.ticket_id || openTicket?.ticket_no || '';
 
   return (
-    <section className="pc-panel phw-card" id="ph-warranty" aria-labelledby="phw-title">
-      <div className="pc-panel-head">
-        <span className="pc-panel-icon" aria-hidden="true"><ShieldIcon /></span>
-        <div>
-          <h2 className="pc-h2" id="phw-title">ตรวจสอบประกัน</h2>
-          <p className="pc-muted">ใส่หมายเลขสินค้า (S/N) หรือรหัสอุปกรณ์บนสติกเกอร์</p>
-        </div>
+    <section className="pc-sheet phw-card" id="ph-warranty" aria-labelledby="phw-title">
+      <div className="pc-sheet-head">
+        <h2 className="pc-h2" id="phw-title">{t('w_title')}</h2>
+        <button type="button" className="pc-icon-btn" onClick={onClose} aria-label={t('w_close')}><CloseIcon /></button>
       </div>
+      <p className="pc-muted">{t('w_sub')}</p>
 
-      <form
-        className="phw-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          lookup();
-        }}
-      >
-        <label className="ph-sr-only" htmlFor="phw-serial">หมายเลขสินค้า</label>
-        <div className="ph-input-wrap">
-          <span className="ph-input-icon" aria-hidden="true"><ShieldIcon /></span>
-          <input
-            id="phw-serial"
-            ref={serialRef}
-            className="ph-input"
-            type="text"
-            inputMode="text"
-            autoComplete="off"
-            spellCheck={false}
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="เช่น BE2417-8C3D1A"
-            aria-describedby="phw-hint"
-          />
-        </div>
-        <button type="submit" className="ph-btn ph-btn-primary" disabled={loading || !code.trim()}>
+      <form className="pc-search" onSubmit={(e) => { e.preventDefault(); lookup(); }}>
+        <label className="ph-sr-only" htmlFor="phw-serial">{t('w_label')}</label>
+        <input
+          id="phw-serial"
+          ref={serialRef}
+          className="pc-input"
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder={t('w_ph')}
+          aria-describedby="phw-hint"
+        />
+        <button type="submit" className="pc-btn-outline" disabled={loading}>
           {loading ? <span className="ph-spinner" aria-hidden="true" /> : <ShieldIcon />}
-          <span>{loading ? 'กำลังตรวจสอบ' : 'ตรวจสอบประกัน'}</span>
+          <span>{loading ? t('w_checking') : t('w_btn')}</span>
         </button>
       </form>
-      <p className="ph-hint" id="phw-hint">
-        S/N อยู่ใต้ตัวเครื่องหรือหลังจอ หรือใช้รหัสอุปกรณ์ เช่น <code>SCHM01-B1-R101-DISP-01</code>
-      </p>
+      <p className="pc-hint" id="phw-hint">{t('w_hint')}</p>
 
-      <div aria-live="polite" ref={resultRef} tabIndex={-1} className="ph-result-region" aria-label="ผลการตรวจสอบประกัน">
+      <div aria-live="polite" ref={resultRef} tabIndex={-1} className="ph-result-region" aria-label={t('w_region')}>
         {error && <div className="ph-alert ph-alert-danger">{error}</div>}
-
-        {!error && searched && !data && !loading && (
-          <div className="ph-alert ph-alert-warn">
-            ไม่พบหมายเลขนี้ในระบบ — ลองตรวจตัวอักษรที่สับสนกันบ่อย (O กับ 0, I กับ 1) อีกครั้ง
-          </div>
-        )}
+        {!error && searched && !data && !loading && <div className="ph-alert ph-alert-warn">{t('w_not_found')}</div>}
 
         {data && (
-          <div className={`phw-result phw-${tone.tone}`}>
+          <div className={`phw-result phw-${tone}`}>
             <div className="phw-result-head">
-              <span className={`phw-status phw-status-${tone.tone}`}>
+              <span className={`phw-status phw-status-${tone}`}>
                 <span className="phw-status-dot" aria-hidden="true" />
-                {data.warranty_status_label || tone.label}
+                {statusLabel}
               </span>
               <span className="phw-days">{daysText}</span>
             </div>
-
             <div className="phw-device">
-              <strong className="phw-device-name">
-                {data.device_label || data.device_type || data.device_id || 'อุปกรณ์'}
-              </strong>
-              <span className="phw-device-sub">
-                {[data.brand, data.model].filter(Boolean).join(' ') || 'ไม่ระบุยี่ห้อ/รุ่น'}
-              </span>
+              <strong className="phw-device-name">{data.device_label || data.device_type || data.device_id || t('m_device')}</strong>
+              <span className="phw-device-sub">{[data.brand, data.model].filter(Boolean).join(' ') || t('w_nobrand')}</span>
             </div>
-
             <div className="phw-grid">
-              <MetaItem label="หมายเลขสินค้า" value={data.serial_number || 'ไม่ระบุ'} />
-              <MetaItem label="รหัสอุปกรณ์" value={data.device_id || '-'} />
-              <MetaItem label="วันที่ซื้อ" value={fmtDate(data.purchase_date)} />
-              <MetaItem label="ประกันสิ้นสุด" value={fmtDate(data.warranty_until)} />
-              <MetaItem label="ติดตั้งที่ห้อง" value={data.room_name || 'ไม่ระบุ'} />
-              <MetaItem label="หน่วยงาน" value={data.organization_name || '-'} />
+              <MetaItem label={t('w_serial')} value={data.serial_number || t('w_none')} />
+              <MetaItem label={t('w_device_id')} value={data.device_id || '-'} />
+              <MetaItem label={t('w_bought')} value={fmtDate(data.purchase_date, locale)} />
+              <MetaItem label={t('w_until')} value={fmtDate(data.warranty_until, locale)} />
+              <MetaItem label={t('w_room')} value={data.room_name || t('w_none')} />
+              <MetaItem label={t('w_org')} value={data.organization_name || '-'} />
             </div>
-
-            {data.has_open_ticket && openTicketNo ? (
-              <p className="phw-note">
-                เครื่องนี้มีงานซ่อมค้างอยู่แล้ว — เลขใบงาน <code>{openTicketNo}</code>
-                {openTicket?.status ? ` สถานะ ${STATUS_LABELS[openTicket.status] || openTicket.status}` : ''}
-                {' '}ไม่ต้องแจ้งซ้ำ ใช้เลขนี้ติดตามสถานะได้เลย
-              </p>
-            ) : (
-              <p className="phw-note">
-                {status === 'expired'
-                  ? 'อุปกรณ์หมดประกันแล้ว ค่าซ่อมจะอยู่ในความรับผิดชอบของโรงเรียน แต่ยังแจ้งซ่อมได้ตามปกติ'
+            <p className="phw-note">
+              {data.has_open_ticket && openTicketNo
+                ? t('w_open', { no: openTicketNo })
+                : status === 'expired'
+                  ? t('w_note_expired')
                   : status === 'unknown'
-                    ? 'ระบบยังไม่มีวันสิ้นสุดประกันของเครื่องนี้ กรุณาแจ้งเจ้าหน้าที่เพื่อบันทึกข้อมูลจากใบเสร็จ'
-                    : 'ถ้าอุปกรณ์มีปัญหา แจ้งซ่อมได้ทันที เจ้าหน้าที่จะตรวจสอบสิทธิ์ประกันกับผู้ขายให้อีกครั้ง'}
-              </p>
-            )}
-
-            <a className="phw-cta" href="/?publicreport=1">
-              แจ้งซ่อมอุปกรณ์
-              <ArrowIcon />
-            </a>
+                    ? t('w_note_unknown')
+                    : t('w_note_ok')}
+            </p>
+            <a className="phw-cta" href="/?publicreport=1">{t('w_report')} <ArrowIcon /></a>
           </div>
         )}
       </div>
@@ -419,7 +348,24 @@ function WarrantyCard() {
   );
 }
 
+function UserIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0116 0" />
+    </svg>
+  );
+}
+
+/**
+ * หน้าแรกสาธารณะ (ไม่ต้องเข้าสู่ระบบ)
+ * ซ้าย: หัวเรื่อง + ปุ่มแจ้งซ่อม/สแกน QR + ติดตามงานซ่อม
+ * ขวา: ผู้ช่วย AI ฝังในหน้า (ถามอาการเบื้องต้นก่อนแจ้งซ่อม)
+ * ล่าง: ตรวจสอบประกัน / สอบถามสินค้า, ขั้นตอน, คำถามที่พบบ่อย
+ * ทางเข้าเจ้าหน้าที่อยู่ที่ท้ายหน้า (แถบบนเป็นปุ่มเปลี่ยนภาษาแทน)
+ */
 export default function PublicHomeView({ initialTicketId, staffLoggedIn = false }: { initialTicketId?: string; staffLoggedIn?: boolean }) {
+  const { t, locale } = useLang();
   const [input, setInput] = useState((initialTicketId || '').toUpperCase());
   const [ticket, setTicket] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -430,6 +376,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   const [mine, setMine] = useState<PublicTicketStatus[] | null>([]);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showWarranty, setShowWarranty] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -442,13 +389,13 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
     async (raw?: string, opts: { quiet?: boolean } = {}) => {
       let no = (raw ?? input).replace(/\s+/g, '').toUpperCase();
       if (!no) {
-        setError('กรุณากรอกเลขใบงาน หรือรหัสอุปกรณ์บนสติกเกอร์');
+        setError(t('err_empty'));
         setTicket(null);
         setSearched(false);
+        inputRef.current?.focus();
         return;
       }
-      if (!opts.quiet) setInput(no);  // รีเฟรชเบื้องหลังต้องไม่ทับสิ่งที่ผู้ใช้กำลังพิมพ์
-      // รีเฟรชอัตโนมัติ: ไม่ล้างผลเดิม ไม่เลื่อนจอ — แค่อัปเดตข้อมูลในที่เดิม
+      if (!opts.quiet) setInput(no); // รีเฟรชเบื้องหลังต้องไม่ทับสิ่งที่ผู้ใช้กำลังพิมพ์
       if (!opts.quiet) {
         setLoading(true);
         setError(null);
@@ -463,11 +410,9 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           try {
             found = await api.getDeviceRecent(no);
           } catch {
-            throw new Error(`ไม่พบเลขใบงานหรือรหัสอุปกรณ์ "${no}" — ตรวจตัวอักษรอีกครั้ง`);
+            throw new Error(t('err_not_found', { no }));
           }
-          if (!found?.recent_ticket?.ticket_id) {
-            throw new Error(`อุปกรณ์ ${no} ยังไม่มีงานแจ้งซ่อม — ถ้าเครื่องมีปัญหา กด "แจ้งซ่อมอุปกรณ์" ได้เลย`);
-          }
+          if (!found?.recent_ticket?.ticket_id) throw new Error(t('err_no_ticket', { no }));
           no = String(found.recent_ticket.ticket_id).toUpperCase();
           setInput(no);
         }
@@ -476,26 +421,24 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         setTicket(r);
         // endpoint สาธารณะคืนคีย์ ticket_no (ส่วน endpoint ที่ต้องล็อกอินคืน ticket_id)
         const resolvedNo: string = r?.ticket_no || r?.ticket_id || no;
-        // รีเฟรชอัตโนมัติไม่ต้องจัดลำดับรายการใหม่ (และไม่ยิงคำขอสถานะซ้ำทุกนาที)
         if (!opts.quiet) setRecent(saveRecent(resolvedNo));
-        // ให้ลิงก์แชร์/กดรีเฟรชแล้วยังอยู่ที่ใบงานเดิม
         try {
           window.history.replaceState({}, '', `/?ticket=${encodeURIComponent(resolvedNo)}`);
         } catch {
           // บางเบราว์เซอร์ในโหมดจำกัดสิทธิ์เขียน history ไม่ได้ — ข้ามไป
         }
       } catch (err: any) {
-        if (!opts.quiet) setError(err?.message || 'ไม่พบเลขใบงานนี้ในระบบ');
+        if (!opts.quiet) setError(err?.message || t('err_generic'));
       } finally {
         setLoading(false);
         setSearched(true);
         if (!opts.quiet) setRevealTick((n) => n + 1);
       }
     },
-    [input],
+    [input, t],
   );
 
-  // ── งานแจ้งซ่อมของฉัน: สถานะล่าสุดของทุกเลขที่เครื่องนี้จำไว้ (คำขอเดียว) ──
+  // ── งานที่ฉันแจ้งไว้: สถานะล่าสุดของทุกเลขที่เครื่องนี้จำไว้ (คำขอเดียว) ──
   useEffect(() => {
     if (!recent.length) { setMine([]); return; }
     let alive = true;
@@ -524,12 +467,6 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTicketId]);
 
-  const focusTrack = () => {
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    trackRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-    setTimeout(() => inputRef.current?.focus(), 250);
-  };
-
   const copyLink = async () => {
     const no = ticket?.ticket_no || ticket?.ticket_id || input;
     if (!no) return;
@@ -539,7 +476,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError('คัดลอกลิงก์ไม่ได้ — กรุณาคัดลอกจากแถบที่อยู่เว็บ');
+      setError(t('copy_fail'));
     }
   };
 
@@ -550,10 +487,8 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   }, [ticket]);
 
   const cancelled = ticket?.status === 'cancelled';
-  /** เลขใบงาน — /tickets/track คืน ticket_no, /tickets/{id} คืน ticket_id */
   const ticketNo: string = ticket?.ticket_no || ticket?.ticket_id || input;
-  /** ข้อมูลอุปกรณ์ — endpoint สาธารณะคืนฟิลด์แบบแบน (device_code/device_label/room_name)
-   *  ส่วน endpoint ที่ต้องล็อกอินคืน device_info ซ้อนอยู่ จึงรองรับทั้งสองรูปแบบ */
+  /** ข้อมูลอุปกรณ์ — endpoint สาธารณะคืนฟิลด์แบบแบน ส่วน endpoint ที่ต้องล็อกอินคืน device_info ซ้อนอยู่ */
   const dev = useMemo<Record<string, any> | null>(() => {
     if (!ticket) return null;
     if (ticket.device_info) return ticket.device_info as Record<string, any>;
@@ -571,326 +506,247 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   }, [ticket]);
   const history: any[] = Array.isArray(ticket?.history) ? ticket.history : [];
   const times = useMemo(() => stepTimes(history), [ticket]);
-  const subNote = ticket?.status ? SUB_STATUS_NOTE[ticket.status] : undefined;
-
-  /** เปอร์เซ็นต์ความคืบหน้าของแถบเรืองแสงใต้ stepper */
-  const progressPct = useMemo(() => {
-    if (stepIndex < 0) return 0;
-    return Math.min(100, Math.round((stepIndex / (STEPS.length - 1)) * 100));
-  }, [stepIndex]);
+  const subNote = ticket?.status && ['pending', 'waiting_parts', 'waiting_user'].includes(ticket.status) ? t(`sub_${ticket.status}`) : undefined;
+  const progressPct = stepIndex < 0 ? 0 : Math.min(100, Math.round((stepIndex / (STEP_KEYS.length - 1)) * 100));
+  const priorityText = ticket?.priority && KNOWN_PRIORITY.has(ticket.priority) ? t(`pr_${ticket.priority}`) : (ticket?.priority || t('pr_normal'));
 
   return (
     <div className="ph-page pc-home">
-      {/* แสงม่วงจาง ๆ ด้านบนชั้นเดียว — ตกแต่งล้วน ไม่ขยับ เพื่อให้เบาบนมือถือ */}
-      <div className="ph-bg" aria-hidden="true">
-        <span className="ph-bg-aurora ph-bg-aurora-1" />
-      </div>
-
-      <header className="ph-topbar">
+      <header className="ph-topbar pc-topbar">
         <a className="ph-brand" href={staffLoggedIn ? '/' : '/?home=1'}>
-          <span className="ph-brand-mark">
-            <img className="ph-brand-logo" src="/logo.jpg" alt="IWA" />
-          </span>
+          <img className="pc-logo" src="/logo.jpg" alt="IWA" width="36" height="36" />
           <span className="ph-brand-text">
             <strong>IWA Smart Classroom Support</strong>
-            <small>ระบบแจ้งซ่อมและติดตามงานอุปกรณ์ห้องเรียน</small>
+            <small>{t('brand_sub')}</small>
           </span>
         </a>
         <div className="ph-topbar-right">
-          <span className="ph-hide-sm"><LivePill>ระบบพร้อมรับแจ้ง</LivePill></span>
-          <a className="ph-customer-link" href={staffLoggedIn ? '/' : '/?login=1'}>พื้นที่เจ้าหน้าที่</a>
-          <PublicThemeToggle />
+          <LanguageSwitcher />
+          <ThemeModeButton />
         </div>
       </header>
 
       <main className="ph-main pc-main">
-        <section className="pc-hero" aria-labelledby="pc-title">
-          <h1 className="pc-title" id="pc-title">แจ้งซ่อมและติดตามงาน<br /><span className="pc-title-accent">อุปกรณ์ห้องเรียน</span></h1>
-          <p className="pc-lead">ไม่ต้องสมัคร ไม่ต้องเข้าสู่ระบบ ใช้เวลาไม่ถึงนาที</p>
-
-          <a href="/?publicreport=1" className="pc-report">
-            <span className="pc-report-icon" aria-hidden="true"><ScanIcon /></span>
-            <span className="pc-report-text">
-              <strong>แจ้งซ่อม / สแกน QR</strong>
-              <small>สแกนสติกเกอร์ที่ตัวเครื่อง หรือพิมพ์รหัสอุปกรณ์</small>
-            </span>
-            <ArrowIcon />
-          </a>
-
-          <AIChatWidget inline />
-
-          <ol className="pc-steps" aria-label="จากแจ้งปัญหา ถึงติดตามผล">
-            <li><b>1</b><span>สแกน QR แล้วเล่าอาการ</span></li>
-            <li><b>2</b><span>ได้เลขใบงานทันที</span></li>
-            <li><b>3</b><span>ติดตามผลได้ที่หน้านี้</span></li>
-          </ol>
-        </section>
-
-        <section className="pc-panel pc-track" ref={trackRef} aria-labelledby="ph-track-title">
-          <div className="pc-panel-head">
-            <span className="pc-panel-icon" aria-hidden="true"><SearchIcon /></span>
-            <div>
-              <h2 className="pc-h2" id="ph-track-title">ติดตามงานซ่อม</h2>
-              <p className="pc-muted">ใส่เลขใบงาน หรือรหัสอุปกรณ์บนสติกเกอร์</p>
+        <div className="pc-left">
+          <section className="pc-hero" aria-labelledby="pc-title">
+            <h1 className="pc-title" id="pc-title">{t('title1')}<br /><span className="pc-title-accent">{t('title2')}</span></h1>
+            <p className="pc-lead">{t('lead')}</p>
+            <div className="pc-cta-row">
+              <a href="/?publicreport=1" className="pc-cta">
+                <ScanIcon />
+                <span>{t('cta')}</span>
+              </a>
+              <span className="pc-cta-note">{t('cta_note')}</span>
             </div>
-          </div>
+          </section>
 
-          <form
-            className="ph-track-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              search();
-            }}
-          >
-            <label className="ph-sr-only" htmlFor="ph-ticket-input">เลขใบงาน</label>
-            <div className="ph-input-wrap">
-              <span className="ph-input-icon" aria-hidden="true"><SearchIcon /></span>
+          <section className="pc-track" ref={trackRef} aria-labelledby="ph-track-title">
+            <h2 className="pc-h2" id="ph-track-title">{t('track_title')}</h2>
+            <p className="pc-muted">{t('track_sub')}</p>
+
+            <form className="pc-search" onSubmit={(e) => { e.preventDefault(); search(); }}>
+              <label className="ph-sr-only" htmlFor="ph-ticket-input">{t('track_label')}</label>
               <input
                 id="ph-ticket-input"
                 ref={inputRef}
-                className="ph-input"
+                className="pc-input"
                 type="text"
-                inputMode="text"
                 autoComplete="off"
                 spellCheck={false}
                 value={input}
                 onChange={(e) => setInput(e.target.value.toUpperCase())}
-                placeholder="เลขใบงาน หรือ รหัสอุปกรณ์"
+                placeholder={t('track_ph')}
                 aria-describedby="ph-ticket-hint"
               />
-            </div>
-            <button type="submit" className="ph-btn ph-btn-primary" disabled={loading || !input.trim()}>
-              {loading ? <span className="ph-spinner" aria-hidden="true" /> : <SearchIcon />}
-              <span>{loading ? 'กำลังค้นหา' : 'ดูสถานะ'}</span>
-            </button>
-          </form>
-          <p className="ph-hint" id="ph-ticket-hint">
-            เช่น <code>TK.SCHM01.26.0001-T</code> — ใส่รหัสอุปกรณ์ ระบบจะเปิดงานล่าสุดของเครื่องนั้น
-          </p>
+              <button type="submit" className="pc-btn-outline" disabled={loading}>
+                {loading ? <span className="ph-spinner" aria-hidden="true" /> : <SearchIcon />}
+                <span>{loading ? t('searching') : t('track_btn')}</span>
+              </button>
+            </form>
+            <p className="pc-hint" id="ph-ticket-hint">
+              {t('example')} <span className="pc-mono">TK.SCHM01.26.0001-T</span>
+            </p>
 
-          {recent.length > 0 && (
-            <div className="ph-mine" aria-labelledby="ph-mine-title">
-              <h3 className="ph-mine-title" id="ph-mine-title">งานที่ฉันแจ้งไว้ <small>(จำไว้ในเครื่องนี้)</small></h3>
-              {mine && mine.length > 0 ? (
-                <ul className="ph-mine-list">
-                  {mine.map((m) => (
-                    <li key={m.ticket_no} className={m.ticket_no === openNo ? 'is-open' : ''}>
-                      <button type="button" className="ph-mine-row" onClick={() => search(m.ticket_no)} disabled={loading}
-                        aria-label={`ดูสถานะใบงาน ${m.ticket_no}`}>
-                        <span className={`badge badge-${m.status} ph-mine-badge`}>{m.status_label}</span>
-                        <span className="ph-mine-body">
-                          <strong>{m.title}</strong>
-                          <small>{m.device_label} · อัปเดต {sinceText(m.updated_at) || shortTime(m.updated_at)}</small>
-                        </span>
-                        <span className="ph-mine-no">{m.ticket_no}</span>
-                      </button>
-                      <button type="button" className="ph-mine-forget" aria-label={`เอา ${m.ticket_no} ออกจากรายการ`}
-                        onClick={() => setRecent(forgetRecent(m.ticket_no))}><CloseIcon /></button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="ph-recent">
-                  {recent.map((no) => (
-                    <button key={no} type="button" className="ph-chip" onClick={() => search(no)} disabled={loading}>
-                      {no}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div aria-live="polite" ref={resultRef} tabIndex={-1} className="ph-result-region" aria-label="ผลการค้นหาใบงาน">
-            {error && <div className="ph-alert ph-alert-danger">{error}</div>}
-
-            {!error && searched && !ticket && !loading && (
-              <div className="ph-alert ph-alert-warn">
-                ไม่พบใบงานนี้ — ตรวจสอบเลขอีกครั้ง หรือถ้าจำไม่ได้ให้สแกน QR ที่อุปกรณ์ ระบบจะแสดงใบงานที่ค้างอยู่ให้
-              </div>
-            )}
-
-            {ticket && (
-              <div className="ph-result">
-                <div className="ph-result-head">
-                  <div className="ph-result-no">
-                    <span className="ph-result-no-label">เลขใบงาน</span>
-                    <strong>{ticketNo}</strong>
-                  </div>
-                  <span className={`badge badge-${ticket.status} ph-status-badge`}>{statusLabelOf(ticket)}</span>
-                </div>
-
-                {ticket.title && <p className="ph-result-title">{ticket.title}</p>}
-
-                {cancelled ? (
-                  <div className="ph-alert ph-alert-danger">ใบงานนี้ถูกยกเลิกแล้ว — หากอุปกรณ์ยังใช้งานไม่ได้ กรุณาแจ้งซ่อมใหม่</div>
-                ) : (
-                  <>
-                    <div className="ph-progress" aria-hidden="true">
-                      <span className="ph-progress-fill" style={{ width: `${progressPct}%` }} />
-                    </div>
-                    <ol className="ph-steps" aria-label="ความคืบหน้าของงาน">
-                      {STEPS.map((s, i) => {
-                        const done = i < stepIndex;
-                        const current = i === stepIndex;
-                        return (
-                          <li
-                            key={s.key}
-                            className={`ph-step${done ? ' is-done' : ''}${current ? ' is-current' : ''}`}
-                            aria-current={current ? 'step' : undefined}
-                          >
-                            <span className="ph-step-dot">{done ? <CheckIcon /> : i + 1}</span>
-                            <span className="ph-step-label">{s.label}</span>
-                            {times[i] && (done || current) && (
-                              <time className="ph-step-time" dateTime={times[i]}>{shortTime(times[i])}</time>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ol>
-                    {subNote && <div className="ph-alert ph-alert-info">{subNote}</div>}
-                    {ticket.finding_technician && (
-                      <div className="ph-alert ph-alert-info">ระบบกำลังส่งงานนี้ให้ช่างที่ว่างอยู่ — เมื่อช่างกดรับ ชื่อช่างจะแสดงที่นี่</div>
-                    )}
-                  </>
-                )}
-
-                <div className="ph-meta-grid">
-                  <MetaItem
-                    label="อุปกรณ์"
-                    value={
-                      <>
-                        {dev?.device_label || dev?.device_type || 'อุปกรณ์'}
-                        {dev?.brand ? ` · ${dev.brand}` : ''}
-                        {dev?.model ? ` ${dev.model}` : ''}
-                      </>
-                    }
-                    sub={dev?.device_id || ticket.device_code || ticket.device_id || '-'}
-                  />
-                  <MetaItem
-                    label="สถานที่"
-                    value={dev?.room_name || '-'}
-                    sub={dev?.organization_name || undefined}
-                  />
-                  {ticket.technician && (
-                    <MetaItem label="ช่างผู้รับผิดชอบ" value={ticket.technician} />
-                  )}
-                  <MetaItem
-                    label="ความเร่งด่วน"
-                    value={PRIORITY_LABELS[ticket.priority] || ticket.priority || 'ปกติ'}
-                  />
-                  <MetaItem
-                    label="แจ้งเมื่อ"
-                    value={fmtDateTime(ticket.created_at)}
-                    sub={sinceText(ticket.created_at) || undefined}
-                  />
-                  {ticket.estimated_completion && !ticket.closed_at && (
-                    <MetaItem
-                      label="กำหนดเสร็จตาม SLA"
-                      value={fmtDateTime(ticket.estimated_completion)}
-                    />
-                  )}
-                  {ticket.closed_at && (
-                    <MetaItem
-                      label="ปิดงานเมื่อ"
-                      value={fmtDateTime(ticket.closed_at)}
-                      sub={sinceText(ticket.closed_at) || undefined}
-                    />
-                  )}
-                </div>
-
-                <h3 className="ph-sub-title">ประวัติการดำเนินการ</h3>
-                {history.length > 0 ? (
-                  <ul className="ph-timeline">
-                    {history.map((h: any, i: number) => (
-                      <li className="ph-timeline-item" key={`${h.created_at || i}-${i}`}>
-                        <span className="ph-timeline-dot" aria-hidden="true" />
-                        <div className="ph-timeline-body">
-                          <div className="ph-timeline-status">
-                            {h.label || STATUS_LABELS[h.to_status || h.status] || h.to_status || h.status || 'อัปเดต'}
-                          </div>
-                          {h.note && <div className="ph-timeline-note">{h.note}</div>}
-                          <div className="ph-timeline-time">
-                            {fmtDateTime(h.created_at)}
-                            {h.author_name ? ` · ${h.author_name}` : ''}
-                          </div>
-                        </div>
+            {recent.length > 0 && (
+              <div className="ph-mine" aria-labelledby="ph-mine-title">
+                <h3 className="ph-mine-title" id="ph-mine-title">{t('mine_title')} <small>{t('mine_saved')}</small></h3>
+                {mine && mine.length > 0 ? (
+                  <ul className="ph-mine-list">
+                    {mine.map((m) => (
+                      <li key={m.ticket_no} className={m.ticket_no === openNo ? 'is-open' : ''}>
+                        <button type="button" className="ph-mine-row" onClick={() => search(m.ticket_no)} disabled={loading}
+                          aria-label={t('view_ticket', { no: m.ticket_no })}>
+                          <span className={`badge badge-${m.status} ph-mine-badge`}>{statusText(m.status, m.status_label, t)}</span>
+                          <span className="ph-mine-body">
+                            <strong>{m.title}</strong>
+                            <small>{m.device_label} · {t('updated')} {sinceText(m.updated_at, t) || shortTime(m.updated_at, locale)}</small>
+                          </span>
+                          <span className="ph-mine-no">{m.ticket_no}</span>
+                        </button>
+                        <button type="button" className="ph-mine-forget" aria-label={t('remove_ticket', { no: m.ticket_no })}
+                          onClick={() => setRecent(forgetRecent(m.ticket_no))}><CloseIcon /></button>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="ph-empty">
-                    ยังไม่มีบันทึกการดำเนินการที่แสดงได้ — ดูความคืบหน้าจากแถบขั้นตอนด้านบน
-                  </p>
-                )}
-
-                {ticket.resolution_notes && (
-                  <div className="ph-alert ph-alert-success">
-                    <strong>ผลการซ่อม:</strong> {ticket.resolution_notes}
+                  <div className="ph-recent">
+                    {recent.map((no) => (
+                      <button key={no} type="button" className="ph-chip" onClick={() => search(no)} disabled={loading}>{no}</button>
+                    ))}
                   </div>
                 )}
-
-                <div className="ph-result-actions">
-                  <button type="button" className="ph-btn" onClick={() => search(ticketNo)} disabled={loading}>
-                    <RefreshIcon />
-                    <span>รีเฟรชสถานะ</span>
-                  </button>
-                  {lastChecked && (
-                    <span className="ph-last-checked" role="status">
-                      อัปเดตล่าสุด {lastChecked.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                      {!FINISHED.has(ticket.status) && ' · อัปเดตเองทุก 1 นาที'}
-                    </span>
-                  )}
-                  <button type="button" className="ph-btn" onClick={copyLink}>
-                    <LinkIcon />
-                    <span>{copied ? 'คัดลอกลิงก์แล้ว' : 'คัดลอกลิงก์ติดตาม'}</span>
-                  </button>
-                  <a className="ph-btn" href="/?publicreport=1">
-                    <PlusIcon />
-                    <span>แจ้งอุปกรณ์อื่น</span>
-                  </a>
-                </div>
               </div>
             )}
-          </div>
-        </section>
 
-        <div className="pc-more">
-          <WarrantyCard />
+            <div aria-live="polite" ref={resultRef} tabIndex={-1} className="ph-result-region" aria-label={t('result_region')}>
+              {error && <div className="ph-alert ph-alert-danger">{error}</div>}
+              {!error && searched && !ticket && !loading && <div className="ph-alert ph-alert-warn">{t('not_found_warn')}</div>}
 
-          <section className="pc-panel pc-help" aria-labelledby="pc-help-title">
-            <h2 className="pc-h2" id="pc-help-title">คำถามที่พบบ่อย</h2>
-            <details>
-              <summary>หาเลขใบงานไม่เจอ</summary>
-              <p>สแกน QR ที่ตัวเครื่องอีกครั้ง ถ้าเครื่องนั้นมีงานค้าง ระบบจะแสดงเลขใบงานและสถานะให้ทันที เลขใบงานยังอยู่ในข้อความยืนยันตอนแจ้งด้วย</p>
-            </details>
-            <details>
-              <summary>แจ้งเครื่องเดิมซ้ำได้ไหม</summary>
-              <p>ไม่ได้ ถ้าเครื่องมีงานค้างอยู่แล้ว ให้เพิ่มอาการเข้าใบงานเดิมแทน ช่างจะเห็นข้อมูลครบในงานเดียว</p>
-            </details>
-            <details>
-              <summary>สติกเกอร์ QR หลุดหรืออ่านไม่ออก</summary>
-              <p>พิมพ์รหัสอุปกรณ์แทนได้ หรือแจ้งเจ้าหน้าที่ IT ของโรงเรียนเพื่อออกสติกเกอร์ใหม่</p>
-            </details>
+              {ticket && (
+                <div className="ph-result">
+                  <div className="ph-result-head">
+                    <div className="ph-result-no">
+                      <span className="ph-result-no-label">{t('ticket_no')}</span>
+                      <strong>{ticketNo}</strong>
+                    </div>
+                    <span className={`badge badge-${ticket.status} ph-status-badge`}>{statusLabelOf(ticket, t)}</span>
+                  </div>
+
+                  {ticket.title && <p className="ph-result-title">{ticket.title}</p>}
+
+                  {cancelled ? (
+                    <div className="ph-alert ph-alert-danger">{t('cancelled')}</div>
+                  ) : (
+                    <>
+                      <div className="ph-progress" aria-hidden="true">
+                        <span className="ph-progress-fill" style={{ width: `${progressPct}%` }} />
+                      </div>
+                      <ol className="ph-steps" aria-label={t('progress')}>
+                        {STEP_KEYS.map((key, i) => {
+                          const done = i < stepIndex;
+                          const current = i === stepIndex;
+                          return (
+                            <li key={key} className={`ph-step${done ? ' is-done' : ''}${current ? ' is-current' : ''}`} aria-current={current ? 'step' : undefined}>
+                              <span className="ph-step-dot">{done ? <CheckIcon /> : i + 1}</span>
+                              <span className="ph-step-label">{t(`step_${key}`)}</span>
+                              {times[i] && (done || current) && (
+                                <time className="ph-step-time" dateTime={times[i]}>{shortTime(times[i], locale)}</time>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                      {subNote && <div className="ph-alert ph-alert-info">{subNote}</div>}
+                      {ticket.finding_technician && <div className="ph-alert ph-alert-info">{t('finding_tech')}</div>}
+                    </>
+                  )}
+
+                  <div className="ph-meta-grid">
+                    <MetaItem
+                      label={t('m_device')}
+                      value={<>{dev?.device_label || dev?.device_type || t('m_device')}{dev?.brand ? ` · ${dev.brand}` : ''}{dev?.model ? ` ${dev.model}` : ''}</>}
+                      sub={dev?.device_id || ticket.device_code || ticket.device_id || '-'}
+                    />
+                    <MetaItem label={t('m_place')} value={dev?.room_name || '-'} sub={dev?.organization_name || undefined} />
+                    {ticket.technician && <MetaItem label={t('m_tech')} value={ticket.technician} />}
+                    <MetaItem label={t('m_priority')} value={priorityText} />
+                    <MetaItem label={t('m_reported')} value={fmtDateTime(ticket.created_at, locale)} sub={sinceText(ticket.created_at, t) || undefined} />
+                    {ticket.estimated_completion && !ticket.closed_at && (
+                      <MetaItem label={t('m_sla')} value={fmtDateTime(ticket.estimated_completion, locale)} />
+                    )}
+                    {ticket.closed_at && (
+                      <MetaItem label={t('m_closed')} value={fmtDateTime(ticket.closed_at, locale)} sub={sinceText(ticket.closed_at, t) || undefined} />
+                    )}
+                  </div>
+
+                  <h3 className="ph-sub-title">{t('history')}</h3>
+                  {history.length > 0 ? (
+                    <ul className="ph-timeline">
+                      {history.map((h: any, i: number) => {
+                        const code = h.to_status || h.status;
+                        return (
+                          <li className="ph-timeline-item" key={`${h.created_at || i}-${i}`}>
+                            <span className="ph-timeline-dot" aria-hidden="true" />
+                            <div className="ph-timeline-body">
+                              <div className="ph-timeline-status">{KNOWN_STATUS.has(code) ? t(`st_${code}`) : (h.label || code || t('history_update'))}</div>
+                              {h.note && <div className="ph-timeline-note">{h.note}</div>}
+                              <div className="ph-timeline-time">{fmtDateTime(h.created_at, locale)}{h.author_name ? ` · ${h.author_name}` : ''}</div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="ph-empty">{t('history_empty')}</p>
+                  )}
+
+                  {ticket.resolution_notes && (
+                    <div className="ph-alert ph-alert-success"><strong>{t('resolution')}</strong> {ticket.resolution_notes}</div>
+                  )}
+
+                  <div className="ph-result-actions">
+                    <button type="button" className="ph-btn" onClick={() => search(ticketNo)} disabled={loading}>
+                      <RefreshIcon /><span>{t('refresh')}</span>
+                    </button>
+                    {lastChecked && (
+                      <span className="ph-last-checked" role="status">
+                        {t('last_updated', { time: lastChecked.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) })}
+                        {!FINISHED.has(ticket.status) && t('auto_refresh')}
+                      </span>
+                    )}
+                    <button type="button" className="ph-btn" onClick={copyLink}>
+                      <LinkIcon /><span>{copied ? t('copied') : t('copy_link')}</span>
+                    </button>
+                    <a className="ph-btn" href="/?publicreport=1"><PlusIcon /><span>{t('report_other')}</span></a>
+                  </div>
+                </div>
+              )}
+            </div>
           </section>
         </div>
 
-        <a className="pc-lead-link" href="/?customer=1">
-          <span>
-            <strong>สนใจอุปกรณ์หรือบริการ?</strong>
-            <small>ฝากชื่อและเบอร์ ทีมงานติดต่อกลับเรื่องสินค้า ราคา หรือการสาธิต</small>
-          </span>
-          <ArrowIcon />
-        </a>
+        <div className="pc-right">
+          <AIChatWidget embedded />
+        </div>
+
+        <nav className="pc-links" aria-label={t('more_links')}>
+          <button type="button" className="pc-link-cell" onClick={() => setShowWarranty((v) => !v)} aria-expanded={showWarranty} aria-controls="ph-warranty">
+            <span className="pc-link-icon" aria-hidden="true"><ShieldIcon /></span>
+            <span className="pc-link-text"><strong>{t('warranty')}</strong><small>{t('warranty_sub')}</small></span>
+            <ArrowIcon />
+          </button>
+          <a className="pc-link-cell" href="/?customer=1">
+            <span className="pc-link-icon" aria-hidden="true"><HeadsetIcon /></span>
+            <span className="pc-link-text"><strong>{t('inquiry')}</strong><small>{t('inquiry_sub')}</small></span>
+            <ArrowIcon />
+          </a>
+        </nav>
+
+        {showWarranty && <WarrantyCard onClose={() => setShowWarranty(false)} />}
+
+        <section className="pc-flow" aria-labelledby="pc-flow-title">
+          <h2 className="pc-h3" id="pc-flow-title">{t('flow_title')}</h2>
+          <ol>
+            <li><b>1</b><span>{t('flow1')}</span></li>
+            <li><b>2</b><span>{t('flow2')}</span></li>
+            <li><b>3</b><span>{t('flow3')}</span></li>
+          </ol>
+        </section>
+
+        <section className="pc-faq" aria-labelledby="pc-faq-title">
+          <h2 className="pc-h3" id="pc-faq-title">{t('faq_title')}</h2>
+          <details><summary>{t('faq1q')}</summary><p>{t('faq1a')}</p></details>
+          <details><summary>{t('faq2q')}</summary><p>{t('faq2a')}</p></details>
+          <details><summary>{t('faq3q')}</summary><p>{t('faq3a')}</p></details>
+        </section>
       </main>
 
-      <footer className="ph-footer">
-        <span className="ph-footer-brand">IWA Smart Classroom Support</span>
-        {/* จัดลิงก์เป็นกลุ่มเดียว เพื่อให้ space-between ของ .ph-footer ยังแบ่งเป็นสองฝั่งเหมือนเดิม */}
-        <nav className="ph-footer-links" aria-label="ลิงก์เพิ่มเติม">
-          <a className="ph-staff-footer-link" href="/?login=1">พื้นที่เจ้าหน้าที่</a>
-          <a href="/?register=1">สมัครสมาชิกเจ้าหน้าที่</a>
-          <a href="/?customer=1">ฝากข้อมูลลูกค้า</a>
+      <footer className="pc-footer">
+        <span>{t('footer_company')}</span>
+        <nav aria-label={t('more_links')}>
+          <a href={staffLoggedIn ? '/' : '/?login=1'}><UserIcon />{t('footer_staff')}</a>
+          <a href="/?register=1">{t('footer_register')}</a>
+          <a href="/?privacy=1">{t('footer_privacy')}</a>
         </nav>
       </footer>
     </div>
