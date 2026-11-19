@@ -617,6 +617,8 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
             <ArrowIcon />
           </a>
 
+          <AIChatWidget inline />
+
           <ol className="pc-steps" aria-label="จากแจ้งปัญหา ถึงติดตามผล">
             <li><b>1</b><span>สแกน QR แล้วเล่าอาการ</span></li>
             <li><b>2</b><span>ได้เลขใบงานทันที</span></li>
@@ -891,7 +893,6 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           <a href="/?customer=1">ฝากข้อมูลลูกค้า</a>
         </nav>
       </footer>
-      <AIChatWidget />
     </div>
   );
 }

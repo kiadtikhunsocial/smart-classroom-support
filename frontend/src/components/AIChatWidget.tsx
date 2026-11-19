@@ -21,7 +21,17 @@ function resolveSessionId(): string {
   });
 }
 
-export default function AIChatWidget() {
+/** คำถามเริ่มต้น — แตะแล้วส่งทันที ช่วยให้ผู้ใช้เริ่มเล่าอาการได้โดยไม่ต้องคิดคำ */
+const STARTERS = ['จอไม่ติด ทำยังไงดี', 'เครื่องไม่มีเสียง', 'ทัชสกรีนกดไม่ได้', 'ต่ออินเทอร์เน็ตไม่ได้'];
+
+const GREETING =
+  'สวัสดีค่ะ เล่าอาการของอุปกรณ์มาได้เลย ผู้ช่วยจะถามทีละข้อและแนะนำวิธีแก้เบื้องต้น ' +
+  'ถ้าลองแล้วยังไม่หาย กด "แจ้งซ่อม" ด้านล่างได้ทันทีค่ะ';
+
+/**
+ * inline=true: ปุ่มเปิดเป็นแถบในหน้า (อยู่คู่กับปุ่มแจ้งซ่อม/สแกน QR) แทนปุ่มลอยมุมจอ
+ */
+export default function AIChatWidget({ inline = false }: { inline?: boolean }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -38,7 +48,7 @@ export default function AIChatWidget() {
     if (open && !greeted) {
       setMessages((m) => [
         ...m,
-        { role: 'bot', text: 'สวัสดีค่ะ วันนี้มีอะไรให้ช่วยคะ? ถามได้เลยเรื่องอุปกรณ์เรียนหรือแจ้งซ่อม' },
+        { role: 'bot', text: GREETING },
       ]);
       setGreeted(true);
     }
@@ -104,17 +114,36 @@ export default function AIChatWidget() {
 
   return (
     <>
-      <button
-        type="button" ref={triggerRef} className="public-chat-trigger"
-        aria-label="คุยกับผู้ช่วย AI" aria-expanded={open} aria-controls={open ? panelId : undefined}
-        onClick={() => open ? close() : setOpen(true)}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.4-3.5A7.5 7.5 0 1 1 20 11.5Z" />
-          <path d="M9 10h6m-6 3h4" />
-        </svg>
-        <span>คุยกับผู้ช่วย AI</span>
-      </button>
+      {inline ? (
+        <button
+          type="button" ref={triggerRef} className="pc-ai"
+          aria-expanded={open} aria-controls={open ? panelId : undefined}
+          onClick={() => open ? close() : setOpen(true)}
+        >
+          <span className="pc-ai-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.4-3.5A7.5 7.5 0 1 1 20 11.5Z" />
+              <path d="M9 10h6m-6 3h4" />
+            </svg>
+          </span>
+          <span className="pc-ai-text">
+            <strong>ถามผู้ช่วย AI ก่อน</strong>
+            <small>เล่าอาการ แล้วลองแก้เบื้องต้นด้วยตัวเอง</small>
+          </span>
+        </button>
+      ) : (
+        <button
+          type="button" ref={triggerRef} className="public-chat-trigger"
+          aria-label="คุยกับผู้ช่วย AI" aria-expanded={open} aria-controls={open ? panelId : undefined}
+          onClick={() => open ? close() : setOpen(true)}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.4-3.5A7.5 7.5 0 1 1 20 11.5Z" />
+            <path d="M9 10h6m-6 3h4" />
+          </svg>
+          <span>คุยกับผู้ช่วย AI</span>
+        </button>
+      )}
 
       {open && (
         <section
@@ -253,12 +282,25 @@ export default function AIChatWidget() {
               </div>
             )}
 
+            {messages.length <= 1 && !typing && (
+              <div className="pc-ai-starters" role="group" aria-label="คำถามที่พบบ่อย แตะเพื่อถาม">
+                {STARTERS.map((s) => (
+                  <button key={s} type="button" className="pc-ai-starter" onClick={() => send(s)}>{s}</button>
+                ))}
+              </div>
+            )}
+
             {messages.length === 0 && !typing && (
               <div style={{ color: 'var(--color-text-tertiary, #9ca3af)', fontSize: 13, textAlign: 'center', margin: 'auto' }}>
                 พิมพ์คำถามเพื่อเริ่มคุยกับผู้ช่วย
               </div>
             )}
           </div>
+
+          {/* ลองแล้วไม่หาย → ไปแจ้งซ่อมได้ทันทีจากในแชต */}
+          {messages.length > 1 && (
+            <a className="pc-ai-report" href="/?publicreport=1">ยังไม่หาย? แจ้งซ่อมเลย</a>
+          )}
 
           {/* ช่องพิมพ์ */}
           <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--color-border, #e5e7eb)', background: 'var(--color-surface, #fff)' }}>

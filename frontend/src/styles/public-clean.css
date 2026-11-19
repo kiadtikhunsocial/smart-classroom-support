@@ -412,3 +412,74 @@
   .pc-form-page .ph-topbar-right { flex-wrap: nowrap; flex: 0 0 auto; gap: 6px; }
 }
 .pc-home .pc-report .ph-action-arrow { color: inherit; opacity: 0.85; stroke: currentColor; }
+
+/* ── ผู้ช่วย AI: แถบคู่กับปุ่มแจ้งซ่อม (แทนปุ่มลอยมุมจอ) ─────────────────── */
+
+.pc-ai {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 64px;
+  margin-top: -8px;
+  padding: 10px 18px;
+  border-radius: var(--pc-radius);
+  border: 1px solid var(--ph-line-strong);
+  background: rgb(var(--ph-accent-rgb) / 0.10);
+  color: var(--ph-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.pc-ai:hover { background: rgb(var(--ph-accent-rgb) / 0.18); }
+.pc-ai[aria-expanded='true'] { border-color: var(--ph-accent-text); }
+.pc-ai:focus-visible { outline: 3px solid var(--ph-accent-text); outline-offset: 3px; }
+.pc-ai-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgb(var(--ph-accent-rgb) / 0.18);
+  color: var(--ph-accent-text);
+}
+.pc-ai-text { display: grid; gap: 2px; min-width: 0; }
+.pc-ai-text strong { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; line-height: 1.3; }
+.pc-ai-text small { color: var(--ph-text-2); font-size: 0.84rem; line-height: 1.4; }
+
+.pc-ai-starters { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 36px; }
+.pc-ai-starter {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, rgb(255 255 255 / 0.14));
+  background: var(--color-surface, transparent);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+.pc-ai-starter:hover { border-color: var(--chat-emphasis); }
+.pc-ai-report {
+  display: block;
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-border, rgb(255 255 255 / 0.14));
+  background: var(--color-surface);
+  color: var(--chat-emphasis);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: center;
+  text-decoration: none;
+}
+.pc-ai-report:hover { text-decoration: underline; }
+
+/* แผงแชตบนมือถือ: เต็มความกว้างจากขอบล่าง อ่านง่ายและพิมพ์สะดวก */
+@media (max-width: 640px) {
+  .pc-home .public-chat-panel {
+    inset: auto 8px 8px 8px;
+    width: auto;
+    height: min(72vh, 560px);
+  }
+}
