@@ -8,6 +8,8 @@ import '../styles/public-warranty.css';
 // เลเยอร์ยกระดับดีไซน์ (glassmorphism + neon) — ต้องโหลดท้ายสุดเพื่อทับของเดิม
 import '../styles/public-premium.css';
 import '../styles/public-refresh.css';
+// เลย์เอาต์ใหม่ (pc-*) — คงสีเดิมทั้งหมด ใช้ตัวแปร --ph-* จากไฟล์ธีม จึงต้องโหลดท้ายสุด
+import '../styles/public-clean.css';
 import PublicThemeToggle from './PublicThemeToggle';
 import AIChatWidget from './AIChatWidget';
 import { forgetRecent, loadRecent, looksLikeTicketNo, saveRecent } from '../publicRecent';
@@ -187,6 +189,14 @@ function ArrowIcon() {
 // ─── ส่วนประกอบย่อยที่ใช้ซ้ำ ────────────────────────────────────────────────
 
 /** จุดเรืองแสงบอกว่าระบบพร้อมรับเรื่อง — ใช้ในแถบบนและใน hero */
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
 function LivePill({ children }: { children: React.ReactNode }) {
   return (
     <span className="ph-live">
@@ -303,16 +313,14 @@ function WarrantyCard() {
   const openTicketNo: string = openTicket?.ticket_id || openTicket?.ticket_no || '';
 
   return (
-    <section className="ph-card phw-card" id="ph-warranty" aria-labelledby="phw-title">
-      <div className="ph-card-head">
-        <h2 className="ph-card-title" id="phw-title">ตรวจสอบประกันสินค้า</h2>
-        <span className="ph-card-tag">WARRANTY CHECK</span>
+    <section className="pc-panel phw-card" id="ph-warranty" aria-labelledby="phw-title">
+      <div className="pc-panel-head">
+        <span className="pc-panel-icon" aria-hidden="true"><ShieldIcon /></span>
+        <div>
+          <h2 className="pc-h2" id="phw-title">ตรวจสอบประกัน</h2>
+          <p className="pc-muted">ใส่หมายเลขสินค้า (S/N) หรือรหัสอุปกรณ์บนสติกเกอร์</p>
+        </div>
       </div>
-
-      <p className="phw-lead">
-        กรอกหมายเลขสินค้าของอุปกรณ์ที่ซื้อไปแล้ว เพื่อดูว่ายังอยู่ในระยะประกันหรือไม่
-        ตรวจได้เองบนเว็บ ไม่ต้องเข้าสู่ระบบและไม่ต้องมีเลขใบงาน
-      </p>
 
       <form
         className="phw-form"
@@ -344,8 +352,7 @@ function WarrantyCard() {
         </button>
       </form>
       <p className="ph-hint" id="phw-hint">
-        หมายเลขสินค้าอยู่บนสติกเกอร์ใต้ตัวเครื่องหรือด้านหลังจอ — พิมพ์รหัสอุปกรณ์ของโรงเรียน
-        (เช่น <code>SCHM01-B1-R101-DISP-01</code>) ก็ค้นได้เหมือนกัน
+        S/N อยู่ใต้ตัวเครื่องหรือหลังจอ หรือใช้รหัสอุปกรณ์ เช่น <code>SCHM01-B1-R101-DISP-01</code>
       </p>
 
       <div aria-live="polite" ref={resultRef} tabIndex={-1} className="ph-result-region" aria-label="ผลการตรวจสอบประกัน">
@@ -573,14 +580,10 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   }, [stepIndex]);
 
   return (
-    <div className="ph-page">
-      {/* ชั้นพื้นหลัง: แสงออโรร่า + เส้นวงจร — ตกแต่งล้วน ไม่รับโฟกัส */}
+    <div className="ph-page pc-home">
+      {/* แสงม่วงจาง ๆ ด้านบนชั้นเดียว — ตกแต่งล้วน ไม่ขยับ เพื่อให้เบาบนมือถือ */}
       <div className="ph-bg" aria-hidden="true">
         <span className="ph-bg-aurora ph-bg-aurora-1" />
-        <span className="ph-bg-aurora ph-bg-aurora-2" />
-        <span className="ph-bg-aurora ph-bg-aurora-3" />
-        <span className="ph-bg-grid" />
-        <span className="ph-bg-vignette" />
       </div>
 
       <header className="ph-topbar">
@@ -600,72 +603,34 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         </div>
       </header>
 
-      <main className="ph-main">
-        <section className="ph-hero">
-          <div className="ph-hero-grid">
-            <div className="ph-hero-copy">
-              <span className="ph-eyebrow">IWA SMART CLASSROOM SUPPORT</span>
-              <h1 className="ph-hero-title">แจ้งซ่อมและติดตามงาน<br /><span className="ph-hero-accent">อุปกรณ์ห้องเรียน</span></h1>
-              <p className="ph-hero-sub">
-                แจ้งซ่อม ติดตามงาน และตรวจสอบประกันได้ด้วยตัวเอง
-                ไม่ต้องเข้าสู่ระบบ เพียงเลือกงานที่ต้องการด้านล่าง
-              </p>
-              <div className="ph-hero-cta">
-                <a href="/?publicreport=1" className="ph-cta-primary">แจ้งซ่อมอุปกรณ์ <ArrowIcon /></a>
-                <button type="button" className="ph-cta-secondary" onClick={focusTrack}>ติดตามงานซ่อม</button>
-              </div>
-            </div>
-            <div className="ph-hero-panel" aria-label="ขั้นตอนการใช้งาน">
-              <span className="ph-panel-kicker">เริ่มใช้งานง่าย ๆ</span>
-              <h2>จากแจ้งปัญหา<br />ถึงติดตามผล</h2>
-              <ol>
-                <li><strong>01</strong><span>สแกน QR หรือกรอกรหัสอุปกรณ์เพื่อแจ้งปัญหา</span></li>
-                <li><strong>02</strong><span>รับเลขใบงานทันที ใช้ค้นสถานะได้ตลอด</span></li>
-                <li><strong>03</strong><span>ดูความคืบหน้าจากเจ้าหน้าที่ในหน้าเดียว</span></li>
-              </ol>
-            </div>
-          </div>
+      <main className="ph-main pc-main">
+        <section className="pc-hero" aria-labelledby="pc-title">
+          <h1 className="pc-title" id="pc-title">แจ้งซ่อมและติดตามงาน<br /><span className="pc-title-accent">อุปกรณ์ห้องเรียน</span></h1>
+          <p className="pc-lead">ไม่ต้องสมัคร ไม่ต้องเข้าสู่ระบบ ใช้เวลาไม่ถึงนาที</p>
 
-          <div className="ph-actions">
-            <a className="ph-action-card ph-action-primary" href="/?publicreport=1">
-              <span className="ph-action-icon"><ScanIcon /></span>
-              <span className="ph-action-body">
-                <strong>แจ้งซ่อม / สแกน QR</strong>
-                <small>สแกนสติกเกอร์ที่อุปกรณ์ หรือกรอกรหัสอุปกรณ์เอง</small>
-              </span>
-              <ArrowIcon />
-            </a>
-            <button type="button" className="ph-action-card" onClick={focusTrack}>
-              <span className="ph-action-icon"><SearchIcon /></span>
-              <span className="ph-action-body">
-                <strong>ติดตามสถานะ</strong>
-                <small>ใช้เลขใบงานที่ได้รับตอนแจ้ง เช่น TK.SCHM01.26.0001-T</small>
-              </span>
-              <ArrowIcon />
-            </button>
-            <a className="ph-action-card" href="#ph-warranty">
-              <span className="ph-action-icon"><ShieldIcon /></span>
-              <span className="ph-action-body">
-                <strong>ตรวจสอบประกัน</strong>
-                <small>กรอกหมายเลขสินค้าของเครื่องที่ซื้อไปแล้ว ดูวันหมดประกันได้ทันที</small>
-              </span>
-              <ArrowIcon />
-            </a>
-          </div>
+          <a href="/?publicreport=1" className="pc-report">
+            <span className="pc-report-icon" aria-hidden="true"><ScanIcon /></span>
+            <span className="pc-report-text">
+              <strong>แจ้งซ่อม / สแกน QR</strong>
+              <small>สแกนสติกเกอร์ที่ตัวเครื่อง หรือพิมพ์รหัสอุปกรณ์</small>
+            </span>
+            <ArrowIcon />
+          </a>
 
+          <ol className="pc-steps" aria-label="จากแจ้งปัญหา ถึงติดตามผล">
+            <li><b>1</b><span>สแกน QR แล้วเล่าอาการ</span></li>
+            <li><b>2</b><span>ได้เลขใบงานทันที</span></li>
+            <li><b>3</b><span>ติดตามผลได้ที่หน้านี้</span></li>
+          </ol>
         </section>
 
-        <section className="ph-customer-band" aria-labelledby="ph-customer-title">
-          <div><span className="ph-panel-kicker">สำหรับผู้สนใจสินค้าและบริการ</span>
-            <h2 id="ph-customer-title">ให้ทีมงานช่วยเลือกอุปกรณ์ที่เหมาะกับคุณ</h2>
-            <p>ฝากชื่อและช่องทางติดต่อเพื่อขอข้อมูลสินค้า ราคา หรือการสาธิต โดยไม่ต้องสร้างบัญชีเจ้าหน้าที่</p></div>
-          <a href="/?customer=1" className="ph-customer-cta">ฝากข้อมูลให้ติดต่อกลับ <ArrowIcon /></a>
-        </section>
-
-        <section className="ph-card ph-track-card" ref={trackRef} aria-labelledby="ph-track-title">
-          <div className="ph-card-head">
-            <h2 className="ph-card-title" id="ph-track-title">ติดตามสถานะใบงาน</h2>
-            <span className="ph-card-tag">TICKET TRACKING</span>
+        <section className="pc-panel pc-track" ref={trackRef} aria-labelledby="ph-track-title">
+          <div className="pc-panel-head">
+            <span className="pc-panel-icon" aria-hidden="true"><SearchIcon /></span>
+            <div>
+              <h2 className="pc-h2" id="ph-track-title">ติดตามงานซ่อม</h2>
+              <p className="pc-muted">ใส่เลขใบงาน หรือรหัสอุปกรณ์บนสติกเกอร์</p>
+            </div>
           </div>
 
           <form
@@ -698,12 +663,12 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
             </button>
           </form>
           <p className="ph-hint" id="ph-ticket-hint">
-            ใส่เลขใบงาน เช่น <code>TK.SCHM01.26.0001-T</code> หรือรหัสบนสติกเกอร์ของเครื่อง ระบบจะเปิดงานล่าสุดของเครื่องนั้นให้
+            เช่น <code>TK.SCHM01.26.0001-T</code> — ใส่รหัสอุปกรณ์ ระบบจะเปิดงานล่าสุดของเครื่องนั้น
           </p>
 
           {recent.length > 0 && (
             <div className="ph-mine" aria-labelledby="ph-mine-title">
-              <h3 className="ph-mine-title" id="ph-mine-title">งานแจ้งซ่อมของฉัน <small>(จำไว้ในเครื่องนี้)</small></h3>
+              <h3 className="ph-mine-title" id="ph-mine-title">งานที่ฉันแจ้งไว้ <small>(จำไว้ในเครื่องนี้)</small></h3>
               {mine && mine.length > 0 ? (
                 <ul className="ph-mine-list">
                   {mine.map((m) => (
@@ -718,7 +683,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                         <span className="ph-mine-no">{m.ticket_no}</span>
                       </button>
                       <button type="button" className="ph-mine-forget" aria-label={`เอา ${m.ticket_no} ออกจากรายการ`}
-                        onClick={() => setRecent(forgetRecent(m.ticket_no))}>×</button>
+                        onClick={() => setRecent(forgetRecent(m.ticket_no))}><CloseIcon /></button>
                     </li>
                   ))}
                 </ul>
@@ -888,19 +853,33 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           </div>
         </section>
 
-        <WarrantyCard />
+        <div className="pc-more">
+          <WarrantyCard />
 
-        <section className="ph-card ph-help">
-          <div className="ph-card-head">
-            <h2 className="ph-card-title">หาเลขใบงานไม่เจอ?</h2>
-            <span className="ph-card-tag">HELP</span>
-          </div>
-          <ul className="ph-help-list">
-            <li>สแกน QR ที่ติดอยู่กับอุปกรณ์ — ถ้าเครื่องนั้นมีงานค้างอยู่ ระบบจะแสดงเลขใบงานและสถานะให้ทันที</li>
-            <li>เลขใบงานอยู่ในข้อความยืนยันตอนแจ้งซ่อม และแยกตามโรงเรียนเพื่อไม่ให้กรอกสลับกัน</li>
-            <li>อุปกรณ์ที่แจ้งไปแล้วจะแจ้งซ้ำไม่ได้ — ให้แจ้งอาการเพิ่มเข้าใบงานเดิมแทน</li>
-          </ul>
-        </section>
+          <section className="pc-panel pc-help" aria-labelledby="pc-help-title">
+            <h2 className="pc-h2" id="pc-help-title">คำถามที่พบบ่อย</h2>
+            <details>
+              <summary>หาเลขใบงานไม่เจอ</summary>
+              <p>สแกน QR ที่ตัวเครื่องอีกครั้ง ถ้าเครื่องนั้นมีงานค้าง ระบบจะแสดงเลขใบงานและสถานะให้ทันที เลขใบงานยังอยู่ในข้อความยืนยันตอนแจ้งด้วย</p>
+            </details>
+            <details>
+              <summary>แจ้งเครื่องเดิมซ้ำได้ไหม</summary>
+              <p>ไม่ได้ ถ้าเครื่องมีงานค้างอยู่แล้ว ให้เพิ่มอาการเข้าใบงานเดิมแทน ช่างจะเห็นข้อมูลครบในงานเดียว</p>
+            </details>
+            <details>
+              <summary>สติกเกอร์ QR หลุดหรืออ่านไม่ออก</summary>
+              <p>พิมพ์รหัสอุปกรณ์แทนได้ หรือแจ้งเจ้าหน้าที่ IT ของโรงเรียนเพื่อออกสติกเกอร์ใหม่</p>
+            </details>
+          </section>
+        </div>
+
+        <a className="pc-lead-link" href="/?customer=1">
+          <span>
+            <strong>สนใจอุปกรณ์หรือบริการ?</strong>
+            <small>ฝากชื่อและเบอร์ ทีมงานติดต่อกลับเรื่องสินค้า ราคา หรือการสาธิต</small>
+          </span>
+          <ArrowIcon />
+        </a>
       </main>
 
       <footer className="ph-footer">
