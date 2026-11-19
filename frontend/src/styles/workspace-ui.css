@@ -278,3 +278,17 @@ html:has(.modal-frame[open]) { overflow: hidden; }
   .public-chat-trigger span { display: none; }
   .public-chat-panel { inset: auto 12px 66px auto; width: min(380px, calc(100vw - 24px)); }
 }
+
+/* Devices toolbar: filters sit inline on wide screens, behind one button on phones. */
+.dv-filters { display: contents; }
+[data-mode] .dv-toolbar .dv-filter-toggle, .dv-toolbar .dv-filter-toggle { display: none; }
+@media (max-width: 640px) {
+  [data-mode] .dv-toolbar .dv-filter-toggle, .dv-toolbar .dv-filter-toggle { display: inline-flex; flex: 1 1 auto; }
+  .dv-filters { display: none; flex-direction: column; gap: 8px; flex: 1 1 100%; }
+  .dv-filters.is-open { display: flex; }
+  .dv-filters .form-select { width: 100%; }
+}
+
+/* Staff login: back link sits on its own line above the logo. */
+.login-back-link { display: inline-block; margin-bottom: 18px; color: var(--color-text-secondary); font-size: .85rem; font-weight: 600; text-decoration: none; }
+.login-back-link:hover { color: var(--color-text); text-decoration: underline; }

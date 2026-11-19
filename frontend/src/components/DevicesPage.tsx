@@ -188,6 +188,9 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
   });
   const switchView = (v: 'table' | 'cards') => { setView(v); try { localStorage.setItem('sc_devices_view', v); } catch { /* ไม่จำก็ได้ */ } };
   const [moreOpen, setMoreOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (isSuperAdmin && !lockedToOwnSchool && orgFilter !== '' ? 1 : 0) + (statusFilter ? 1 : 0) + (sortBy !== 'room' ? 1 : 0);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -943,6 +946,12 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="ค้นหา รหัส / ยี่ห้อ / รุ่น / Serial / ห้อง" aria-label="ค้นหาอุปกรณ์" />
         </div>
+        {/* มือถือ: ซ่อนตัวกรองไว้หลังปุ่มเดียว จอจะได้เห็นรายการเร็วขึ้น */}
+        <button type="button" className="btn btn-secondary dv-filter-toggle" aria-expanded={filtersOpen}
+          aria-controls="dv-filters" onClick={() => setFiltersOpen((v) => !v)}>
+          ตัวกรอง{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+        </button>
+        <div id="dv-filters" className={`dv-filters${filtersOpen ? ' is-open' : ''}`}>
         {isSuperAdmin && !lockedToOwnSchool && (
           <select className="form-select" value={orgFilter} aria-label="โรงเรียน"
             onChange={(e) => setOrgFilter(e.target.value === '' ? '' : Number(e.target.value))}>
@@ -960,6 +969,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
           <option value="warranty">เรียง: ประกันใกล้หมดก่อน</option>
           <option value="id">เรียง: รหัสอุปกรณ์</option>
         </select>
+        </div>
         <div className="dv-view" role="group" aria-label="รูปแบบการแสดง">
           <button type="button" className={view === 'table' ? 'is-on' : ''} aria-pressed={view === 'table'} onClick={() => switchView('table')} title="ตาราง">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
