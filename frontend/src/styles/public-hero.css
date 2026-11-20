@@ -253,3 +253,24 @@
 @media (prefers-reduced-motion: reduce) {
   .pc-modal, .pc-modal .pc-sheet, .pc-trackpage .ph-result, .pc-trackpage .ph-step.is-current .ph-step-dot, .pc-trackpage .ph-timeline-item { animation: none; }
 }
+
+/* ── ติดตามงาน + ผู้ช่วย AI สูงเท่ากันบนจอกว้าง ───────────────────────── */
+@media (min-width: 880px) {
+  .pc-home .pc-main:not(.pc-trackpage) .pc-left { display: flex; flex-direction: column; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-track { flex: 1; display: flex; flex-direction: column; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-track .pc-prev { flex: 1; display: flex; flex-direction: column; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-track .pc-prev-log { flex: 1; }
+  /* ความสูงแถวกำหนดโดยฝั่งซ้าย; แชตเต็มช่อง เลื่อนข้อความภายในเอง */
+  .pc-home .pc-main:not(.pc-trackpage) .pc-right { align-self: stretch; position: relative; min-height: 440px; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-right .pc-chat { position: absolute; inset: 0; height: auto; }
+}
+
+/* ฝั่งซ้ายเป็นการ์ดเหมือนแผงแชต ขอบบน/ล่างตรงกัน */
+.pc-home .pc-main:not(.pc-trackpage) .pc-track {
+  padding: 18px;
+  box-sizing: border-box;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
+  box-shadow: 0 4px 18px rgb(29 27 41 / 0.05);
+}
