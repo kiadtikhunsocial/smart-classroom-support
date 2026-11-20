@@ -16,6 +16,7 @@ import HeroSlides from './HeroSlides';
 import HeroWave from './HeroWave';
 import Reveal from './Reveal';
 import HomeDemo from './HomeDemo';
+import TrackPreview from './TrackPreview';
 import ThemeModeButton from './ThemeModeButton';
 import LanguageSwitcher from './LanguageSwitcher';
 import AIChatWidget from './AIChatWidget';
@@ -589,6 +590,8 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
             <p className="pc-hint" id="ph-ticket-hint">
               {t('example')} <span className="pc-mono">TK.SCHM01.26.0001-T</span>
             </p>
+
+            {!ticket && !searched && !loading && <TrackPreview />}
 
             {recent.length > 0 && (
               <div className="ph-mine" aria-labelledby="ph-mine-title">
