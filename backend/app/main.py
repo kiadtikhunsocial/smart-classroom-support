@@ -7329,7 +7329,7 @@ def web_chat_handle(request: Request, payload: WebChatIn):
     lang = normalize_lang(payload.lang)
     # pipeline เป็นภาษาไทย: แปลข้อความเข้า → ประมวลผล → แปลคำตอบกลับเป็นภาษาของหน้าเว็บ
     reply = handle_message(user_id=f"web-{session_id}", text=to_thai(payload.text.strip(), lang), reply_token="")
-    return {"reply": from_thai(reply, lang), "lang": lang}
+    return {"reply": from_thai(reply, lang)}
 
 @app.post("/api/line/bot", status_code=200)
 def line_bot_handle(payload: LineBotIn, _: None = Depends(require_n8n_secret)):

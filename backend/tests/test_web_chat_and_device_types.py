@@ -63,3 +63,18 @@ def test_custom_device_type_roundtrip():
             org = db.get(Organization, org_id)
             if org: db.delete(org)
         db.commit(); db.close()
+
+
+def test_web_chat_translates_to_and_from_site_language(monkeypatch):
+    import app.chatbot_i18n as i18n
+    seen = []
+    monkeypatch.setattr(chatbot_core, "handle_message", lambda **kw: seen.append(kw["text"]) or "ลองเช็กสาย HDMI ค่ะ")
+    monkeypatch.setattr(i18n, "request_text", lambda parts, **kw: "Check the HDMI cable." if "Thai customer-service reply" in parts[0] else "โปรเจคเตอร์ไม่มีภาพ")
+    with TestClient(app) as client:
+        r = client.post("/api/chatbot/web", json={"session_id": str(uuid.uuid4()), "text": "Projector has no image", "lang": "en"})
+        assert r.json() == {"reply": "Check the HDMI cable."}
+        assert seen == ["โปรเจคเตอร์ไม่มีภาพ"]
+        # Thai input and Thai site language are passed through untouched
+        r = client.post("/api/chatbot/web", json={"session_id": str(uuid.uuid4()), "text": "สวัสดี", "lang": "th"})
+        assert r.json() == {"reply": "ลองเช็กสาย HDMI ค่ะ"}
+        assert seen[-1] == "สวัสดี"
