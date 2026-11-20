@@ -28,7 +28,7 @@ function resolveSessionId(): string {
  */
 export default function AIChatWidget({ inline = false, embedded = false }: { inline?: boolean; embedded?: boolean }) {
   // embedded=true: แผงแชตฝังอยู่ในหน้า เปิดค้างไว้ตลอด (หน้าแรกสาธารณะ)
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const starters = [t('ai_s1'), t('ai_s2'), t('ai_s3'), t('ai_s4')];
   const [open, setOpen] = useState(embedded);
   const [messages, setMessages] = useState<Msg[]>(() => (embedded ? [{ role: 'bot', text: t('ai_greeting') }] : []));
@@ -91,6 +91,7 @@ export default function AIChatWidget({ inline = false, embedded = false }: { inl
         body: JSON.stringify({
           session_id: sessionId,
           text,
+          lang,
         }),
       });
       if (!res.ok) {

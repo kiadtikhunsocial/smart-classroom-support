@@ -7313,6 +7313,7 @@ class LineBotIn(BaseModel):
 class WebChatIn(BaseModel):
     session_id: UUID
     text: str = Field(..., min_length=1, max_length=1000)
+    lang: str = Field("th", max_length=8)  # ภาษาของหน้าเว็บ: th/en/zh/ja/ko
 
 
 @app.post("/api/chatbot/web")
@@ -7324,8 +7325,11 @@ def web_chat_handle(request: Request, payload: WebChatIn):
     """
     from app.chatbot_core import handle_message
     session_id = str(payload.session_id)
-    reply = handle_message(user_id=f"web-{session_id}", text=payload.text.strip(), reply_token="")
-    return {"reply": reply}
+    from app.chatbot_i18n import normalize_lang, to_thai, from_thai
+    lang = normalize_lang(payload.lang)
+    # pipeline เป็นภาษาไทย: แปลข้อความเข้า → ประมวลผล → แปลคำตอบกลับเป็นภาษาของหน้าเว็บ
+    reply = handle_message(user_id=f"web-{session_id}", text=to_thai(payload.text.strip(), lang), reply_token="")
+    return {"reply": from_thai(reply, lang), "lang": lang}
 
 @app.post("/api/line/bot", status_code=200)
 def line_bot_handle(payload: LineBotIn, _: None = Depends(require_n8n_secret)):

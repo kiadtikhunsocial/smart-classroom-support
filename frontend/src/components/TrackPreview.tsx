@@ -115,8 +115,8 @@ export default function TrackPreview() {
       </div>
 
       <ul className="pc-prev-log">
-        {x.steps.slice(0, stage + 1).map((s, n) => (
-          <li key={`${lang}-${n}`} className={n === stage ? 'is-new' : ''}>
+        {x.steps.map((s, n) => (
+          <li key={`${lang}-${n}`} className={n === stage ? 'is-new' : n > stage ? 'is-future' : ''}>
             <time>{s.time}</time>
             <span>{s.log}</span>
           </li>

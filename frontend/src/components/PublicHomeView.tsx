@@ -393,13 +393,22 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [copied, setCopied] = useState(false);
   const [showWarranty, setShowWarranty] = useState(false);
+  useEffect(() => {
+    if (!showWarranty) return;
+    const on = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowWarranty(false); };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [showWarranty]);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const autoRan = useRef(false);
   const resultRef = useRef<HTMLDivElement | null>(null);
   const [revealTick, setRevealTick] = useState(0);
-  useRevealResult(resultRef, revealTick);
+  /** หน้าแรก = กล่องค้นหาอย่างเดียว; ผลละเอียดเปิดในหน้าใหม่ (?ticket=) เพื่อไม่ให้ดันเลย์เอาต์หน้าแรก */
+  const trackMode = !!initialTicketId;
+  // หน้าติดตามเปิดมาที่บนสุดเสมอ; เลื่อนลงผลเฉพาะตอนค้นเลขใหม่ในหน้านั้น
+  useRevealResult(resultRef, trackMode ? (revealTick > 1 ? revealTick : 0) : revealTick);
 
   const search = useCallback(
     async (raw?: string, opts: { quiet?: boolean } = {}) => {
@@ -412,6 +421,10 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         return;
       }
       if (!opts.quiet) setInput(no); // รีเฟรชเบื้องหลังต้องไม่ทับสิ่งที่ผู้ใช้กำลังพิมพ์
+      if (!trackMode && !opts.quiet) {
+        window.location.assign(`/?ticket=${encodeURIComponent(no)}`);
+        return;
+      }
       if (!opts.quiet) {
         setLoading(true);
         setError(null);
@@ -451,7 +464,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         if (!opts.quiet) setRevealTick((n) => n + 1);
       }
     },
-    [input, t],
+    [input, t, trackMode],
   );
 
   // ── งานที่ฉันแจ้งไว้: สถานะล่าสุดของทุกเลขที่เครื่องนี้จำไว้ (คำขอเดียว) ──
@@ -542,6 +555,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         </div>
       </header>
 
+      {!trackMode && (
       <section className="pc-hero-full" aria-labelledby="pc-title" onMouseEnter={() => setHeroHover(true)} onMouseLeave={() => setHeroHover(false)}>
         <HeroSlides paused={heroHover} />
         <div className="pc-hero-inner">
@@ -554,19 +568,21 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           <div className="pc-cta-row">
             <a href="/?publicreport=1" className="pc-cta">
               <ScanIcon />
-              <span>{t('cta')}</span>
+              <span><Typewriter text={t('cta')} speed={30} deleteSpeed={12} startDelay={2200} caret={false} /></span>
             </a>
-            <span className="pc-cta-note">{t('cta_note')}</span>
+            <span className="pc-cta-note"><Typewriter text={t('cta_note')} speed={22} deleteSpeed={8} startDelay={2600} caret={false} /></span>
           </div>
         </div>
         <HeroWave />
       </section>
+      )}
 
-      <main className="ph-main pc-main">
+      <main className={`ph-main pc-main${trackMode ? ' pc-trackpage' : ''}`}>
         <div className="pc-left">
           <section className="pc-track" ref={trackRef} aria-labelledby="ph-track-title">
+            {trackMode && <a className="pt-back" href="/?home=1"><ArrowIcon /><span>{t('back_home')}</span></a>}
             <h2 className="pc-h2" id="ph-track-title">{t('track_title')}</h2>
-            <p className="pc-muted">{t('track_sub')}</p>
+            <p className="pc-muted">{trackMode ? t('track_page_sub') : t('track_sub')}</p>
 
             <form className="pc-search" onSubmit={(e) => { e.preventDefault(); search(); }}>
               <label className="ph-sr-only" htmlFor="ph-ticket-input">{t('track_label')}</label>
@@ -593,12 +609,12 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
 
             {!ticket && !searched && !loading && <TrackPreview />}
 
-            {recent.length > 0 && (
+            {!trackMode && recent.length > 0 && (
               <div className="ph-mine" aria-labelledby="ph-mine-title">
                 <h3 className="ph-mine-title" id="ph-mine-title">{t('mine_title')} <small>{t('mine_saved')}</small></h3>
                 {mine && mine.length > 0 ? (
                   <ul className="ph-mine-list">
-                    {mine.map((m) => (
+                    {mine.slice(0, 3).map((m) => (
                       <li key={m.ticket_no} className={m.ticket_no === openNo ? 'is-open' : ''}>
                         <button type="button" className="ph-mine-row" onClick={() => search(m.ticket_no)} disabled={loading}
                           aria-label={t('view_ticket', { no: m.ticket_no })}>
@@ -616,7 +632,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                   </ul>
                 ) : (
                   <div className="ph-recent">
-                    {recent.map((no) => (
+                    {recent.slice(0, 4).map((no) => (
                       <button key={no} type="button" className="ph-chip" onClick={() => search(no)} disabled={loading}>{no}</button>
                     ))}
                   </div>
@@ -640,6 +656,8 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
 
                   {ticket.title && <p className="ph-result-title">{ticket.title}</p>}
 
+                  <div className="pt-cols">
+                    <div className="pt-main">
                   {cancelled ? (
                     <div className="ph-alert ph-alert-danger">{t('cancelled')}</div>
                   ) : (
@@ -667,24 +685,6 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                     </>
                   )}
 
-                  <div className="ph-meta-grid">
-                    <MetaItem
-                      label={t('m_device')}
-                      value={<>{dev?.device_label || dev?.device_type || t('m_device')}{dev?.brand ? ` · ${dev.brand}` : ''}{dev?.model ? ` ${dev.model}` : ''}</>}
-                      sub={dev?.device_id || ticket.device_code || ticket.device_id || '-'}
-                    />
-                    <MetaItem label={t('m_place')} value={dev?.room_name || '-'} sub={dev?.organization_name || undefined} />
-                    {ticket.technician && <MetaItem label={t('m_tech')} value={ticket.technician} />}
-                    <MetaItem label={t('m_priority')} value={priorityText} />
-                    <MetaItem label={t('m_reported')} value={fmtDateTime(ticket.created_at, locale)} sub={sinceText(ticket.created_at, t) || undefined} />
-                    {ticket.estimated_completion && !ticket.closed_at && (
-                      <MetaItem label={t('m_sla')} value={fmtDateTime(ticket.estimated_completion, locale)} />
-                    )}
-                    {ticket.closed_at && (
-                      <MetaItem label={t('m_closed')} value={fmtDateTime(ticket.closed_at, locale)} sub={sinceText(ticket.closed_at, t) || undefined} />
-                    )}
-                  </div>
-
                   <h3 className="ph-sub-title">{t('history')}</h3>
                   {history.length > 0 ? (
                     <ul className="ph-timeline">
@@ -706,6 +706,26 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                     <p className="ph-empty">{t('history_empty')}</p>
                   )}
 
+                    </div>
+                    <aside className="pt-side">
+                  <div className="ph-meta-grid">
+                    <MetaItem
+                      label={t('m_device')}
+                      value={<>{dev?.device_label || dev?.device_type || t('m_device')}{dev?.brand ? ` · ${dev.brand}` : ''}{dev?.model ? ` ${dev.model}` : ''}</>}
+                      sub={dev?.device_id || ticket.device_code || ticket.device_id || '-'}
+                    />
+                    <MetaItem label={t('m_place')} value={dev?.room_name || '-'} sub={dev?.organization_name || undefined} />
+                    {ticket.technician && <MetaItem label={t('m_tech')} value={ticket.technician} />}
+                    <MetaItem label={t('m_priority')} value={priorityText} />
+                    <MetaItem label={t('m_reported')} value={fmtDateTime(ticket.created_at, locale)} sub={sinceText(ticket.created_at, t) || undefined} />
+                    {ticket.estimated_completion && !ticket.closed_at && (
+                      <MetaItem label={t('m_sla')} value={fmtDateTime(ticket.estimated_completion, locale)} />
+                    )}
+                    {ticket.closed_at && (
+                      <MetaItem label={t('m_closed')} value={fmtDateTime(ticket.closed_at, locale)} sub={sinceText(ticket.closed_at, t) || undefined} />
+                    )}
+                  </div>
+
                   {ticket.resolution_notes && (
                     <div className="ph-alert ph-alert-success"><strong>{t('resolution')}</strong> {ticket.resolution_notes}</div>
                   )}
@@ -725,12 +745,15 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
                     </button>
                     <a className="ph-btn" href="/?publicreport=1"><PlusIcon /><span>{t('report_other')}</span></a>
                   </div>
+                    </aside>
+                  </div>
                 </div>
               )}
             </div>
           </section>
         </div>
 
+        {!trackMode && (<>
         <Reveal className="pc-right" delay={0.1}>
           <AIChatWidget embedded />
         </Reveal>
@@ -748,7 +771,11 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           </a>
         </Reveal>
 
-        {showWarranty && <WarrantyCard onClose={() => setShowWarranty(false)} />}
+        {showWarranty && (
+          <div className="pc-modal" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowWarranty(false); }}>
+            <WarrantyCard onClose={() => setShowWarranty(false)} />
+          </div>
+        )}
 
         <Reveal className="pc-demo-wrap"><HomeDemo /></Reveal>
 
@@ -758,6 +785,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           <details><summary>{t('faq2q')}</summary><p>{t('faq2a')}</p></details>
           <details><summary>{t('faq3q')}</summary><p>{t('faq3a')}</p></details>
         </Reveal>
+        </>)}
       </main>
 
       <footer className="pc-footer">
