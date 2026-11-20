@@ -10,6 +10,8 @@ from app.models import AuditLog, Device, DeviceTypeOption, Organization, Session
 
 
 def test_web_chat_does_not_need_or_expose_n8n_secret(monkeypatch):
+    import app.web_agent as web_agent
+    monkeypatch.setattr(web_agent, "reply", lambda *a, **k: None)  # rule-based path under test
     calls = []
     monkeypatch.setattr(chatbot_core, "handle_message", lambda **kwargs: calls.append(kwargs) or "รับทราบค่ะ")
     session = uuid.uuid4()
@@ -66,6 +68,10 @@ def test_custom_device_type_roundtrip():
 
 
 def test_web_chat_translates_to_and_from_site_language(monkeypatch):
+    import app.web_agent as web_agent
+    monkeypatch.setattr(web_agent, "reply", lambda *a, **k: None)  # AI agent unavailable -> fallback + translation
+    import app.web_agent as web_agent
+    monkeypatch.setattr(web_agent, "reply", lambda *a, **k: None)  # AI agent unavailable -> fallback + translation
     import app.chatbot_i18n as i18n
     seen = []
     monkeypatch.setattr(chatbot_core, "handle_message", lambda **kw: seen.append(kw["text"]) or "ลองเช็กสาย HDMI ค่ะ")
@@ -78,3 +84,21 @@ def test_web_chat_translates_to_and_from_site_language(monkeypatch):
         r = client.post("/api/chatbot/web", json={"session_id": str(uuid.uuid4()), "text": "สวัสดี", "lang": "th"})
         assert r.json() == {"reply": "ลองเช็กสาย HDMI ค่ะ"}
         assert seen[-1] == "สวัสดี"
+
+
+def test_web_chat_prefers_ai_agent_reply(monkeypatch):
+    import app.web_agent as web_agent
+    monkeypatch.setattr(web_agent, "reply", lambda uid, text, lang: f"AI[{lang}]: {text}")
+    monkeypatch.setattr(chatbot_core, "handle_message", lambda **kw: (_ for _ in ()).throw(AssertionError("rule pipeline must not run")))
+    with TestClient(app) as client:
+        r = client.post("/api/chatbot/web", json={"session_id": str(uuid.uuid4()), "text": "hello", "lang": "ko"})
+        assert r.json() == {"reply": "AI[ko]: hello"}
+
+
+def test_web_agent_skips_database_facts_and_unavailable_model(monkeypatch):
+    import app.web_agent as web_agent
+    monkeypatch.setattr(web_agent.ai_client, "is_available", lambda: False)
+    assert web_agent.reply("web-x", "hello", "en") is None
+    monkeypatch.setattr(web_agent.ai_client, "is_available", lambda: True)
+    assert web_agent.reply("web-x", "I want to pay for this", "en") is None          # payment stays deterministic
+    assert web_agent.reply("web-x", "มีควันออกจากโปรเจคเตอร์", "en") is None  # safety stays deterministic

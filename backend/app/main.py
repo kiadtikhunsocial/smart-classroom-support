@@ -7327,6 +7327,12 @@ def web_chat_handle(request: Request, payload: WebChatIn):
     session_id = str(payload.session_id)
     from app.chatbot_i18n import normalize_lang, to_thai, from_thai
     lang = normalize_lang(payload.lang)
+    # 1) บทสนทนา AI จริง (Gemini + KB/แคตตาล็อกของระบบ) ตอบเป็นภาษาของหน้าเว็บโดยตรง
+    from app.web_agent import reply as ai_reply
+    ai_text = ai_reply(f"web-{session_id}", payload.text.strip(), lang)
+    if ai_text:
+        return {"reply": ai_text}
+    # 2) ข้อเท็จจริงจากฐานข้อมูล (สถานะงาน/ประกัน/ชำระเงิน) หรือ Gemini ใช้ไม่ได้: pipeline กฎเดิม
     # pipeline เป็นภาษาไทย: แปลข้อความเข้า → ประมวลผล → แปลคำตอบกลับเป็นภาษาของหน้าเว็บ
     reply = handle_message(user_id=f"web-{session_id}", text=to_thai(payload.text.strip(), lang), reply_token="")
     return {"reply": from_thai(reply, lang)}
