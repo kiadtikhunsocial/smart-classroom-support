@@ -29,6 +29,19 @@ _NOTICE = {
 }
 
 
+# The Thai pipeline matches fixed helpdesk vocabulary, so steer the translation towards it.
+_TH_STYLE = (
+    "Write short, plain Thai the way a teacher types to a helpdesk, in Thai script only (no English or other scripts, "
+    "except codes). Phrase problems as '<device> + symptom'. Use these exact terms: "
+    "projector = โปรเจคเตอร์; interactive display / smart board = จอ Interactive; touch screen not responding = ทัชสกรีนกดไม่ได้; "
+    "no picture / no image = ไม่มีภาพ; no sound = ไม่มีเสียง; won't turn on = เปิดไม่ติด; internet/Wi-Fi not working = ต่ออินเทอร์เน็ตไม่ได้; "
+    "slow = ช้า; freezes = ค้าง; printer = ปริ้นเตอร์; computer = คอมพิวเตอร์; "
+    "'I tried it but it did not help / still not fixed' = ยังไม่หาย; 'it is fixed / works now' = หายแล้ว; "
+    "'report a repair' = แจ้งซ่อม; 'contact' = ติดต่อ; 'products' = สินค้า. "
+    "Do not add politeness particles or extra words."
+)
+
+
 def normalize_lang(value: str | None) -> str:
     v = (value or "th").strip().lower()[:2]
     return v if v in SUPPORTED else "th"
@@ -46,10 +59,10 @@ def to_thai(text: str, lang: str) -> str:
     if not re.search(r"[A-Za-z぀-ヿ㐀-鿿가-힯]{2,}\s*[A-Za-z぀-ヿ㐀-鿿가-힯]", text) and re.fullmatch(r"[A-Za-z0-9._\-\s]{1,40}", text):
         return text
     out = request_text(
-        [f"Translate this {SUPPORTED[lang]} message from a school IT-repair website visitor into natural Thai. {_KEEP}", text],
-        generation_config={"temperature": 0, "maxOutputTokens": 400},
+        [f"Translate this {SUPPORTED[lang]} message from a school IT-repair website visitor into Thai. {_TH_STYLE} {_KEEP}", text],
+        generation_config={"temperature": 0, "maxOutputTokens": 600},
         timeout=10.0,
-        retries=1,
+        retries=3,
     )
     return (out or "").strip() or text
 
@@ -60,9 +73,9 @@ def from_thai(reply: str, lang: str) -> str:
         return reply
     out = request_text(
         [f"Translate this Thai customer-service reply into natural, polite {SUPPORTED[lang]}. {_KEEP}", reply],
-        generation_config={"temperature": 0.1, "maxOutputTokens": 1200},
+        generation_config={"temperature": 0.1, "maxOutputTokens": 2000},
         timeout=15.0,
-        retries=1,
+        retries=3,
     )
     out = (out or "").strip()
     if out:
