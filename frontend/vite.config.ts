@@ -74,6 +74,8 @@ export default defineConfig(({ mode }) => {
             if (inPkg('qrcode') || inPkg('pngjs') || inPkg('dijkstrajs')) {
               return 'vendor-qrcode';
             }
+            if (inPkg('motion') || inPkg('motion-dom') || inPkg('motion-utils') || inPkg('framer-motion')) return 'vendor-motion';
+            if (inPkg('gsap')) return 'vendor-gsap';
             return undefined;
           },
         },

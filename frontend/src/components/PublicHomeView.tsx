@@ -9,6 +9,13 @@ import '../styles/public-premium.css';
 import '../styles/public-refresh.css';
 // เลย์เอาต์ใหม่ (pc-*) ตามแบบที่เจ้าของงานส่งมา — โหลดท้ายสุด
 import '../styles/public-clean.css';
+// hero สไลด์ + คลื่น + พิมพ์ดีด + เดโม — ต้องมาหลัง public-clean
+import '../styles/public-hero.css';
+import Typewriter from './Typewriter';
+import HeroSlides from './HeroSlides';
+import HeroWave from './HeroWave';
+import Reveal from './Reveal';
+import HomeDemo from './HomeDemo';
 import ThemeModeButton from './ThemeModeButton';
 import LanguageSwitcher from './LanguageSwitcher';
 import AIChatWidget from './AIChatWidget';
@@ -366,6 +373,14 @@ function UserIcon() {
  */
 export default function PublicHomeView({ initialTicketId, staffLoggedIn = false }: { initialTicketId?: string; staffLoggedIn?: boolean }) {
   const { t, locale } = useLang();
+  const [heroHover, setHeroHover] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const on = () => setScrolled(window.scrollY > 24);
+    on();
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
   const [input, setInput] = useState((initialTicketId || '').toUpperCase());
   const [ticket, setTicket] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -512,7 +527,7 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
 
   return (
     <div className="ph-page pc-home">
-      <header className="ph-topbar pc-topbar">
+      <header className={`ph-topbar pc-topbar${scrolled ? " is-scrolled" : ""}`}>
         <a className="ph-brand" href="/?home=1">
           <img className="pc-logo" src="/logo.jpg" alt="IWA" width="36" height="36" />
           <span className="ph-brand-text">
@@ -526,20 +541,28 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
         </div>
       </header>
 
+      <section className="pc-hero-full" aria-labelledby="pc-title" onMouseEnter={() => setHeroHover(true)} onMouseLeave={() => setHeroHover(false)}>
+        <HeroSlides paused={heroHover} />
+        <div className="pc-hero-inner">
+          <h1 className="pc-title" id="pc-title">
+            <Typewriter text={t('title1')} />
+            <br />
+            <span className="pc-title-accent"><Typewriter text={t('title2')} startDelay={700} /></span>
+          </h1>
+          <p className="pc-lead"><Typewriter text={t('lead')} speed={14} deleteSpeed={6} startDelay={1400} caret={false} /></p>
+          <div className="pc-cta-row">
+            <a href="/?publicreport=1" className="pc-cta">
+              <ScanIcon />
+              <span>{t('cta')}</span>
+            </a>
+            <span className="pc-cta-note">{t('cta_note')}</span>
+          </div>
+        </div>
+        <HeroWave />
+      </section>
+
       <main className="ph-main pc-main">
         <div className="pc-left">
-          <section className="pc-hero" aria-labelledby="pc-title">
-            <h1 className="pc-title" id="pc-title">{t('title1')}<br /><span className="pc-title-accent">{t('title2')}</span></h1>
-            <p className="pc-lead">{t('lead')}</p>
-            <div className="pc-cta-row">
-              <a href="/?publicreport=1" className="pc-cta">
-                <ScanIcon />
-                <span>{t('cta')}</span>
-              </a>
-              <span className="pc-cta-note">{t('cta_note')}</span>
-            </div>
-          </section>
-
           <section className="pc-track" ref={trackRef} aria-labelledby="ph-track-title">
             <h2 className="pc-h2" id="ph-track-title">{t('track_title')}</h2>
             <p className="pc-muted">{t('track_sub')}</p>
@@ -705,11 +728,11 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
           </section>
         </div>
 
-        <div className="pc-right">
+        <Reveal className="pc-right" delay={0.1}>
           <AIChatWidget embedded />
-        </div>
+        </Reveal>
 
-        <nav className="pc-links" aria-label={t('more_links')}>
+        <Reveal as="nav" className="pc-links" aria-label={t('more_links')}>
           <button type="button" className="pc-link-cell" onClick={() => setShowWarranty((v) => !v)} aria-expanded={showWarranty} aria-controls="ph-warranty">
             <span className="pc-link-icon" aria-hidden="true"><ShieldIcon /></span>
             <span className="pc-link-text"><strong>{t('warranty')}</strong><small>{t('warranty_sub')}</small></span>
@@ -720,25 +743,18 @@ export default function PublicHomeView({ initialTicketId, staffLoggedIn = false 
             <span className="pc-link-text"><strong>{t('inquiry')}</strong><small>{t('inquiry_sub')}</small></span>
             <ArrowIcon />
           </a>
-        </nav>
+        </Reveal>
 
         {showWarranty && <WarrantyCard onClose={() => setShowWarranty(false)} />}
 
-        <section className="pc-flow" aria-labelledby="pc-flow-title">
-          <h2 className="pc-h3" id="pc-flow-title">{t('flow_title')}</h2>
-          <ol>
-            <li><b>1</b><span>{t('flow1')}</span></li>
-            <li><b>2</b><span>{t('flow2')}</span></li>
-            <li><b>3</b><span>{t('flow3')}</span></li>
-          </ol>
-        </section>
+        <Reveal className="pc-demo-wrap"><HomeDemo /></Reveal>
 
-        <section className="pc-faq" aria-labelledby="pc-faq-title">
+        <Reveal as="section" className="pc-faq" aria-labelledby="pc-faq-title">
           <h2 className="pc-h3" id="pc-faq-title">{t('faq_title')}</h2>
           <details><summary>{t('faq1q')}</summary><p>{t('faq1a')}</p></details>
           <details><summary>{t('faq2q')}</summary><p>{t('faq2a')}</p></details>
           <details><summary>{t('faq3q')}</summary><p>{t('faq3a')}</p></details>
-        </section>
+        </Reveal>
       </main>
 
       <footer className="pc-footer">
