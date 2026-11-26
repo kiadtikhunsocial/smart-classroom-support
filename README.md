@@ -7,7 +7,7 @@
 `System_Blueprint_Smart_Classroom_IT_Support_v1_0.md` และ `วิเคราะห์และออกแบบระบบ.md`
 
 > README นี้อธิบาย **การรันบนเครื่องด้วย Docker Compose**
-> ระบบที่ deploy จริง (Vercel / Render / Neon / Railway), ค่าลับ, และงานค้างล่าสุด อยู่ใน [HANDOFF.md](HANDOFF.md)
+> ระบบที่ deploy จริง (Vercel / Render / Supabase / Railway), ค่าลับ, และงานค้างล่าสุด อยู่ใน [HANDOFF.md](HANDOFF.md)
 
 ## ภาพรวมฟีเจอร์
 

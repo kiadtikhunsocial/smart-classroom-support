@@ -29,7 +29,7 @@ Each device carries its own QR code, so a report arrives already tied to the exa
 
 ## Capabilities and Constraints
 
-- React 18 + Vite + TypeScript frontend (Vercel), FastAPI backend (Render), Postgres (Neon), n8n + LINE OA, Gemini AI troubleshooting grounded in the KB.
+- React 18 + Vite + TypeScript frontend (Vercel), FastAPI backend (Render), Postgres (Supabase), n8n + LINE OA, Gemini AI troubleshooting grounded in the KB.
 - No router: staff pages live in the URL hash (`#/tickets`); public pages are chosen by query parameters (`?home=1`, `?device=`, `?t=`).
 - Features: public QR repair form, ticket tracking by number or device code, warranty lookup, auto-dispatch with accept/skip offers, tickets workflow, devices, schools, users, PM plans, KB, reports, audit log, sales/registrations.
 - Menus and pages stay as they are (owner did not approve hiding or merging menus, 2026-11-19).

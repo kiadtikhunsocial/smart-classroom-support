@@ -1,5 +1,5 @@
 """Smoke test: LINE chatbot หลัง merge ไฟล์ทีมบอท
-รันกับ Neon จริง — ส่งข้อความจำลองเข้า handle_message แล้วดูคำตอบ
+รันกับฐานข้อมูล production จริง (Supabase) — ส่งข้อความจำลองเข้า handle_message แล้วดูคำตอบ
 ไม่ต้องมี GEMINI_API_KEY (จะใช้ fallback ของแต่ละ flow)
 """
 import warnings

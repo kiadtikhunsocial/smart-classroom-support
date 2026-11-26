@@ -36,7 +36,7 @@ from sqlalchemy.orm import (
 
 # โปรเจกต์นี้ผูกกับ PostgreSQL: models ใช้ JSONB และ query ใน main.py ใช้ ILIKE /
 # SUBSTRING(... FROM 'regex') ซึ่ง SQLite ไม่รองรับ — จึงไม่มี fallback เป็นไฟล์ .db
-# production (Render/Neon) ตั้งค่าผ่าน env DATABASE_URL เสมอ
+# production (Render -> Supabase) ตั้งค่าผ่าน env DATABASE_URL เสมอ — ดู docs/SYSTEM_MAP.md
 DEFAULT_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/smart_classroom"
 DATABASE_URL = os.getenv("DATABASE_URL") or DEFAULT_DATABASE_URL
 

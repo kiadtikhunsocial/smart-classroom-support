@@ -2,7 +2,7 @@
 """scripts/migrate_ticket_indexes.py — เพิ่ม index ให้รายการใบงานแบบแบ่งหน้า
 
 ``create_all()`` สร้าง index ให้เฉพาะตารางที่สร้างใหม่ ฐานข้อมูลที่มีอยู่แล้ว
-(local, Neon) จึงต้องรันสคริปต์นี้หนึ่งครั้ง::
+(local, Supabase) จึงต้องรันสคริปต์นี้หนึ่งครั้ง::
 
     python scripts/migrate_ticket_indexes.py
 

@@ -5,7 +5,7 @@
 # ⚠ สำคัญ: ค่าที่เป็น `sync: false` = "ตั้งใน Dashboard เท่านั้น ห้าม sync จากไฟล์"
 #    ห้ามใส่ค่าจริงของ DATABASE_URL / CORS_ORIGINS / REPORT_FORM_URL ในไฟล์นี้
 #    เพราะ Render จะเขียนทับค่าที่ตั้งไว้ใน production (เคยทำให้ DATABASE_URL
-#    ชี้ไปฐานข้อมูลของ Render แทน Neon แล้วระบบอ่านข้อมูลไม่ได้)
+#    ชี้ไปฐานข้อมูลของ Render แทนฐานข้อมูลจริง แล้วระบบอ่านข้อมูลไม่ได้)
 services:
   - type: web
     name: smart-classroom-backend
@@ -13,7 +13,7 @@ services:
     plan: free
     buildCommand: "pip install -r backend/requirements.txt"
     # Both migrations are repeatable. Run them before serving requests so an
-    # existing Neon database has the membership columns and all role labels.
+    # existing production database (Supabase) has the membership columns and all role labels.
     startCommand: "cd backend && python scripts/migrate_membership.py && python scripts/migrate_role_enum.py --apply && python scripts/migrate_chatbot_studio.py && python scripts/import_demo_pack.py --apply && python scripts/import_sales_demo.py --apply && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     envVars:
@@ -26,7 +26,7 @@ services:
       - key: GEMINI_MODEL
         value: "gemini-flash-latest"
       # ── ค่าต่อไปนี้ต้องตั้งใน Render Dashboard (มีค่าจริงอยู่แล้ว ห้าม sync) ──
-      - key: DATABASE_URL          # Neon connection string
+      - key: DATABASE_URL          # Supabase Session pooler URI (ดู docs/SYSTEM_MAP.md)
         sync: false
       - key: CORS_ORIGINS          # โดเมน frontend บน Vercel
         sync: false
@@ -73,7 +73,7 @@ services:
       - key: UPLOAD_URL_SECRET
         sync: false
 
-# หมายเหตุ: บล็อก databases ด้านล่างไม่ได้ใช้งานแล้ว (ระบบใช้ Neon เป็นฐานข้อมูลจริง)
+# หมายเหตุ: บล็อก databases ด้านล่างไม่ได้ใช้งานแล้ว (ระบบใช้ Supabase เป็นฐานข้อมูลจริงตั้งแต่ 26 พ.ย. 2026, ก่อนหน้านั้น Neon)
 # เก็บไว้เพื่อไม่ให้ Render ลบฐานข้อมูลเดิมทิ้ง — ถ้าต้องการลบจริงให้ลบทั้งบล็อกนี้
 databases:
   - name: smart-classroom-db
