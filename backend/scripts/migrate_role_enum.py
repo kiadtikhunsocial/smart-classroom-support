@@ -8,7 +8,7 @@ app/models.py ประกาศ role เป็น SAEnum(..., create_type=False
 แต่ฐานข้อมูลที่ตั้งก่อนหน้านี้อาจมีแค่ 5 ค่า (ไม่มี owner / admin_school) ทำให้
 การสร้างหรือแก้ผู้ใช้บทบาทเหล่านั้นล้มด้วย
     DataError: invalid input value for enum user_role_enum: "admin_school"
-scripts/migrate.py มีคำสั่งนี้อยู่แล้วแต่ hardcode /app (ใช้ได้แต่ในคอนเทนเนอร์)
+(scripts/migrate.py รุ่นเก่าเคยมีคำสั่งนี้แต่ hardcode /app จึงลบออกแล้ว)
 
 ความปลอดภัย
 -----------
