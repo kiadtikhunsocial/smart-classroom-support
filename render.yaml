@@ -24,7 +24,7 @@ services:
       - key: ENVIRONMENT
         value: "production"
       - key: GEMINI_MODEL
-        value: "gemini-flash-latest"
+        value: "gemini-flash-lite-latest"   # flash-latest ตอบ 503/429 บ่อยบน key นี้ (26 พ.ย. 2026)
       # ── ค่าต่อไปนี้ต้องตั้งใน Render Dashboard (มีค่าจริงอยู่แล้ว ห้าม sync) ──
       - key: DATABASE_URL          # Supabase Session pooler URI (ดู docs/SYSTEM_MAP.md)
         sync: false

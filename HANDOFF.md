@@ -142,6 +142,8 @@ DATABASE_URL='<production-url>' JWT_SECRET=x PYTHONPATH=. python scripts/cleanup
 
 | # | รายการ |
 |---|---|
-| 1 | **เปลี่ยนค่าลับที่หลุดในประวัติ git (repo สาธารณะ)** — สคริปต์เก่าที่ลบไปแล้วเคยฝังไว้ และยังอยู่ในประวัติ git การลบไฟล์ไม่ได้แก้ปัญหานี้ ต้องเปลี่ยนค่า: (ก) n8n API key ทุกตัว: n8n → Settings → n8n API → ลบ key เก่า (ข) LINE Channel Access Token ที่ขึ้นต้น `NcoCcY`: ถ้ายังใช้อยู่ ให้ออกใหม่ใน LINE Developers แล้วตั้งทั้ง Render + n8n (ตรวจ 26 พ.ย. 2026: ไม่พบ `N8N_SHARED_SECRET` หรือ Gemini key ในประวัติ) |
-| 2 | ทดสอบด้วย LINE จริงจากมือถือ และข้อความแจ้งเตือนเข้ากลุ่ม LINE เจ้าหน้าที่ |
-| 3 | Render ต้องตั้ง `GEMINI_API_KEY` / `GEMINI_MODEL` / `ENABLE_GEMINI_*` ให้แชต AI หน้าเว็บตอบแบบสนทนาได้ |
+| 1 | 🔴 **n8n บน Railway ล่ม** (ตรวจ 26 พ.ย. 2026 10:15: ทั้ง `n8n-production-3bcb9` และ `n8n-production-b27c` ตอบ Railway 404 "Application not found") ผลกระทบ: LINE OA ไม่ถึง backend (บอท LINE ไม่ตอบ), ไม่มีแจ้งเตือนเข้ากลุ่ม LINE, SLA check / keep-alive ไม่ทำงาน (Supabase เสี่ยงถูกหยุดหลัง 7 วัน, Render หลับบ่อยขึ้น) วิธีแก้: ล็อกอิน Railway ดูว่า project/service n8n ยังอยู่ไหม (อาจหมดเครดิต/ถูกลบ) → สร้างใหม่ + import `n8n_workflows/` → ตั้ง LINE webhook ใน LINE Developers ให้ชี้ URL ใหม่ + ตั้ง `N8N_WEBHOOK_URL` ใน Render |
+| 2 | **เปลี่ยน n8n API key** เมื่อ n8n กลับมา: key เก่าหลุดในประวัติ git ของ repo สาธารณะ (n8n → Settings → n8n API → ลบ key เก่า) — ตรวจแล้ว LINE token ที่หลุด (`NcoCcY…`) เป็นตัวเก่า ไม่ใช่ตัวที่ใช้บน Render ตอนนี้ และไม่พบ `N8N_SHARED_SECRET`/Gemini key ในประวัติ |
+| 3 | รัน index ใบงานบน Supabase หนึ่งครั้ง (ช่วยให้หน้ารายการใบงานเร็วเมื่อข้อมูลเยอะ): `cd backend && DATABASE_URL='<supabase-url>' PYTHONPATH=. python scripts/migrate_ticket_indexes.py` |
+| 4 | Gemini บน Render ใช้ `gemini-flash-lite-latest` (เปลี่ยน 26 พ.ย. 2026 เพราะ `gemini-flash-latest` ตอบ 503/429) ถ้ายังติดโควตา ให้ใช้ key แบบเสียเงิน |
+| 5 | ทดสอบด้วย LINE จริงจากมือถือ และข้อความแจ้งเตือนเข้ากลุ่ม LINE เจ้าหน้าที่ (หลังแก้ข้อ 1) |
