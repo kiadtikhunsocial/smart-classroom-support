@@ -1,8 +1,47 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : แอป FastAPI ทั้งหมด: ทุก endpoint /api/*, สิทธิ์ผู้ใช้, Ticket, อุปกรณ์, รายงาน, LINE webhook
+# ถูกเรียกจาก  : frontend (Vercel) ผ่าน VITE_API_URL, n8n (Railway) ผ่าน header X-N8N-Secret, uvicorn บน Render
+# เชื่อมต่อไป  : Supabase (models), n8n /webhook/notify (แจ้งเตือนกลุ่ม LINE), line_bot, Gemini, R2 (storage), Google Sheets
+# env ที่อ่าน  : ดูตาราง env ใน docs/SYSTEM_MAP.md
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 Smart Classroom Support — FastAPI Backend
 Scope: Device lookup + Ticket CRUD + Workflow status + QR scan log
 
 Run: uvicorn app.main:app --reload --port 8000
+
+สารบัญ endpoint (ค้นด้วย Ctrl+F ตาม path เช่น "/api/tickets")
+------------------------------------------------------------
+เปิดสาธารณะ (ไม่ต้องล็อกอิน — หน้าเว็บลูกค้า / สแกน QR):
+  /api/public/*            ฟอร์มแจ้งซ่อม, ตัวเลือก, ตรวจประกัน, งานค้างของเครื่อง
+  /api/tickets/track/{no}  ติดตามงานด้วยเลข Ticket
+  /api/qr/resolve, /api/qr/lookup   อ่าน QR บนสติกเกอร์อุปกรณ์ (rotate/batch = เจ้าหน้าที่)
+  /api/chatbot/web         แชต AI หน้าเว็บ -> app/web_agent.py
+  /api/ai/diagnose         วิเคราะห์อาการเบื้องต้น -> app/gemini_service.py
+  POST /api/self-service   บันทึกว่าผู้ใช้ลองแก้เองก่อนแจ้งซ่อม (GET = เจ้าหน้าที่)
+  /health                  Render health check + n8n keep-alive
+
+เจ้าหน้าที่ (ต้องมี JWT จาก /api/auth/login, สิทธิ์ตาม role):
+  /api/auth/*, /api/me/*                     ล็อกอิน, ข้อมูลตัวเอง
+  /api/tickets/*                             ใบงานซ่อม (รายการแบ่งหน้า, สถานะ, มอบหมาย, คอมเมนต์, ไฟล์แนบ)
+  /api/dispatch/*, /api/staff                ส่งงานให้ช่าง -> app/dispatch.py
+  /api/devices/*, /api/device-types, /api/device-categories, /api/rooms, /api/organizations/*
+  /api/pm/*                                  บำรุงรักษาเชิงป้องกัน -> app/pm_rules.py
+  /api/kb/*                                  ฐานความรู้แชตบอต
+  /api/chatbot/manage/*                      หน้า "จัดการ AI / LINE OA" (คำถาม-คำตอบ, คำแนะนำ AI, ผลประเมิน)
+  /api/sales/*                               lead / ยอดขาย -> app/google_sheets.py
+  /api/registrations/*                       อนุมัติ/ปฏิเสธคำขอสมัครสมาชิก
+  /api/users/*, /api/settings, /api/audit-logs, /api/deleted-records, /api/system
+  /api/reports/*, /api/stats/*               รายงานและสถิติ
+  /api/uploads, /uploads/{name}              ไฟล์แนบ -> app/storage.py
+
+จาก n8n เท่านั้น (ต้องมี header X-N8N-Secret หรือ ?k= = env N8N_SHARED_SECRET):
+  /api/line/*              ข้อความ LINE ที่ n8n ส่งต่อมา -> app/chatbot_core.py
+                           (webhook รับ X-Line-Signature จาก LINE ตรงได้ด้วย ถ้าตั้ง LINE_CHANNEL_SECRET)
+  /api/internal/sla/check  n8n เรียกทุก 15 นาที (ยกระดับงานเกิน SLA)
+
+ขาออก: _notify_n8n() -> {N8N_WEBHOOK_URL}notify (n8n push เข้ากลุ่ม LINE เจ้าหน้าที่)
 """
 
 from contextlib import asynccontextmanager

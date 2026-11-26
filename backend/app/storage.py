@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : เก็บไฟล์แนบ/รูป: ในเครื่อง หรือ Cloudflare R2 (S3) + ลิงก์ดาวน์โหลดแบบลงลายเซ็น
+# ถูกเรียกจาก  : main (อัปโหลด/ดาวน์โหลด)
+# เชื่อมต่อไป  : ดิสก์ backend/uploads หรือ Cloudflare R2
+# env ที่อ่าน  : STORAGE_BACKEND, S3_BUCKET, S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, UPLOAD_URL_SECRET, MAX_UPLOAD_MB
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 storage.py — เก็บไฟล์แนบ + ความปลอดภัยไฟล์แนบ (Blueprint §41 File Attachment Security)
 

@@ -42,7 +42,7 @@ export interface DashboardChartsProps {
 }
 
 /* ── สีที่ recharts ต้องได้เป็น "ค่าที่คำนวณแล้ว" ────────────────────────────
-   อ่านจาก element ที่อยู่ในหน้าจริง เพราะ dashboard-futuristic.css ทับ token
+   อ่านจาก element ที่อยู่ในหน้าจริง เพราะ stylesheet ของหน้าอาจทับ token
    ไว้ที่ .dsh-page ไม่ใช่ :root  ค่าเริ่มต้นอ่านจาก :root เพื่อไม่ให้กระพริบ */
 type ScopedChartVars = {
   grid: string;

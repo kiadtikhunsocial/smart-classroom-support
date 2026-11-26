@@ -7,6 +7,10 @@
 #   bash backend/scripts/migrate_to_supabase.sh restore   # pg_restore latest dump -> Supabase
 #   bash backend/scripts/migrate_to_supabase.sh verify    # compare row counts + sequences
 #   bash backend/scripts/migrate_to_supabase.sh lock      # enable RLS, revoke anon/authenticated
+#   bash backend/scripts/migrate_to_supabase.sh backup    # pg_dump the LIVE Supabase DB -> backups/supabase_<stamp>.dump
+#
+# สำรองฐานข้อมูลปัจจุบันเป็นประจำ: ใช้ `backup` (ต้องการแค่ SUPABASE_URL)
+# กู้คืนไฟล์ backup: pg_restore --no-owner --no-privileges -d "<url>" backups/supabase_<stamp>.dump
 #
 # Reads NEON_URL and SUPABASE_URL from .env.migrate (gitignored). Use the Supabase
 # "Session pooler" string (port 5432, user postgres.<ref>), not the IPv6-only direct host.
@@ -30,8 +34,8 @@ norm() {  # drop the SQLAlchemy driver suffix, force sslmode=require for remote 
 }
 mask() { printf '%s' "$1" | sed -E 's#://([^:/@]+):[^@]*@#://\1:***@#'; }
 
-SRC="$(norm "${NEON_URL:?NEON_URL not set}")"
 DST="$(norm "${SUPABASE_URL:?SUPABASE_URL not set}")"
+if [ "${1:-}" = "backup" ]; then SRC=""; else SRC="$(norm "${NEON_URL:?NEON_URL not set}")"; fi
 NET_ARGS=()
 [ -n "${DOCKER_NETWORK:-}" ] && NET_ARGS=(--network "$DOCKER_NETWORK")
 
@@ -62,6 +66,12 @@ case "${1:-}" in
     pg pg_dump "$SRC" -Fc -n public --no-owner --no-privileges -f "/b/neon_$stamp.dump"
     counts "$SRC" > "$BACKUP_DIR/neon_$stamp.counts.txt"
     ls -l "$BACKUP_DIR/neon_$stamp.dump"; echo "counts -> backups/neon_$stamp.counts.txt"
+    ;;
+  backup)
+    stamp="$(date +%Y%m%d_%H%M%S)"
+    pg pg_dump "$DST" -Fc -n public --no-owner --no-privileges -f "/b/supabase_$stamp.dump"
+    counts "$DST" > "$BACKUP_DIR/supabase_$stamp.counts.txt"
+    ls -l "$BACKUP_DIR/supabase_$stamp.dump"; echo "counts -> backups/supabase_$stamp.counts.txt"
     ;;
   restore)
     f="$(ls -t "$BACKUP_DIR"/neon_*.dump | head -1)"; f="/b/$(basename "$f")"

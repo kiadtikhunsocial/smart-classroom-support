@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ลิงก์แจ้งซ่อมใช้ครั้งเดียวจาก LINE ไปฟอร์ม QR (ไม่เปิดเผย LINE user ID)
+# ถูกเรียกจาก  : chatbot_core, main
+# เชื่อมต่อไป  : ตาราง line_report_links, line_bot
+# env ที่อ่าน  : REPORT_FORM_URL, ENVIRONMENT
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Single-use LINE-to-QR links. The browser never receives a LINE user ID.
 
 Only the signed LINE webhook (or authenticated n8n forwarder) can issue a link.

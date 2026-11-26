@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : แปลภาษาแชตเว็บ 5 ภาษา <-> ภาษาไทย (ใช้ตอน AI สนทนาไม่ได้)
+# ถูกเรียกจาก  : main (POST /api/chatbot/web)
+# เชื่อมต่อไป  : ai_client (Gemini)
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Language bridge for the public web chat.
 
 The chatbot pipeline (NLU, knowledge base, ticket flow) is written in Thai.

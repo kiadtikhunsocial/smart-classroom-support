@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ฟังก์ชันเสริมแชตบอต: FAQ, สมัครสมาชิก, ลิงก์ฟอร์ม, ข้อความสำเร็จรูป
+# ถูกเรียกจาก  : chatbot_core, chatbot_knowledge, chatbot_sales, main
+# เชื่อมต่อไป  : Supabase (models), google_sheets (ส่งข้อมูลสมาชิก), line_bot
+# env ที่อ่าน  : CUSTOMER_SIGNUP_URL, FAQ_CACHE_TTL_SECONDS, ENVIRONMENT
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 chatbot_helpers.py — ฟังก์ชันช่วยเสริม LINE chatbot (A–F)
   A. intent ละเอียด (ซ่อม/สินค้า/บริการ/ติดต่อ/ซื้อ/ทักทาย/กำกวม)

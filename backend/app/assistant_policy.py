@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : กฎความปลอดภัย/น้ำเสียง/การอ้างอิงข้อมูลของผู้ช่วย AI + ตรวจ prompt injection และเหตุเร่งด่วน
+# ถูกเรียกจาก  : chatbot_core, gemini_service, line_bot, web_agent, main
+# เชื่อมต่อไป  : คืนข้อความ system prompt (อ่านเพิ่มจาก backend/chatbot_extra_prompt.txt)
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Shared safety, tone, and grounding policy for the customer-service assistant."""
 import re
 from pathlib import Path

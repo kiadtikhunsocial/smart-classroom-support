@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ตัวเรียก Google Gemini (REST) ที่ทุกส่วน AI ใช้ร่วมกัน
+# ถูกเรียกจาก  : gemini_service, line_bot, web_agent, chatbot_i18n, main
+# เชื่อมต่อไป  : Gemini API generativelanguage.googleapis.com (หรือ Vertex endpoint ถ้าตั้ง GEMINI_TUNED_ENDPOINT)
+# env ที่อ่าน  : GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TUNED_ENDPOINT
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Small, defensive Gemini REST client shared by the chatbot.
 
 The chatbot has several optional AI steps. Keeping the transport, retries,

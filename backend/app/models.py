@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : โครงสร้างตารางฐานข้อมูลทั้งหมด (SQLAlchemy) + การเชื่อมต่อฐานข้อมูล
+# ถูกเรียกจาก  : ทุกโมดูลที่อ่าน/เขียนข้อมูล และ backend/scripts/*
+# เชื่อมต่อไป  : PostgreSQL ตาม DATABASE_URL (production = Supabase Session pooler)
+# env ที่อ่าน  : DATABASE_URL
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """app/models.py — Database models for Smart Classroom Support System
 PostgreSQL only — connection string มาจาก env DATABASE_URL
 """

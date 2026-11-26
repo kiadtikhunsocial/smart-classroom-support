@@ -1,3 +1,8 @@
+// ── แผนที่ไฟล์ ──────────────────────────────────────────────
+// หน้าที่     : จุดเดียวที่ frontend เรียก backend (ทุกฟังก์ชันใน `api`) + เก็บ JWT (localStorage sc_token)
+// ส่งไปที่    : backend FastAPI บน Render (VITE_API_URL) -> backend/app/main.py
+// ภาพรวมระบบ : docs/SYSTEM_MAP.md
+// ─────────────────────────────────────────────────────────
 import { User } from '../types/user';
 import type { DispatchMe, DispatchSummary, StaffDetail, PublicOptions, PublicTicketStatus, Ticket } from '../types';
 

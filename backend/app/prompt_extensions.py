@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : คำแนะนำ AI ที่แก้ได้บนเว็บ หรือไฟล์ chatbot_prompts/*.txt
+# ถูกเรียกจาก  : gemini_service, line_bot, web_agent, main (/api/chatbot/manage/prompts)
+# เชื่อมต่อไป  : ตาราง chatbot_prompt_settings, โฟลเดอร์ backend/chatbot_prompts/
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """prompt_extensions.py — คำแนะนำ AI ที่แก้ได้โดยไม่ต้องแตะโค้ด (แยกตาม "งาน")
 
 ภาพรวม

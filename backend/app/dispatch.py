@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ส่งงานซ่อมให้ช่าง (คนว่างได้ทันที, ทุกคนยุ่ง = รอคิว) + ตัวกวาดงานค้าง
+# ถูกเรียกจาก  : main (สร้าง/อัปเดต Ticket, /api/dispatch/*), chatbot_core
+# เชื่อมต่อไป  : Supabase (users, repair_tickets), line_bot (แจ้งช่างทาง LINE)
+# env ที่อ่าน  : AUTO_ASSIGN_ENABLED, DISPATCH_OFFER_MINUTES, DISPATCH_FREE_MAX_ACTIVE, DISPATCH_SWEEP_DISABLED, DISPATCH_TIMEOUT_COOLDOWN_MINUTES, STAFF_APP_URL
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """dispatch.py — ระบบส่งงาน (v2: ส่งให้คนว่าง / คนยุ่งแค่แจ้งเตือน / งานค้างรอคนว่าง)
 
 ใบงานใหม่:

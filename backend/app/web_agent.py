@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : แชต AI แบบสนทนาบนหน้าเว็บสาธารณะ
+# ถูกเรียกจาก  : main (POST /api/chatbot/web) <- frontend/src/components/AIChatWidget.tsx
+# เชื่อมต่อไป  : ai_client (Gemini), kb_loader, company_catalog, ticket_track ใน main, chat_session
+# env ที่อ่าน  : GEMINI_* (ผ่าน ai_client)
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Conversational AI for the public website chat.
 
 เส้นทาง: หน้าเว็บ (frontend/src/components/AIChatWidget.tsx) -> POST /api/chatbot/web (main.py)

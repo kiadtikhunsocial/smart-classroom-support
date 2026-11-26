@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ตรวจประกันจากรหัสอุปกรณ์/Serial (ข้อมูลจริง ไม่ใช้ AI)
+# ถูกเรียกจาก  : chatbot_core, web_agent, main
+# เชื่อมต่อไป  : ตาราง devices ใน Supabase, pm_rules
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """LINE warranty lookup: exact product/device identifier, no AI-generated facts."""
 import re
 from datetime import datetime, timezone

@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : งาน AI ของแชตบอต LINE: แยกเจตนา ดึงข้อมูล จับคู่ KB อธิบายวิธีแก้ เรียบเรียงคำตอบ
+# ถูกเรียกจาก  : chatbot_core, chatbot_quality, main
+# เชื่อมต่อไป  : ai_client (Gemini); prompt หลักอยู่ในไฟล์นี้ + คำแนะนำจาก prompt_extensions (แก้บนเว็บได้)
+# env ที่อ่าน  : GEMINI_API_KEY, GEMINI_MODEL, ENABLE_GEMINI_NATURAL_REPLIES
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 gemini_service.py — Google Gemini API (REST) สำหรับ AI Troubleshooting
 เรียกผ่าน httpx (ไม่มี SDK dependency) ตาม TOR 5.5 / SD-05

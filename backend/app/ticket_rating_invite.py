@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ชวนผู้แจ้งทาง LINE ให้คะแนนงานที่ปิดแล้ว (ครั้งเดียวต่อ Ticket)
+# ถูกเรียกจาก  : main
+# เชื่อมต่อไป  : line_bot, Supabase
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Invite the original LINE reporter to rate completed staff work once per ticket.
 
 Never infer a recipient from a phone/name: only tickets created by the verified

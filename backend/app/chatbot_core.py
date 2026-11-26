@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : สมองหลักของแชตบอต LINE: ตัดสินว่าข้อความคืออะไร แล้วตอบ / สร้าง Ticket / ส่งต่อ
+# ถูกเรียกจาก  : main (POST /api/line/webhook และ /api/line/bot ที่ n8n ส่งมา, แชตเว็บแบบ fallback)
+# เชื่อมต่อไป  : gemini_service (AI), kb_loader (ฐานความรู้), dispatch (ส่งงานให้ช่าง), line_bot (ตอบ LINE), Supabase
+# env ที่อ่าน  : ENABLE_GEMINI_CLASSIFIER, ENABLE_GEMINI_ORCHESTRATION, REPORT_FORM_URL, ENVIRONMENT
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 chatbot_core.py — logic หลักตัดสินใจบทสนทนา chatbot
 

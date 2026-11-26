@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : เก็บสถานะบทสนทนาแชตบอตหลายรอบ (LINE และแชตเว็บ)
+# ถูกเรียกจาก  : chatbot_core, web_agent, main
+# เชื่อมต่อไป  : ตาราง line_sessions ใน Supabase (ผ่าน models)
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 chat_session.py — เก็บ state การสนทนา chatbot (multi-turn) ลงตาราง line_sessions
 ใช้ SQLite/Postgres ตาม engine เดิม (ไม่ต้อง Redis แยกให้ยุ่ง)

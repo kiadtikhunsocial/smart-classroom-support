@@ -1,3 +1,8 @@
+// ── แผนที่ไฟล์ ──────────────────────────────────────────────
+// หน้าที่     : ตัวเลือกหน้า (ไม่มี router): หน้าสาธารณะเลือกจาก ?query, หน้าเจ้าหน้าที่จาก #/<เมนู>
+// ข้อมูลจาก  : api/client.ts -> backend Render /api/* -> Supabase
+// แผนที่หน้า : frontend/README.md  |  ภาพรวมระบบ: docs/SYSTEM_MAP.md
+// ─────────────────────────────────────────────────────────
 import React, { useState, useEffect, ReactNode } from 'react';
 import ModalOverlay from './components/ModalOverlay';
 import { DeviceInfo, Ticket, Stats, DeviceCreate, TicketCreate } from './types';
@@ -36,7 +41,7 @@ import { roleLabel } from './roleLabels';
 import { REPORTER_TYPE_OPTIONS, DEFAULT_REPORTER_TYPE } from './reporterTypes';
 import { useThemeVersion, themeColor, themeTint, cssVar } from './theme';
 import './styles/dashboard.css';
-// ดีไซน์ Calm: เลิกใช้เลเยอร์ neon/futuristic ของหน้าแรก (dashboard-futuristic.css)
+// ดีไซน์ Calm: เลเยอร์ neon/futuristic ของหน้าแรกถูกลบออกแล้ว
 // เพื่อให้สบายตาและเป็นทางการ — ไฟล์ยังเก็บไว้ ถ้าต้องการกลับมาใช้ให้ import คืน
 
 /** กราฟ Dashboard โหลดแยกก้อน — recharts + d3 ราว 86 kB gzip
