@@ -142,6 +142,6 @@ DATABASE_URL='<production-url>' JWT_SECRET=x PYTHONPATH=. python scripts/cleanup
 
 | # | รายการ |
 |---|---|
-| 1 | **หมุน (เปลี่ยน) n8n API key** — สคริปต์เก่าที่ลบไปแล้วเคยมี API key ฝังอยู่ และยังอยู่ในประวัติ git ของ repo สาธารณะ: n8n → Settings → API → ลบ key เก่า สร้างใหม่ |
+| 1 | **เปลี่ยนค่าลับที่หลุดในประวัติ git (repo สาธารณะ)** — สคริปต์เก่าที่ลบไปแล้วเคยฝังไว้ และยังอยู่ในประวัติ git การลบไฟล์ไม่ได้แก้ปัญหานี้ ต้องเปลี่ยนค่า: (ก) n8n API key ทุกตัว: n8n → Settings → n8n API → ลบ key เก่า (ข) LINE Channel Access Token ที่ขึ้นต้น `NcoCcY`: ถ้ายังใช้อยู่ ให้ออกใหม่ใน LINE Developers แล้วตั้งทั้ง Render + n8n (ตรวจ 26 พ.ย. 2026: ไม่พบ `N8N_SHARED_SECRET` หรือ Gemini key ในประวัติ) |
 | 2 | ทดสอบด้วย LINE จริงจากมือถือ และข้อความแจ้งเตือนเข้ากลุ่ม LINE เจ้าหน้าที่ |
 | 3 | Render ต้องตั้ง `GEMINI_API_KEY` / `GEMINI_MODEL` / `ENABLE_GEMINI_*` ให้แชต AI หน้าเว็บตอบแบบสนทนาได้ |
