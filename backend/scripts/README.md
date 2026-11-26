@@ -62,6 +62,7 @@ DATABASE_URL='<url>' JWT_SECRET=x PYTHONPATH=. python scripts/<ชื่อส�
 |---|---|---|
 | `smoke_chatbot.py` | บอท LINE 9 สถานการณ์ (เรียก `handle_message` ตรง) | ✏️ |
 | `smoke_line_real.py` | เคสจริงจาก log LINE ที่เคยพัง | ✏️ |
+| `smoke_api.py` | API หลักผ่าน TestClient (เดิม `backend/run_tests.py`) | ✏️ |
 | `smoke_full.py` | flow แจ้งซ่อมผ่านบอท + LINE webhook + RBAC | ✏️ |
 | `smoke_kb_perms.py` | สิทธิ์ KB ของ admin_school / admin (ลบข้อมูลที่สร้างเองตอนจบ) | ✏️🗑️ |
 | `smoke_notify_endpoints.py` | ทุก endpoint ที่ส่งแจ้งเตือนไป n8n (กันบั๊ก NameError) | ✏️ |

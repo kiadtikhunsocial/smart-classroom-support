@@ -1,8 +1,11 @@
-"""run_tests.py — ทดสอบระบบโดยใช้ TestClient (ไม่ต้องรัน server จริง)"""
+"""smoke_api.py — ทดสอบ API หลักด้วย TestClient (ไม่ต้องรัน server จริง) กับฐานข้อมูลตาม DATABASE_URL
+
+เดิมชื่อ backend/run_tests.py ย้ายมาไว้รวมกับ smoke อื่น รัน: cd backend && python scripts/smoke_api.py
+"""
 import os
 import sys
 
-os.chdir(os.path.join(os.path.dirname(__file__), "..", "backend"))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # -> โฟลเดอร์ backend/
 sys.path.insert(0, ".")
 
 from sqlalchemy import text as sa_text
