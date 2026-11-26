@@ -4363,6 +4363,23 @@ def update_chatbot_prompt(task: str, payload: ChatbotPromptInput, request: Reque
     return {"task": task, "guidance": row.guidance, "enabled": row.enabled, "source": "database"}
 
 
+@app.delete("/api/chatbot/manage/prompts/{task}")
+def reset_chatbot_prompt(task: str, request: Request,
+                         db: Session = Depends(get_db), user: User = Depends(_CHATBOT_MANAGER)):
+    """ลบค่าที่บันทึกจากเว็บ → กลับไปใช้ไฟล์ backend/chatbot_prompts/<task>.txt (ดู app/prompt_extensions.py)"""
+    from app.prompt_extensions import ALLOWED_PROMPT_TASKS, file_guidance
+    if task not in ALLOWED_PROMPT_TASKS:
+        raise HTTPException(status_code=404, detail="ไม่พบงาน AI นี้")
+    row = db.get(ChatbotPromptSetting, task)
+    if row is not None:
+        db.delete(row)
+        write_audit(db, action="chatbot_prompt_reset", user=user, entity_type="chatbot_prompt",
+                    entity_id=task, new_value={"source": "file"}, request=request)
+        db.commit()
+    guidance = file_guidance(task)
+    return {"task": task, "guidance": guidance, "enabled": bool(guidance), "source": "file"}
+
+
 @app.get("/api/chatbot/manage/ratings")
 def list_line_ratings(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
                       user: User = Depends(require_ratings_viewer)):

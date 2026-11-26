@@ -111,6 +111,36 @@ def test_prompt_override_and_ratings_are_private(studio):
     assert "line_ratings" not in general_report.json()
 
 
+def test_web_chat_prompt_can_be_reset_back_to_file(studio):
+    """web_chat ถูกแก้บนเว็บได้ และ DELETE คืนค่าเป็นไฟล์ chatbot_prompts/web_chat.txt"""
+    from app.prompt_extensions import file_guidance
+    client, headers, denied, _owner_headers, _other_headers, suffix = studio
+    db = SessionLocal()
+    previous = db.get(ChatbotPromptSetting, "web_chat")
+    backup = (previous.guidance, previous.enabled, previous.updated_by) if previous else None
+    db.close()
+    try:
+        listed = client.get("/api/chatbot/manage/prompts", headers=headers).json()
+        assert "web_chat" in {item["task"] for item in listed}
+        saved = client.put("/api/chatbot/manage/prompts/web_chat", headers=headers,
+                           json={"guidance": f"ตอบสั้น {suffix}", "enabled": True})
+        assert saved.status_code == 200 and saved.json()["source"] == "database"
+        assert suffix in with_extension("web_chat", "ฐาน")
+        assert client.delete("/api/chatbot/manage/prompts/web_chat", headers=denied).status_code == 403
+        reset = client.delete("/api/chatbot/manage/prompts/web_chat", headers=headers)
+        assert reset.status_code == 200, reset.text
+        assert reset.json() == {"task": "web_chat", "guidance": file_guidance("web_chat"),
+                                "enabled": bool(file_guidance("web_chat")), "source": "file"}
+        assert suffix not in with_extension("web_chat", "ฐาน")
+        assert client.delete("/api/chatbot/manage/prompts/not-a-task", headers=headers).status_code == 404
+    finally:
+        db = SessionLocal()
+        db.execute(text("DELETE FROM chatbot_prompt_settings WHERE task = 'web_chat'"))
+        if backup is not None:
+            db.add(ChatbotPromptSetting(task="web_chat", guidance=backup[0], enabled=backup[1], updated_by=backup[2]))
+        db.commit(); db.close()
+
+
 def test_global_style_is_added_without_replacing_fixed_prompt(monkeypatch):
     from app import prompt_extensions
     monkeypatch.setattr(prompt_extensions, "guidance_for_task",

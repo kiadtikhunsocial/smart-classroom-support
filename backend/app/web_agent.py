@@ -1,5 +1,11 @@
 """Conversational AI for the public website chat.
 
+เส้นทาง: หน้าเว็บ (frontend/src/components/AIChatWidget.tsx) -> POST /api/chatbot/web (main.py)
+-> reply() ในไฟล์นี้ -> Gemini (ai_client.py) ; ถ้าคืน None main.py ใช้ chatbot_core เดิมแทน
+ข้อมูลที่ส่งให้ AI: kb_articles (Supabase), company_catalog.py, ticket_track() ของ main.py
+prompt หลักอยู่ที่ _system_prompt() ด้านล่าง; คำแนะนำเพิ่มเติมแก้ได้บนเว็บ งาน "web_chat"
+(ดู app/prompt_extensions.py และ backend/chatbot_prompts/web_chat.txt)
+
 The rule-based pipeline in chatbot_core answers with prepared Thai templates.
 For the web chat we let the model hold a real conversation, but only over
 data that the system owns:
@@ -20,6 +26,7 @@ import re
 
 from app import ai_client
 from app.assistant_policy import classify_urgency, contains_prompt_injection
+from app.prompt_extensions import with_extension
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +174,7 @@ def reply(user_id: str, text: str, lang: str) -> str | None:
     contents.append({"role": "user", "parts": [{"text": turn}]})
 
     body = {
-        "systemInstruction": {"parts": [{"text": _system_prompt(lang)}]},
+        "systemInstruction": {"parts": [{"text": with_extension("web_chat", _system_prompt(lang))}]},
         "contents": contents,
         "generationConfig": {"temperature": 0.5, "maxOutputTokens": 900},
     }

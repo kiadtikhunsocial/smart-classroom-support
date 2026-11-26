@@ -14,6 +14,7 @@ const PROMPT_LABELS: Record<string, string> = {
   intent: 'เข้าใจเจตนาลูกค้า', field_extraction: 'จับข้อมูลจากข้อความ', kb_match: 'จับคู่ฐานความรู้',
   kb_explanation: 'อธิบายวิธีแก้', orchestration: 'วางลำดับบทสนทนา',
   repair_reply: 'ตอบเรื่องแจ้งซ่อม', slot_question: 'ถามข้อมูลที่ขาด', line_reply: 'รูปแบบคำตอบ LINE',
+  web_chat: 'แชต AI บนหน้าเว็บ',
 };
 const EMPTY = { question: '', answer: '', aliases: '', source_label: '', source_url: '', is_published: false };
 
@@ -84,6 +85,17 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
       setPrompts((old) => old.map((p) => p.task === selectedTask ? updated : p));
       setNotice('บันทึกคำแนะนำแล้ว — คำถามใหม่จะใช้ค่าจากฐานข้อมูลทันที');
     } catch (err: any) { setError(err.message || 'บันทึกไม่สำเร็จ'); }
+    finally { setBusy(false); }
+  };
+
+  // DELETE /api/chatbot/manage/prompts/{task} → backend ใช้ค่าจากไฟล์ chatbot_prompts/<task>.txt อีกครั้ง
+  const resetPrompt = async () => {
+    setError(''); setNotice(''); setBusy(true);
+    try {
+      const updated = await api.resetChatbotPrompt(selectedTask);
+      setPrompts((old) => old.map((p) => p.task === selectedTask ? updated : p));
+      setNotice('กลับไปใช้ค่าจากไฟล์แล้ว');
+    } catch (err: any) { setError(err.message || 'รีเซ็ตไม่สำเร็จ'); }
     finally { setBusy(false); }
   };
 
@@ -160,6 +172,9 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
         <div className="studio-help">{guidance.length}/2000 ตัวอักษร · ค่าเดิมจาก {prompts.find((p) => p.task === selectedTask)?.source === 'database' ? 'ฐานข้อมูล' : 'ไฟล์เริ่มต้น'}</div>
         <label className="studio-check"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> เปิดใช้คำแนะนำนี้</label>
         <button className="btn btn-primary" disabled={busy || prompts.length === 0}>{busy ? 'กำลังบันทึก…' : 'บันทึกคำแนะนำ'}</button>
+        {prompts.find((p) => p.task === selectedTask)?.source === 'database' &&
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void resetPrompt()}>กลับไปใช้ค่าจากไฟล์</button>}
+        <p className="studio-help">ค่าที่บันทึกที่นี่ชนะไฟล์ <code>backend/chatbot_prompts/{selectedTask}.txt</code> เสมอ ถ้าแก้ไฟล์แล้วอยากให้มีผล ให้กด “กลับไปใช้ค่าจากไฟล์”</p>
       </form>
     </section>}
 

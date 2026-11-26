@@ -173,6 +173,9 @@ export const api = {
   listChatbotPrompts: () => request<any[]>('/chatbot/manage/prompts'),
   updateChatbotPrompt: (task: string, data: { guidance: string; enabled: boolean }) =>
     request<any>(`/chatbot/manage/prompts/${encodeURIComponent(task)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // ลบค่าที่บันทึกจากเว็บ แล้วกลับไปใช้ไฟล์ backend/chatbot_prompts/<task>.txt
+  resetChatbotPrompt: (task: string) =>
+    request<any>(`/chatbot/manage/prompts/${encodeURIComponent(task)}`, { method: 'DELETE' }),
   getLineRatings: (days = 30) => request<any>(`/chatbot/manage/ratings?days=${days}`),
   getChatbotRuntime: () => request<any>('/chatbot/manage/runtime'),
   previewChatbot: (message: string) => request<any>('/chatbot/manage/preview', { method: 'POST', body: JSON.stringify({ message }) }),

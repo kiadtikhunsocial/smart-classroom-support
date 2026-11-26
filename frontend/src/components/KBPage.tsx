@@ -166,7 +166,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
         <div><span className="bot-review-kicker">ปรับคำตอบได้ด้วยตัวเอง</span>
           <h2>ทบทวนคำถาม → เพิ่มความรู้ → ทดสอบ → เผยแพร่</h2>
           <p>เขียนขั้นตอนที่ตรวจสอบได้พร้อมคำค้นหลายรูปแบบ บันทึกเป็นฉบับร่างก่อน ทวนข้อมูลกับผู้เชี่ยวชาญ แล้วจึงเปิด “เผยแพร่” และทดสอบในสภาพแวดล้อมทดสอบ</p>
-          <p>ปรับน้ำเสียงรวมที่ <code>backend/chatbot_extra_prompt.txt</code> หรือปรับแยกงานที่ <code>backend/chatbot_prompts/</code> เช่น intent, kb_match, line_reply แล้วทดสอบและ deploy backend ใหม่ วิธีแก้ให้แก้เป็นบทความที่นี่ ไม่ใช่ใส่ใน prompt</p></div>
+          <p>ปรับน้ำเสียงและคำแนะนำ AI ได้ทันทีที่เมนู “จัดการ AI / LINE OA” → แท็บ “คำแนะนำ AI” (ไม่ต้อง deploy) ค่าเริ่มต้นอยู่ในไฟล์ <code>backend/chatbot_prompts/</code> วิธีแก้ให้แก้เป็นบทความที่นี่ ไม่ใช่ใส่ใน prompt</p></div>
         {canReviewBot && <button className="btn" type="button" onClick={() => void toggleReview()} aria-expanded={botReviewOpen}>{botReviewOpen ? 'ซ่อนคำถามที่ควรตรวจ' : 'ดูคำถามที่บอตตอบไม่ชัด'}</button>}
       </section>
       {botReviewOpen && <section className="bot-review-panel" aria-label="คุณภาพแชตบอต">
