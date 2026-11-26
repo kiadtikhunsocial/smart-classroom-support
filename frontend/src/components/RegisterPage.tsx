@@ -136,7 +136,7 @@ export default function RegisterPage() {
               ไปหน้าเข้าสู่ระบบ
             </a>
             <a
-              href="/"
+              href="/?home=1"
               style={{
                 textAlign: 'center',
                 fontSize: '0.8rem',
@@ -155,7 +155,7 @@ export default function RegisterPage() {
   return (
     <div className="login-page">
       <div className="login-card" style={{ maxWidth: 520 }}>
-        <a href="/" className="login-back-link">
+        <a href="/?home=1" className="login-back-link">
           ← กลับหน้าแรก (แจ้งซ่อม/ติดตามสถานะ)
         </a>
         <div className="login-logo">
@@ -167,7 +167,7 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <h1 className="login-title">สมัครสมาชิก</h1>
+            <h1 className="login-title">ขอเปิดบัญชีเจ้าหน้าที่</h1>
             <p className="login-subtitle">สำหรับเจ้าหน้าที่ — ใช้งานได้เมื่อผู้ดูแลอนุมัติ</p>
           </div>
         </div>
@@ -346,7 +346,7 @@ export default function RegisterPage() {
                     display: 'inline-block',
                   }}
                 />
-                กำลังส่งคำขอ...
+                กำลังส่งคำขอ…
               </>
             ) : (
               <>ส่งคำขอสมัครสมาชิก</>

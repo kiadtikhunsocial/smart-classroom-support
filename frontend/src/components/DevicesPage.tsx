@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ModalOverlay from './ModalOverlay';
 import QRCode from 'qrcode';
 import { api } from '../api/client';
 import DetailField from './DetailField';
@@ -87,6 +88,27 @@ const deviceAgeText = (v: any): string => {
   return rest ? `${years} ปี ${rest} เดือน` : `${years} ปี`;
 };
 
+/** ไอคอนตามกลุ่มประเภทอุปกรณ์ (จอ/คอม/เครือข่าย/เสียง/กล้อง/ไฟฟ้า/ซอฟต์แวร์) */
+function DeviceGlyph({ type }: { type?: string }) {
+  const t = (type || '').toLowerCase();
+  const path =
+    /display|projector|visualizer/.test(t) ? 'M3 4h18v12H3zM8 20h8M12 16v4'
+    : /notebook|tablet/.test(t) ? 'M5 5h14v10H5zM2 19h20'
+    : /computer|aio|desktop/.test(t) ? 'M3 4h18v12H3zM9 20h6M12 16v4M3 13h18'
+    : /router|access point|switch/.test(t) ? 'M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0M12 19.5h.01M2 9a15 15 0 0120 0'
+    : /speaker|microphone/.test(t) ? 'M12 3a3 3 0 013 3v6a3 3 0 01-6 0V6a3 3 0 013-3zM5 11a7 7 0 0014 0M12 18v3'
+    : /camera/.test(t) ? 'M3 7h4l2-3h6l2 3h4v13H3zM12 17a4 4 0 100-8 4 4 0 000 8z'
+    : /ups/.test(t) ? 'M13 2L4 14h7l-1 8 9-12h-7z'
+    : /printer/.test(t) ? 'M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z'
+    : /software/.test(t) ? 'M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12'
+    : 'M4 4h16v16H4z';
+  return (
+    <svg className="dv-glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={path} />
+    </svg>
+  );
+}
+
 /** แถวข้อมูล label/value ในแผงรายละเอียด */
 function DetailRow({ label, value, mono, wide }: { label: string; value: React.ReactNode; mono?: boolean; wide?: boolean }) {
   return <DetailField label={label} value={value} mono={mono} wide={wide} />;
@@ -155,6 +177,20 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
   const [error, setError] = useState<string | null>(null);
   const [orgFilter, setOrgFilter] = useState<number | ''>(isSuperAdmin ? '' : (currentOrgId ?? ''));
   const [typeFilter, setTypeFilter] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  /** การ์ดสรุปที่กดอยู่: มีงานซ่อม / ใกล้หมดประกัน / หมดประกัน / ไม่ได้ใช้งาน */
+  const [quick, setQuick] = useState<'' | 'open' | 'expiring' | 'expired' | 'inactive'>('');
+  const [sortBy, setSortBy] = useState('room');
+  const [page, setPage] = useState(1);
+  const [view, setView] = useState<'table' | 'cards'>(() => {
+    try { return (localStorage.getItem('sc_devices_view') as 'table' | 'cards') || 'table'; } catch { return 'table'; }
+  });
+  const switchView = (v: 'table' | 'cards') => { setView(v); try { localStorage.setItem('sc_devices_view', v); } catch { /* ไม่จำก็ได้ */ } };
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (isSuperAdmin && !lockedToOwnSchool && orgFilter !== '' ? 1 : 0) + (statusFilter ? 1 : 0) + (sortBy !== 'room' ? 1 : 0);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -392,16 +428,50 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
     if (ib !== -1) return 1;
     return a.localeCompare(b, 'th');
   });
-  const visibleDevices = typeFilter
-    ? devices.filter((d) => (d.device_type || 'Other') === typeFilter)
-    : devices;
+  // ── ค้นหา + ตัวกรองทั้งหมดของหน้า (ทำฝั่งหน้าเว็บ: ข้อมูลอุปกรณ์ทั้งโรงเรียนโหลดมาครบแล้ว) ──
+  const q = search.trim().toLowerCase();
+  const visibleDevices = useMemo(() => {
+    const list = devices.filter((d) => {
+      if (typeFilter && (d.device_type || 'Other') !== typeFilter) return false;
+      if (statusFilter && d.status !== statusFilter) return false;
+      if (quick === 'open' && !d.has_open_ticket) return false;
+      if (quick === 'expiring' && warrantyInfo(d.warranty_until).status !== 'expiring') return false;
+      if (quick === 'expired' && warrantyInfo(d.warranty_until).status !== 'expired') return false;
+      if (quick === 'inactive' && d.status === 'active') return false;
+      if (!q) return true;
+      return [d.device_id, d.device_type, d.brand, d.model, d.serial_number, d.room_name, d.room_code,
+        d.building, d.organization_name].some((v) => v && String(v).toLowerCase().includes(q));
+    });
+    const by = (v: any) => String(v ?? '');
+    const sorters: Record<string, (a: any, b: any) => number> = {
+      id: (a, b) => by(a.device_id).localeCompare(by(b.device_id)),
+      room: (a, b) => by(a.organization_name).localeCompare(by(b.organization_name), 'th')
+        || by(a.building).localeCompare(by(b.building), 'th') || by(a.room_name).localeCompare(by(b.room_name), 'th'),
+      warranty: (a, b) => (warrantyInfo(a.warranty_until).daysLeft ?? 1e9) - (warrantyInfo(b.warranty_until).daysLeft ?? 1e9),
+      type: (a, b) => by(a.device_type).localeCompare(by(b.device_type)) || by(a.device_id).localeCompare(by(b.device_id)),
+    };
+    return [...list].sort(sorters[sortBy] || sorters.room);
+  }, [devices, typeFilter, statusFilter, quick, q, sortBy]);
 
-  // สรุปสถานะประกันของรายการที่เห็นอยู่ — ให้ผู้ดูแลรู้ภาพรวมก่อนไล่ดูรายเครื่อง
+  // แบ่งหน้า — 100 เครื่องขึ้นไปจะไม่ต้องเลื่อนยาวทั้งหน้า
+  const PAGE_SIZE = 48;
+  const pageCount = Math.max(1, Math.ceil(visibleDevices.length / PAGE_SIZE));
+  const curPage = Math.min(page, pageCount);
+  const pageDevices = visibleDevices.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [typeFilter, statusFilter, quick, q, sortBy, orgFilter]);
+
+  // ภาพรวมทั้งหมดในขอบเขตที่เห็น (ไม่ขึ้นกับตัวกรอง) — กดการ์ดเพื่อกรองได้ทันที
   const warrantySummary = useMemo(() => {
-    const acc = { total: visibleDevices.length, active: 0, expiring: 0, expired: 0, unknown: 0 };
-    for (const d of visibleDevices) acc[warrantyInfo(d.warranty_until).status] += 1;
+    const acc = { total: devices.length, active: 0, expiring: 0, expired: 0, unknown: 0, open: 0, inactive: 0 };
+    for (const d of devices) {
+      acc[warrantyInfo(d.warranty_until).status] += 1;
+      if (d.has_open_ticket) acc.open += 1;
+      if (d.status !== 'active') acc.inactive += 1;
+    }
     return acc;
-  }, [visibleDevices]);
+  }, [devices]);
+  const filtersOn = !!(typeFilter || statusFilter || quick || q);
+  const clearFilters = () => { setTypeFilter(''); setStatusFilter(''); setQuick(''); setSearch(''); };
 
   // แผงรายละเอียดใช้ข้อมูลล่าสุดถ้าโหลดมาได้ ไม่ได้ก็ใช้แถวที่กดมา
   const detailView = detailData || detailDevice;
@@ -419,46 +489,44 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
             </svg>
           </button>
           <div>
-            <h1 className="top-bar-title">อุปกรณ์ทั้งหมด</h1>
+            <h1 className="top-bar-title">อุปกรณ์</h1>
             <span className="top-bar-subtitle">
-              {typeFilter
-                ? `${visibleDevices.length} เครื่อง · หมวด ${typeFilter} (ทั้งหมด ${devices.length})`
-                : `${devices.length} เครื่อง · ${typeOptions.length} หมวดหมู่`}
-              {!loading && warrantySummary.total > 0 && (
-                ` · ประกันปกติ ${warrantySummary.active} · ใกล้หมด ${warrantySummary.expiring}`
-                + ` · หมดแล้ว ${warrantySummary.expired}`
-                + (warrantySummary.unknown ? ` · ไม่มีข้อมูล ${warrantySummary.unknown}` : '')
-              )}
+              {loading ? 'กำลังโหลด…' : `${devices.length} เครื่อง · ${typeOptions.length} หมวดหมู่`}
             </span>
           </div>
         </div>
-        <div className="top-bar-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isSuperAdmin && !lockedToOwnSchool && (
-            <select className="form-select" style={{ width: 200 }} value={orgFilter} onChange={(e) => setOrgFilter(e.target.value === '' ? '' : Number(e.target.value))}>
-              <option value="">ทุกโรงเรียน</option>
-              {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
+        <div className="top-bar-actions dv-actions">
+          {canManage && (
+            <button className="btn btn-primary" onClick={openAdd}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6, verticalAlign: 'middle' }} aria-hidden="true">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              เพิ่มอุปกรณ์
+            </button>
           )}
-          <select
-            className="form-select"
-            style={{ width: 210 }}
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            aria-label="กรองตามหมวดหมู่อุปกรณ์"
-            disabled={loading || typeOptions.length === 0}
-          >
-            <option value="">ทุกหมวดหมู่อุปกรณ์</option>
-            {typeOptions.map((t) => (
-              <option key={t} value={t}>{t} ({typeCounts[t]})</option>
-            ))}
-          </select>
-          <button className="btn btn-primary" onClick={openAdd} disabled={!canManage}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6, verticalAlign: 'middle' }}>
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-            เพิ่มอุปกรณ์
-          </button>
-          {canManage && <button className="btn btn-secondary" onClick={() => { setImportFile(null); setImportPreview(null); setImportError(''); document.getElementById('device-csv-import')?.click(); }}>นำเข้า Google Sheets CSV</button>}
+          {canManage && (
+            <div className="dv-more">
+              <button className="btn btn-secondary" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>เพิ่มเติม ▾</button>
+              {moreOpen && (
+                <div className="dv-more-menu" role="menu" onMouseLeave={() => setMoreOpen(false)}>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); setImportFile(null); setImportPreview(null); setImportError(''); document.getElementById('device-csv-import')?.click(); }}>
+                    นำเข้าจาก Google Sheets (CSV)
+                  </button>
+                  <button role="menuitem" onClick={() => {
+                    setMoreOpen(false);
+                    const cols = ['device_id', 'device_type', 'brand', 'model', 'serial_number', 'organization_name', 'building', 'floor', 'room_name', 'status', 'purchase_date', 'warranty_until'];
+                    const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+                    const csv = '﻿' + [cols.join(','), ...visibleDevices.map((d) => cols.map((c) => esc(d[c])).join(','))].join('\r\n');
+                    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+                    const link = document.createElement('a'); link.href = url; link.download = 'devices.csv'; link.click();
+                    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  }}>
+                    ส่งออกรายการที่เห็น (CSV)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <input id="device-csv-import" type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={async (e) => {
             const file = e.target.files?.[0]; e.target.value = '';
             if (!file) return;
@@ -476,8 +544,8 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
         </div>
       </div>
 
-      {(importFile || importBusy) && <div className="panel-overlay" onClick={() => { if (!importBusy) setImportFile(null); }}>
-        <div className="repair-panel" style={{ width: 680, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="นำเข้าอุปกรณ์จาก Google Sheets">
+      {(importFile || importBusy) && <ModalOverlay label="นำเข้าอุปกรณ์จาก Google Sheets" onClose={() => { if (!importBusy) setImportFile(null); }}>
+        <div className="repair-panel" style={{ width: 680, maxWidth: '96vw' }}>
           <div className="repair-panel-header"><h3 className="repair-panel-title">นำเข้าอุปกรณ์จาก Google Sheets</h3><button className="repair-panel-close" onClick={() => setImportFile(null)} aria-label="ปิด">×</button></div>
           <div className="repair-panel-body">
             <p>ใน Google Sheets เลือก ไฟล์ → ดาวน์โหลด → ค่าที่คั่นด้วยจุลภาค (.csv) แล้วเลือกไฟล์ที่นี่ ระบบจะตรวจทุกแถวก่อนเพิ่มข้อมูล โดยไม่เขียนทับอุปกรณ์เดิม</p>
@@ -488,7 +556,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
               const link = document.createElement('a'); link.href = url; link.download = 'device-import-template.csv'; link.click();
               window.setTimeout(() => URL.revokeObjectURL(url), 1000);
             }}>ดาวน์โหลดแม่แบบ CSV</button>
-            <p>ไฟล์: {importFile?.name} {importBusy ? '· กำลังตรวจ...' : ''}</p>
+            <p>ไฟล์: {importFile?.name} {importBusy ? '· กำลังตรวจ…' : ''}</p>
             {importError && <p role="alert" style={{ color: 'var(--color-danger)' }}>{importError}</p>}
             {importPreview && <>
               <p><strong>ทั้งหมด {importPreview.total} แถว · พร้อมนำเข้า {importPreview.valid} · ต้องแก้ไข {importPreview.invalid}</strong></p>
@@ -503,7 +571,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
             </>}
           </div>
         </div>
-      </div>}
+      </ModalOverlay>}
 
       {error && (
         <div style={{ padding: '10px 14px', background: 'var(--color-danger-light)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', marginBottom: 16 }}>
@@ -513,8 +581,8 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
 
       {/* ฟอร์มเพิ่ม/แก้ไข */}
       {showForm && (
-        <div className="panel-overlay" onClick={() => setShowForm(false)}>
-          <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="ข้อมูลอุปกรณ์" onClose={() => setShowForm(false)}>
+          <div className="repair-panel" style={{ width: 520, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editingId ? `แก้ไข ${editingId}` : 'เพิ่มอุปกรณ์ใหม่'}</h3>
               <button className="repair-panel-close" onClick={() => setShowForm(false)} aria-label="ปิด" title="ปิด">
@@ -596,7 +664,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
                         ＋
                       </button>
                     </div>
-                    {roomsLoading && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>กำลังโหลดห้อง...</div>}
+                    {roomsLoading && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>กำลังโหลดห้อง…</div>}
                     {!roomsLoading && rooms.length === 0 && (
                       <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: 4 }}>
                         ยังไม่มีห้องในโรงเรียนนี้ — กด ＋ เพื่อเพิ่มห้อง
@@ -664,20 +732,20 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+                    {saving ? 'กำลังบันทึก…' : 'บันทึก'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
                 </div>
               </form>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* QR Modal */}
       {qrDevice && (
-        <div className="panel-overlay" onClick={() => setQrDevice(null)}>
-          <div className="repair-panel" style={{ width: 380, maxWidth: '95vw', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="QR ของอุปกรณ์" onClose={() => setQrDevice(null)}>
+          <div className="repair-panel" style={{ width: 380, maxWidth: '95vw', textAlign: 'center' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">QR Code — {qrDevice.device_id}</h3>
               <button className="repair-panel-close" onClick={() => setQrDevice(null)} aria-label="ปิด" title="ปิด">
@@ -707,13 +775,13 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* แผงรายละเอียดอุปกรณ์ */}
       {detailDevice && (
-        <div className="panel-overlay" onClick={closeDetail}>
-          <div className="repair-panel detail-sheet" style={{ width: 740, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="device-detail-title">
+        <ModalOverlay labelledBy="device-detail-title" onClose={closeDetail}>
+          <div className="repair-panel detail-sheet" style={{ width: 740, maxWidth: '96vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title" id="device-detail-title">รายละเอียดอุปกรณ์</h3>
               <button className="repair-panel-close" onClick={closeDetail} aria-label="ปิด" title="ปิด">
@@ -726,7 +794,7 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
               {detailLoading && (
                 <div className="loading-state" style={{ padding: '16px 0' }}>
                   <div className="spinner" style={{ width: 24, height: 24 }} />
-                  <span>กำลังโหลดข้อมูลล่าสุด...</span>
+                  <span>กำลังโหลดข้อมูลล่าสุด…</span>
                 </div>
               )}
 
@@ -851,16 +919,94 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
                     <button className="btn btn-ghost" onClick={closeDetail}>ปิด</button>
                   </div>}
           </div>
+        </ModalOverlay>
+      )}
+
+      {/* ── การ์ดสรุป: กดเพื่อกรอง ─────────────────────────────────────── */}
+      <div className="dv-kpis">
+        {([
+          ['', 'ทั้งหมด', warrantySummary.total, 'is-all'],
+          ['open', 'มีงานซ่อมค้าง', warrantySummary.open, 'is-open'],
+          ['expiring', `ใกล้หมดประกัน (≤${WARRANTY_WARN_DAYS} วัน)`, warrantySummary.expiring, 'is-expiring'],
+          ['expired', 'หมดประกันแล้ว', warrantySummary.expired, 'is-expired'],
+          ['inactive', 'พัก / ปลดระวาง', warrantySummary.inactive, 'is-inactive'],
+        ] as const).map(([key, label, n, cls]) => (
+          <button key={key || 'all'} type="button" className={`dv-kpi ${cls}${quick === key ? ' is-on' : ''}`}
+            aria-pressed={quick === key} onClick={() => setQuick(quick === key ? '' : key)}>
+            <strong>{loading ? '–' : n}</strong>
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── ค้นหา + ตัวกรอง ──────────────────────────────────────────── */}
+      <div className="dv-toolbar">
+        <div className="dv-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="ค้นหา รหัส / ยี่ห้อ / รุ่น / Serial / ห้อง" aria-label="ค้นหาอุปกรณ์" />
+        </div>
+        {/* มือถือ: ซ่อนตัวกรองไว้หลังปุ่มเดียว จอจะได้เห็นรายการเร็วขึ้น */}
+        <button type="button" className="btn btn-secondary dv-filter-toggle" aria-expanded={filtersOpen}
+          aria-controls="dv-filters" onClick={() => setFiltersOpen((v) => !v)}>
+          ตัวกรอง{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+        </button>
+        <div id="dv-filters" className={`dv-filters${filtersOpen ? ' is-open' : ''}`}>
+        {isSuperAdmin && !lockedToOwnSchool && (
+          <select className="form-select" value={orgFilter} aria-label="โรงเรียน"
+            onChange={(e) => setOrgFilter(e.target.value === '' ? '' : Number(e.target.value))}>
+            <option value="">ทุกโรงเรียน</option>
+            {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        )}
+        <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="สถานะเครื่อง">
+          <option value="">ทุกสถานะเครื่อง</option>
+          {DEVICE_STATUSES.map((s) => <option key={s} value={s}>{DEVICE_STATUS_LABELS[s]}</option>)}
+        </select>
+        <select className="form-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="เรียงตาม">
+          <option value="room">เรียง: โรงเรียน / ห้อง</option>
+          <option value="type">เรียง: ประเภท</option>
+          <option value="warranty">เรียง: ประกันใกล้หมดก่อน</option>
+          <option value="id">เรียง: รหัสอุปกรณ์</option>
+        </select>
+        </div>
+        <div className="dv-view" role="group" aria-label="รูปแบบการแสดง">
+          <button type="button" className={view === 'table' ? 'is-on' : ''} aria-pressed={view === 'table'} onClick={() => switchView('table')} title="ตาราง">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+          </button>
+          <button type="button" className={view === 'cards' ? 'is-on' : ''} aria-pressed={view === 'cards'} onClick={() => switchView('cards')} title="การ์ด">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* ── หมวดหมู่: ชิปกดเลือก ─────────────────────────────────────── */}
+      {typeOptions.length > 0 && (
+        <div className="dv-chips" role="group" aria-label="หมวดหมู่อุปกรณ์">
+          <button type="button" className={`dv-chip${!typeFilter ? ' is-on' : ''}`} aria-pressed={!typeFilter} onClick={() => setTypeFilter('')}>
+            ทุกประเภท <em>{devices.length}</em>
+          </button>
+          {typeOptions.map((t) => (
+            <button key={t} type="button" className={`dv-chip${typeFilter === t ? ' is-on' : ''}`} aria-pressed={typeFilter === t}
+              onClick={() => setTypeFilter(typeFilter === t ? '' : t)}>
+              <DeviceGlyph type={t} /> {t} <em>{typeCounts[t]}</em>
+            </button>
+          ))}
         </div>
       )}
 
-      {/* ตารางอุปกรณ์ */}
-      <div className="page-section">
+      <div className="dv-resultbar">
+        <span>แสดง {visibleDevices.length} จาก {devices.length} เครื่อง</span>
+        {filtersOn && <button type="button" className="dv-clear" onClick={clearFilters}>ล้างตัวกรอง</button>}
+      </div>
+
+      {/* ── รายการอุปกรณ์ ───────────────────────────────────────────── */}
+      <div className="page-section dv-list">
         <div className="section-body">
           {loading ? (
             <div className="loading-state" style={{ padding: '40px' }}>
               <div className="spinner" />
-              <span>กำลังโหลด...</span>
+              <span>กำลังโหลด…</span>
             </div>
           ) : visibleDevices.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px' }}>
@@ -869,91 +1015,121 @@ export default function DevicesPage({ onBack, onOpenTicket, currentOrgId, isSupe
                 <path d="M2 10h20M12 14v6"/>
               </svg>
               <span className="empty-text">
-                {typeFilter
-                  ? `ไม่มีอุปกรณ์ในหมวด "${typeFilter}" — เลือก "ทุกหมวดหมู่อุปกรณ์" เพื่อดูทั้งหมด`
+                {filtersOn
+                  ? 'ไม่พบอุปกรณ์ที่ตรงกับตัวกรอง — กด "ล้างตัวกรอง" เพื่อดูทั้งหมด'
                   : 'ไม่มีอุปกรณ์ — กด "เพิ่มอุปกรณ์" เพื่อเพิ่มเครื่องแรก'}
               </span>
             </div>
+          ) : view === 'cards' ? (
+            <ul className="dv-cards">
+              {pageDevices.map((d) => {
+                const w = warrantyInfo(d.warranty_until);
+                return (
+                  <li key={d.device_id}>
+                    <div className={`dv-card${d.has_open_ticket ? ' has-ticket' : ''}`} role="button" tabIndex={0}
+                      aria-label={`ดูรายละเอียดอุปกรณ์ ${d.device_id}`}
+                      onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) void openDetail(d); }}
+                      onKeyDown={(e) => { if (e.target === e.currentTarget && e.key === 'Enter') void openDetail(d); }}>
+                      <div className="dv-card-top">
+                        <span className="dv-glyph-box"><DeviceGlyph type={d.device_type} /></span>
+                        <span className={`badge badge-${d.status}`}>{DEVICE_STATUS_LABELS[d.status] || d.status}</span>
+                      </div>
+                      <strong className="dv-card-type">{d.device_type}</strong>
+                      <span className="dv-card-model">{[d.brand, d.model].filter(Boolean).join(' ') || 'ไม่ระบุยี่ห้อ/รุ่น'}</span>
+                      <span className="dv-mono">{d.device_id}</span>
+                      <span className="dv-card-loc">{[d.room_name || d.room_code, d.building && `${d.building}${d.floor ? ` ชั้น ${d.floor}` : ''}`].filter(Boolean).join(' · ') || '—'}</span>
+                      {d.organization_name && <span className="dv-card-loc">{d.organization_name}</span>}
+                      <div className="dv-card-foot">
+                        <span className={`dv-warranty is-${w.status}`} title={`${w.label} · สิ้นสุด ${fmtDateTh(d.warranty_until)}`}>{w.status === 'unknown' ? 'ไม่มีข้อมูลประกัน' : w.status === 'expired' ? 'หมดประกัน' : `ประกัน${w.short}`}</span>
+                        {d.has_open_ticket && <span className="dv-ticket-flag">มีงานซ่อม</span>}
+                      </div>
+                      {canManage && (
+                        <div className="dv-card-actions">
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => showQr(d)}>QR</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(d)}>แก้ไข</button>
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
             <div className="table-wrap">
-              <table className="data-table">
+              <table className="data-table dv-table">
                 <thead>
                   <tr>
-                    <th>รหัส</th>
-                    <th>ประเภท</th>
-                    <th>ยี่ห้อ/รุ่น</th>
+                    <th>อุปกรณ์</th>
+                    <th>ที่ตั้ง</th>
                     <th>Serial No.</th>
-                    <th>ห้อง</th>
-                    <th>โรงเรียน</th>
                     <th>ประกัน</th>
                     <th>สถานะ</th>
-                    <th>จัดการ</th>
+                    <th aria-label="จัดการ" />
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleDevices.map((d) => (
-                    <tr key={d.device_id} className="clickable-data-row" tabIndex={0}
-                      aria-label={`ดูรายละเอียดอุปกรณ์ ${d.device_id}`}
-                      onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a, select, input')) void openDetail(d); }}
-                      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); void openDetail(d); } }}>
-                      <td className="table-id">
-                        <button
-                          type="button"
-                          onClick={() => openDetail(d)}
-                          title="ดูรายละเอียดอุปกรณ์"
-                          className="device-id-link"
-                        >
-                          {d.device_id}
-                        </button>
-                        {d.has_open_ticket && <span className="device-open-ticket-badge">มีงานซ่อม</span>}
-                      </td>
-                      <td>{d.device_type}{/mock|ตัวอย่าง|เดโม/i.test(`${d.notes || ''} ${d.serial_number || ''}`) && <span className="badge badge-pending" style={{ marginLeft: 6 }}>DEMO</span>}</td>
-                      <td>{d.brand || '—'} {d.model || ''}</td>
-                      <td style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.8rem' }}>
-                        {d.serial_number || '—'}
-                      </td>
-                      <td>
-                        {d.room_name || d.room_code || '—'}
-                        {d.building && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-tertiary)' }}>
-                            {d.building}{d.floor ? ` · ชั้น ${d.floor}` : ''}
-                          </div>
-                        )}
-                      </td>
-                      <td>{d.organization_name || '—'}</td>
-                      <td>
-                        {(() => {
-                          const w = warrantyInfo(d.warranty_until);
-                          return (
-                            <span
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: WARRANTY_COLOR[w.status], whiteSpace: 'nowrap' }}
-                              title={`${w.label} · สิ้นสุด ${fmtDateTh(d.warranty_until)}`}
-                            >
-                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} aria-hidden="true" />
-                              {w.short}
+                  {pageDevices.map((d) => {
+                    const w = warrantyInfo(d.warranty_until);
+                    const demo = /mock|ตัวอย่าง|เดโม/i.test(`${d.notes || ''} ${d.serial_number || ''}`);
+                    return (
+                      <tr key={d.device_id} className={`clickable-data-row${d.has_open_ticket ? ' has-ticket' : ''}`} tabIndex={0}
+                        aria-label={`ดูรายละเอียดอุปกรณ์ ${d.device_id}`}
+                        onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a, select, input')) void openDetail(d); }}
+                        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); void openDetail(d); } }}>
+                        <td>
+                          <div className="dv-cell-device">
+                            <span className="dv-glyph-box"><DeviceGlyph type={d.device_type} /></span>
+                            <span className="dv-cell-main">
+                              <strong>{d.device_type}{demo && <span className="dv-demo">DEMO</span>}</strong>
+                              <span>{[d.brand, d.model].filter(Boolean).join(' ') || '—'}</span>
+                              <span className="dv-mono">{d.device_id}</span>
                             </span>
-                          );
-                        })()}
-                      </td>
-                      <td>
-                        <span className={`badge badge-${d.status}`}>{DEVICE_STATUS_LABELS[d.status] || d.status}</span>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => openDetail(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>รายละเอียด</button>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="dv-cell-main">
+                            <strong>{d.room_name || d.room_code || '—'}</strong>
+                            {d.building && <span>{d.building}{d.floor ? ` · ชั้น ${d.floor}` : ''}</span>}
+                            {d.organization_name && <span>{d.organization_name}</span>}
+                          </div>
+                        </td>
+                        <td className="dv-mono">{d.serial_number || '—'}</td>
+                        <td>
+                          <span className={`dv-warranty is-${w.status}`} title={`${w.label} · สิ้นสุด ${fmtDateTh(d.warranty_until)}`}>
+                            {w.status === 'unknown' ? 'ไม่มีข้อมูล' : w.short}
+                          </span>
+                          {d.warranty_until && <span className="dv-sub">ถึง {fmtDateTh(d.warranty_until)}</span>}
+                        </td>
+                        <td>
+                          <span className={`badge badge-${d.status}`}>{DEVICE_STATUS_LABELS[d.status] || d.status}</span>
+                          {d.has_open_ticket && <span className="dv-ticket-flag">มีงานซ่อม</span>}
+                        </td>
+                        <td className="dv-row-actions">
                           {canManage && (
                             <>
-                              <button className="btn btn-secondary btn-sm" onClick={() => showQr(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>QR</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => openEdit(d)} style={{ padding: '4px 10px', fontSize: '0.78rem' }}>แก้ไข</button>
+                              <button type="button" className="dv-icon-btn" onClick={() => showQr(d)} title="ดู QR Code" aria-label={`QR ของ ${d.device_id}`}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 17h4v4" /></svg>
+                              </button>
+                              <button type="button" className="dv-icon-btn" onClick={() => openEdit(d)} title="แก้ไข" aria-label={`แก้ไข ${d.device_id}`}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
+                              </button>
                             </>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          <span className="dv-chev" aria-hidden="true">›</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+          )}
+          {!loading && pageCount > 1 && (
+            <nav className="dv-pager" aria-label="เปลี่ยนหน้า">
+              <button type="button" className="btn btn-ghost btn-sm" disabled={curPage <= 1} onClick={() => setPage(curPage - 1)}>‹ ก่อนหน้า</button>
+              <span>หน้า {curPage} / {pageCount}</span>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={curPage >= pageCount} onClick={() => setPage(curPage + 1)}>ถัดไป ›</button>
+            </nav>
           )}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalOverlay from './ModalOverlay';
 import { api } from '../api/client';
 import '../styles/schools.css';
 
@@ -66,7 +67,7 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
   if (loading) return (
     <div className="loading-state" style={{ minHeight: 200, padding: '40px' }}>
       <div className="spinner" />
-      <span>กำลังโหลดโรงเรียน...</span>
+      <span>กำลังโหลดโรงเรียน…</span>
     </div>
   );
 
@@ -108,8 +109,8 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
 
       {/* ฟอร์มเพิ่มโรงเรียน */}
       {showForm && (
-        <div className="panel-overlay" onClick={() => setShowForm(false)}>
-          <div className="repair-panel" style={{ width: 440, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="ข้อมูลโรงเรียน" onClose={() => setShowForm(false)}>
+          <div className="repair-panel" style={{ width: 440, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">เพิ่มโรงเรียนใหม่</h3>
               <button className="repair-panel-close" onClick={() => setShowForm(false)} aria-label="ปิด" title="ปิด">
@@ -137,14 +138,14 @@ export default function SchoolsPage({ onSelectSchool, onBack }: {
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
-                    {saving ? 'กำลังเพิ่ม...' : 'เพิ่มโรงเรียน'}
+                    {saving ? 'กำลังเพิ่ม…' : 'เพิ่มโรงเรียน'}
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
                 </div>
               </form>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       <div className="schools-summary" aria-label="ภาพรวมโรงเรียน"><div><span>โรงเรียนทั้งหมด</span><strong>{orgs.length}</strong><small>แห่งในระบบ</small></div><div><span>อุปกรณ์ที่ลงทะเบียน</span><strong>{totalDevices.toLocaleString('th-TH')}</strong><small>ทุกโรงเรียน</small></div><div><span>ใบงานทั้งหมด</span><strong>{totalTickets.toLocaleString('th-TH')}</strong><small>ทุกสถานะ</small></div></div>
@@ -352,7 +353,7 @@ export function SchoolAdminView({ orgId, onBack, canDelete }: {
           {loading ? (
             <div className="loading-state" style={{ padding: '40px' }}>
               <div className="spinner" />
-              <span>กำลังโหลด...</span>
+              <span>กำลังโหลด…</span>
             </div>
           ) : filteredTickets.length === 0 ? (
             <div className="empty-state" style={{ padding: '32px 16px' }}>
@@ -474,7 +475,7 @@ export function SchoolAdminView({ orgId, onBack, canDelete }: {
             {loading ? (
               <div className="loading-state" style={{ padding: '40px' }}>
                 <div className="spinner" />
-                <span>กำลังโหลด...</span>
+                <span>กำลังโหลด…</span>
               </div>
             ) : devices.length === 0 ? (
               <div className="empty-state" style={{ padding: '32px 16px' }}>

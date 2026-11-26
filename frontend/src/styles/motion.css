@@ -1,0 +1,106 @@
+/* ============================================================================
+   motion.css — แอนิเมชันเรียบ ๆ ของทั้งแอป
+   - เคลื่อนเฉพาะ opacity / transform (ลื่นบนมือถือ ไม่ดันเลย์เอาต์)
+   - สั้น 160–240ms ไม่ขวางการกดต่อ
+   - ผู้ใช้ที่ตั้ง "ลดการเคลื่อนไหว" ในเครื่อง → ปิดทั้งหมด
+   ========================================================================== */
+
+:root {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-fast: 160ms;
+  --motion-base: 220ms;
+}
+
+/* ── เปลี่ยนหน้า: เฟดขึ้นสั้น ๆ ─────────────────────────────────────────── */
+.page-enter {
+  animation: page-enter var(--motion-base) var(--ease-out-soft) both;
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* การ์ด/แถวในหน้า ไล่เข้าทีละนิด (เฉพาะ 6 ชิ้นแรก — ที่เหลือมาพร้อมกัน ไม่ต้องรอ) */
+.page-enter .stat-card,
+.page-enter .dp-kpi,
+.page-enter .page-section {
+  animation: item-enter var(--motion-base) var(--ease-out-soft) both;
+}
+.page-enter > :nth-child(2) { animation-delay: 30ms; }
+.page-enter .dp-kpi:nth-child(2), .page-enter .stat-card:nth-child(2) { animation-delay: 40ms; }
+.page-enter .dp-kpi:nth-child(3), .page-enter .stat-card:nth-child(3) { animation-delay: 80ms; }
+.page-enter .dp-kpi:nth-child(4), .page-enter .stat-card:nth-child(4) { animation-delay: 120ms; }
+
+@keyframes item-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── หน้าสาธารณะ (ลูกค้า): เนื้อหาเฟดเข้าเมื่อเปิดหน้า ───────────────────── */
+.ph-main, .pr-main {
+  animation: page-enter 320ms var(--ease-out-soft) both;
+}
+.ph-result, .ph-mine-list > li {
+  animation: item-enter var(--motion-base) var(--ease-out-soft) both;
+}
+
+/* ── สถานะกำลังโหลด: ไม่โผล่ทันที (โหลดเร็ว = ไม่เห็นสปินเนอร์กระพริบ) ───── */
+.loading-state {
+  animation: fade-in-late 400ms ease both;
+}
+@keyframes fade-in-late {
+  0%, 40% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* ── ปุ่ม: ยุบลงเล็กน้อยตอนกด ให้รู้ว่ากดติด ─────────────────────────────── */
+.btn, .ph-btn, .tk-tab, .tk-card, .dp-mine-row, .ph-mine-row, .nav-item {
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: ease;
+}
+.btn:active:not(:disabled), .ph-btn:active:not(:disabled), .tk-card:active, .ph-mine-row:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* ── มือถือ: แตะแล้วตอบสนองทันที ไม่มีหน่วงซูมสองครั้ง / ไม่มีกรอบฟ้าของเบราว์เซอร์ ── */
+a, button, [role="button"], [role="tab"], [role="switch"], input, select, textarea, label {
+  touch-action: manipulation;
+}
+a, button, [role="button"], [role="tab"], [role="switch"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* แผง/กล่องที่เลื่อนในตัว ไม่ลากหน้าหลังตาม */
+.detail-sheet, .confirm-box, .dp-offer, .sidebar { overscroll-behavior: contain; }
+
+/* หัวข้อไม่ทิ้งคำเดียวไว้บรรทัดสุดท้าย */
+h1, h2, h3, .top-bar-title, .ph-hero-title { text-wrap: balance; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter, .page-enter .stat-card, .page-enter .dp-kpi, .page-enter .page-section,
+  .ph-main, .pr-main, .ph-result, .ph-mine-list > li, .loading-state {
+    animation: none;
+  }
+  .btn:active:not(:disabled), .ph-btn:active:not(:disabled), .tk-card:active, .ph-mine-row:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ── ลิงก์ "ข้ามไปยังเนื้อหา" — ซ่อนจนกด Tab ครั้งแรก (คนใช้คีย์บอร์ด/โปรแกรมอ่านจอ) ── */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 2000;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+  transform: translateY(-160%);
+  transition: transform var(--motion-fast) ease;
+}
+.skip-link:focus-visible { transform: none; outline: 2px solid #fff; outline-offset: 2px; }
+.app-main:focus { outline: none; }

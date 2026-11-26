@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : จับสัญญาณสนใจซื้อจากลูกค้าใน LINE แล้วบันทึกเป็น lead
+# ถูกเรียกจาก  : chatbot_core
+# เชื่อมต่อไป  : ตาราง sales_leads, line_bot, main
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Customer-originated LINE sales signals; never marks a deal won or payment received."""
 import re
 import logging

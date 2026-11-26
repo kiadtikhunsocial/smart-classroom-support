@@ -1,11 +1,44 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { startQrCamera, scanQrFromFile } from '../lib/qrCamera';
+import { saveRecent } from '../publicRecent';
 import { REPORTER_TYPE_OPTIONS, DEFAULT_REPORTER_TYPE } from '../reporterTypes';
 import '../styles/public-home.css';
 import '../styles/public-report.css';
 // เลเยอร์ธีม: ผูก --ph-*/--pr-* เข้ากับ token กลาง จึงต้องมาหลัง public-report.css
 import '../styles/public-theme.css';
+import '../styles/public-clean.css';
 import PublicThemeToggle from './PublicThemeToggle';
+
+/** อาการที่พบบ่อย — แตะเพื่อเติมหัวข้อได้ทันที ไม่ต้องพิมพ์ */
+const QUICK_SYMPTOMS = ['จอไม่ติด', 'ไม่มีเสียง', 'เปิดเครื่องไม่ติด', 'ทัชสกรีนไม่ตอบสนอง', 'อินเทอร์เน็ตใช้ไม่ได้', 'ภาพกระพริบ / สีเพี้ยน'];
+
+const PRIORITY_CHOICES: { value: string; label: string }[] = [
+  { value: 'low', label: 'ไม่รีบ' },
+  { value: 'normal', label: 'ปกติ' },
+  { value: 'high', label: 'ด่วน' },
+  { value: 'critical', label: 'ด่วนมาก' },
+];
+
+const REPORTER_KEY = 'scs_public_reporter';
+
+function loadReporter(): { reporter_name?: string; reporter_phone?: string; reporter_type?: string } {
+  try {
+    const raw = window.localStorage.getItem(REPORTER_KEY);
+    const v = raw ? JSON.parse(raw) : null;
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveReporter(v: { reporter_name: string; reporter_phone: string; reporter_type: string }) {
+  try {
+    window.localStorage.setItem(REPORTER_KEY, JSON.stringify(v));
+  } catch {
+    // โหมดส่วนตัว/บล็อกที่เก็บข้อมูล — ไม่จำก็ได้
+  }
+}
 
 // ─── แจ้งซ่อมสาธารณะ (คนไม่มีบัญชี) ─────────────────────────────────────────
 // ทางเข้า: URL ?publicreport=1 หรือปุ่มบนหน้า Login — อยู่ก่อน auth gate
@@ -112,7 +145,20 @@ const SearchIcon = () => (
   </svg>
 );
 
-const STEPS = ['สแกน QR อุปกรณ์', 'กรอกอาการเสีย', 'ส่งคำร้อง'];
+const CameraIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+    <circle cx="12" cy="13" r="4" />
+  </svg>
+);
+
+const XIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
+const STEPS = ['ระบุอุปกรณ์', 'เล่าอาการ', 'รับเลขใบงาน'];
 
 export default function PublicNoLoginReportView() {
   const [lineReportToken] = useState(() =>
@@ -126,18 +172,22 @@ export default function PublicNoLoginReportView() {
   const [resolving, setResolving] = useState(false);
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
-  const scannerRef = useRef<any>(null);
+  const scannerRef = useRef<(() => Promise<void>) | null>(null);
 
   // ช่องทางสำรองเมื่อกล้องใช้ไม่ได้ / สติกเกอร์ QR เสียหาย: พิมพ์โค้ดหรือลิงก์ใต้ QR
   const [manualCode, setManualCode] = useState('');
 
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    reporter_name: '',
-    reporter_phone: '',
-    reporter_type: DEFAULT_REPORTER_TYPE,
-    priority: 'normal',
+  // ชื่อ/เบอร์/ประเภทผู้แจ้งที่เคยกรอก — จำไว้ในเครื่องนี้ ครั้งต่อไปไม่ต้องพิมพ์ซ้ำ
+  const [form, setForm] = useState(() => {
+    const saved = loadReporter();
+    return {
+      title: '',
+      description: '',
+      reporter_name: saved.reporter_name || '',
+      reporter_phone: saved.reporter_phone || '',
+      reporter_type: saved.reporter_type || DEFAULT_REPORTER_TYPE,
+      priority: 'normal',
+    };
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -242,43 +292,46 @@ export default function PublicNoLoginReportView() {
 
   const startScan = async () => {
     setScanError(null);
-    setScanStatus('กำลังเปิดกล้อง...');
+    setScanStatus('กำลังเปิดกล้อง…');
     setScanning(true);
     try {
-      const Html5Qrcode = (await import('html5-qrcode')).Html5Qrcode;
-      const scanner = new Html5Qrcode('public-qr-reader');
-      scannerRef.current = scanner;
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText: string) => {
-          // เจอ QR แล้ว — ปิดกล้องก่อนค่อยยิง API
-          const finish = () => {
-            scannerRef.current = null;
-            setScanning(false);
-            applyQrDevice(decodedText);
-          };
-          scanner.stop().then(finish).catch(finish);
-        },
-        () => { /* เฟรมที่ยังไม่เจอ QR — ข้าม */ }
-      );
+      // เจอ QR แล้ว helper ปิดกล้องให้ก่อน แล้วค่อยเรียก callback นี้
+      scannerRef.current = await startQrCamera('public-qr-reader', (decodedText) => {
+        scannerRef.current = null;
+        setScanning(false);
+        applyQrDevice(decodedText);
+      });
       setScanStatus('เล็ง QR บนอุปกรณ์ให้อยู่ในกรอบ');
-    } catch {
+    } catch (err: any) {
       scannerRef.current = null;
       setScanning(false);
       setScanStatus(null);
-      setScanError('เปิดกล้องไม่สำเร็จ — ต้องเปิดผ่าน HTTPS (หรือ localhost) และอนุญาตให้ใช้กล้อง');
+      setScanError(err?.message || 'เปิดกล้องไม่สำเร็จ');
     }
   };
 
   const stopScan = async () => {
-    const scanner = scannerRef.current;
+    const stop = scannerRef.current;
     scannerRef.current = null;
-    if (scanner) {
-      try { await scanner.stop(); } catch { /* ปิดไปแล้ว — ไม่ต้องทำอะไร */ }
-    }
+    if (stop) await stop();
     setScanning(false);
     setScanStatus(null);
+  };
+
+  /** ถ่ายรูป/เลือกรูป QR — ใช้ได้แม้หน้าเว็บไม่ใช่ HTTPS เพราะแอปกล้องของเครื่องเป็นคนถ่าย */
+  const scanPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    await stopScan();
+    setScanError(null);
+    setScanStatus('กำลังอ่าน QR จากรูป...');
+    try {
+      const text = await scanQrFromFile(file, 'public-qr-file-reader');
+      setScanStatus(null);
+      applyQrDevice(text);
+    } catch (err: any) {
+      setScanStatus(null);
+      setScanError(err?.message || 'อ่าน QR จากรูปไม่สำเร็จ');
+    }
   };
 
   /** เริ่มใหม่: สแกนอุปกรณ์อื่น */
@@ -315,9 +368,9 @@ export default function PublicNoLoginReportView() {
   // ปิดกล้องเสมอเมื่อออกจากหน้า (ไม่งั้นไฟกล้องค้าง)
   useEffect(() => {
     return () => {
-      const scanner = scannerRef.current;
+      const stop = scannerRef.current;
       scannerRef.current = null;
-      if (scanner) scanner.stop().catch(() => {});
+      if (stop) stop().catch(() => {});
     };
   }, []);
 
@@ -328,7 +381,7 @@ export default function PublicNoLoginReportView() {
   const requestScanLocation = () => {
     if (!navigator.geolocation) { setLocationStatus('เบราว์เซอร์นี้ไม่รองรับตำแหน่ง'); return; }
     setLocationBusy(true);
-    setLocationStatus('กำลังขออนุญาตตำแหน่ง...');
+    setLocationStatus('กำลังขออนุญาตตำแหน่ง…');
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setScanLocation({ lat: position.coords.latitude, lng: position.coords.longitude,
@@ -402,6 +455,8 @@ export default function PublicNoLoginReportView() {
     try {
       const result = await api.publicReport(payload);
       setTicketId(result.ticket_id || '-');
+      saveRecent(result.ticket_id);  // กลับหน้าแรกแล้วเห็นใน "งานแจ้งซ่อมของฉัน" ทันที
+      saveReporter({ reporter_name: payload.reporter_name, reporter_phone: payload.reporter_phone, reporter_type: payload.reporter_type });
       setResultDevice(result);
       setLineReceiptSent(Boolean(result.line_receipt_sent));
       setSubmitted(true);
@@ -490,22 +545,24 @@ export default function PublicNoLoginReportView() {
       : null;
 
   const stepIndex = submitted ? 2 : scanned ? 1 : 0;
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (stepIndex === 0) return;
+    stepHeading.current?.focus({ preventScroll: true });
+    stepHeading.current?.scrollIntoView({ block: 'nearest' });
+  }, [stepIndex]);
   // สถานะประกันของเครื่องที่สแกนได้ — คำนวณตอน render เพราะขึ้นกับวันปัจจุบัน
   const warranty = scanned ? warrantyState(scanned.warranty_until) : null;
 
   return (
-    <div className="ph-page pr-page">
-      {/* พื้นหลังตกแต่ง — ชุดเดียวกับหน้าแรกสาธารณะ */}
+    <div className="ph-page pr-page service-report pc-form-page">
+      {/* แสงม่วงจางชั้นเดียว — ชุดเดียวกับหน้าแรกสาธารณะ */}
       <div className="ph-bg" aria-hidden="true">
         <div className="ph-bg-aurora ph-bg-aurora-1" />
-        <div className="ph-bg-aurora ph-bg-aurora-2" />
-        <div className="ph-bg-aurora ph-bg-aurora-3" />
-        <div className="ph-bg-grid" />
-        <div className="ph-bg-vignette" />
       </div>
 
       <header className="ph-topbar">
-        <a className="ph-brand" href="/" aria-label="กลับหน้าแรก">
+        <a className="ph-brand" href="/?home=1" aria-label="กลับหน้าแรก">
           <span className="ph-brand-mark">
             <img className="ph-brand-logo" src="/logo.jpg" alt="" />
           </span>
@@ -515,26 +572,20 @@ export default function PublicNoLoginReportView() {
           </span>
         </a>
         <div className="ph-topbar-right">
-          <span className="ph-live">
-            <span className="ph-live-dot" aria-hidden="true" />
-            ไม่ต้องเข้าสู่ระบบ
-          </span>
-          <PublicThemeToggle />
-          <a className="ph-login-link" href="/?login=1">
-            เข้าสู่ระบบเจ้าหน้าที่
+          <a className="ph-staff-entry" href="/?login=1">
+            พื้นที่เจ้าหน้าที่
           </a>
+          <PublicThemeToggle />
         </div>
       </header>
 
       <main className="ph-main pr-main">
         <section className="pr-head">
-          <span className="ph-eyebrow">PUBLIC REPAIR REQUEST</span>
           <h1 className="pr-title">
-            แจ้งซ่อมอุปกรณ์<span className="ph-hero-accent">ในห้องเรียน</span>
+            แจ้งซ่อมอุปกรณ์ห้องเรียน
           </h1>
           <p className="pr-sub">
-            สแกน QR บนตัวอุปกรณ์ที่เสีย ระบบจะระบุห้อง อุปกรณ์ และโรงเรียนให้อัตโนมัติ
-            จากนั้นกรอกอาการแล้วส่ง — จะได้เลขใบงานไว้ติดตามสถานะทันที
+            ระบุอุปกรณ์และอาการที่พบ ระบบจะออกเลขใบงานให้ใช้ติดตามสถานะ
           </p>
 
           <ol className="pr-steps" aria-label="ขั้นตอนการแจ้งซ่อม">
@@ -564,7 +615,7 @@ export default function PublicNoLoginReportView() {
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
               </div>
-              <h2 className="pr-success-title">ส่งคำร้องเรียบร้อยแล้ว</h2>
+              <h2 className="pr-success-title" ref={stepHeading} tabIndex={-1}>ส่งคำร้องเรียบร้อยแล้ว</h2>
               <p className="pr-success-sub">หมายเลขใบงานของคุณ</p>
               <div className="pr-ticket-no">{ticketId}</div>
               {resultDevice?.device_id && (
@@ -583,7 +634,7 @@ export default function PublicNoLoginReportView() {
                   <SearchIcon />
                   <span>ติดตามสถานะใบงานนี้</span>
                 </a>
-                <a className="ph-btn" href="/">
+                <a className="ph-btn" href="/?home=1">
                   <BackIcon />
                   <span>กลับหน้าแรก</span>
                 </a>
@@ -597,8 +648,7 @@ export default function PublicNoLoginReportView() {
               เปิดจากแชต LINE แล้ว — กรุณาใช้ปุ่มสแกน QR ในหน้านี้ เพื่อให้เลขใบงานส่งกลับไปยังแชตเดิมอัตโนมัติ
             </div>}
             <div className="ph-card-head">
-              <h2 className="ph-card-title">สแกน QR ที่ตัวอุปกรณ์</h2>
-              <span className="ph-card-tag">STEP 1</span>
+              <h2 className="ph-card-title">ระบุอุปกรณ์ที่ต้องการแจ้งซ่อม</h2>
             </div>
 
             <button
@@ -617,6 +667,20 @@ export default function PublicNoLoginReportView() {
               style={{ display: scanning ? 'block' : 'none' }}
             />
 
+            {/* ถ่ายรูป QR: ทางสำรองที่ใช้ได้เสมอบนมือถือ แม้เบราว์เซอร์บล็อกกล้องสด */}
+            <label className={`ph-btn pr-btn-photo${resolving ? ' is-disabled' : ''}`}>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="ph-sr-only"
+                disabled={resolving}
+                onChange={(e) => { scanPhoto(e.target.files?.[0]); e.target.value = ''; }}
+              />
+              <span>ถ่ายรูป QR / เลือกรูป</span>
+            </label>
+            <div id="public-qr-file-reader" hidden />
+
             <div aria-live="polite">
               {scanStatus && <div className="ph-alert ph-alert-info">{scanStatus}</div>}
               {scanError && (
@@ -631,7 +695,7 @@ export default function PublicNoLoginReportView() {
               <div className="pr-fallback-head">
                 <span className="pr-fallback-icon"><CameraOffIcon /></span>
                 <label className="pr-label pr-label-inline" htmlFor="qr-manual-code">
-                  กล้องใช้ไม่ได้? พิมพ์โค้ด/ลิงก์ใต้สติกเกอร์ QR
+                  กรอกรหัสอุปกรณ์หรือลิงก์ QR
                 </label>
               </div>
               <div className="pr-inline-row">
@@ -647,7 +711,7 @@ export default function PublicNoLoginReportView() {
                       if (manualCode.trim().length >= 4 && !resolving) applyQrDevice(manualCode);
                     }
                   }}
-                  placeholder="เช่น /scan?t=xxxxxxxx"
+                  placeholder="เช่น DEV-001"
                   autoComplete="off"
                   maxLength={200}
                 />
@@ -657,7 +721,7 @@ export default function PublicNoLoginReportView() {
                   onClick={() => applyQrDevice(manualCode)}
                   disabled={resolving || manualCode.trim().length < 4}
                 >
-                  {resolving ? 'กำลังตรวจสอบ...' : 'ใช้โค้ดนี้'}
+                  {resolving ? 'กำลังตรวจสอบ…' : 'ค้นหาอุปกรณ์'}
                 </button>
               </div>
               <p className="ph-hint">
@@ -666,7 +730,7 @@ export default function PublicNoLoginReportView() {
             </div>
 
             <div className="pr-back-row">
-              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/'; }}>
+              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/?home=1'; }}>
                 <BackIcon />
                 <span>กลับหน้าแรก</span>
               </button>
@@ -676,8 +740,7 @@ export default function PublicNoLoginReportView() {
           /* ─── ขั้นที่ 2: อุปกรณ์ถูกล็อกจาก QR แล้ว → กรอกอาการเสีย ─── */
           <section className="ph-card pr-card">
             <div className="ph-card-head">
-              <h2 className="ph-card-title">กรอกอาการที่พบ</h2>
-              <span className="ph-card-tag">STEP 2</span>
+              <h2 className="ph-card-title" ref={stepHeading} tabIndex={-1}>เล่าอาการที่พบ</h2>
             </div>
 
             <div className="pr-device">
@@ -711,7 +774,7 @@ export default function PublicNoLoginReportView() {
             {openTicketLoading && !blocking && (
               <p className="pr-checking" aria-live="polite">
                 <span className="ph-spinner" aria-hidden="true" />
-                กำลังตรวจสอบงานค้างของอุปกรณ์นี้...
+                กำลังตรวจสอบงานค้างของอุปกรณ์นี้…
               </p>
             )}
 
@@ -767,7 +830,7 @@ export default function PublicNoLoginReportView() {
                           disabled={noteSending}
                         >
                           {noteSending ? <span className="ph-spinner" aria-hidden="true" /> : <SendIcon />}
-                          <span>{noteSending ? 'กำลังส่ง...' : 'ส่งข้อมูลเพิ่มเข้าใบเดิม'}</span>
+                          <span>{noteSending ? 'กำลังส่ง…' : 'ส่งข้อมูลเพิ่มเข้าใบเดิม'}</span>
                         </button>
                         {photos.length > 0 && (
                           <p className="pr-note-hint">
@@ -788,40 +851,92 @@ export default function PublicNoLoginReportView() {
 
             <form className="pr-form" onSubmit={handleSubmit}>
               <div className="pr-field">
-                <span className="pr-label">ตำแหน่งขณะสแกน QR (ไม่บังคับ)</span>
-                <p className="pr-note-hint">อนุญาตเฉพาะเมื่อต้องการให้เจ้าหน้าที่เห็นพิกัดขณะกรอกฟอร์ม ไม่ใช่หลักฐานยืนยันที่ตั้งอุปกรณ์</p>
-                <button type="button" className="ph-btn" onClick={requestScanLocation} disabled={locationBusy}>
-                  {locationBusy ? 'กำลังระบุตำแหน่ง...' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}
-                </button>
-                {locationStatus && <p className="pr-note-hint" role="status">{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</p>}
-              </div>
-              <div className="pr-field">
                 <label className="pr-label" htmlFor="pr-title">
-                  หัวข้อ/อาการ <span className="pr-req">*</span>
+                  อาการที่พบ <span className="pr-req">*</span>
                 </label>
+                <div className="pc-chips" role="group" aria-label="อาการที่พบบ่อย แตะเพื่อเลือก">
+                  {QUICK_SYMPTOMS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`pc-chip${form.title === s ? ' is-on' : ''}`}
+                      aria-pressed={form.title === s}
+                      onClick={() => setField('title', form.title === s ? '' : s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
                 <input
                   id="pr-title"
                   type="text"
                   className="pr-input"
                   value={form.title}
                   onChange={(e) => setField('title', e.target.value)}
-                  placeholder="เช่น จอภาพไม่ติด, Wi-Fi ไม่เข้า, ไฟไม่มา"
+                  placeholder="หรือพิมพ์อาการเอง"
                   maxLength={200}
                   required
                 />
               </div>
 
               <div className="pr-field">
-                <label className="pr-label" htmlFor="pr-desc">รายละเอียด</label>
+                <label className="pr-label" htmlFor="pr-desc">รายละเอียดเพิ่มเติม <span className="pc-opt">ไม่บังคับ</span></label>
                 <textarea
                   id="pr-desc"
                   className="pr-textarea"
                   value={form.description}
                   onChange={(e) => setField('description', e.target.value)}
-                  placeholder="บรรยายอาการที่เกิดขึ้น (เช่น เปิดเครื่องแล้วจอไม่ติด ไฟไม่เข้า)"
+                  placeholder="เช่น เป็นตั้งแต่เมื่อไหร่ ลองทำอะไรไปแล้ว"
                   rows={3}
                 />
               </div>
+
+              <div className="pr-field">
+                <span className="pr-label" id="pr-photos-label">รูปถ่ายปัญหา <span className="pc-opt">ไม่บังคับ · สูงสุด 3 รูป</span></span>
+                <label className={`ph-btn pc-photo-btn${photos.length >= 3 ? ' is-disabled' : ''}`}>
+                  <input
+                    id="pr-photos"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="ph-sr-only"
+                    aria-labelledby="pr-photos-label"
+                    disabled={photos.length >= 3}
+                    onChange={async (e) => {
+                      const files = e.target.files;
+                      if (!files) return;
+                      try {
+                        for (const f of Array.from(files).slice(0, 3 - photos.length)) {
+                          const r = await api.upload(f);
+                          setPhotos((prev) => [...prev, r.url].slice(0, 3));
+                        }
+                      } catch (err: any) { setError(err?.message || 'อัปโหลดรูปไม่สำเร็จ'); }
+                      e.target.value = '';
+                    }}
+                  />
+                  <CameraIcon />
+                  <span>{photos.length ? `เพิ่มรูป (${photos.length}/3)` : 'ถ่ายรูป / เลือกรูป'}</span>
+                </label>
+                {photos.length > 0 && (
+                  <div className="pr-thumbs">
+                    {photos.map((u, i) => (
+                      <div className="pr-thumb" key={`${u}-${i}`}>
+                        <img src={u} alt={`รูปที่แนบ ${i + 1}`} />
+                        <button
+                          type="button"
+                          className="pr-thumb-remove"
+                          onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                          aria-label={`ลบรูปที่ ${i + 1}`}
+                        >
+                          <XIcon />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <h3 className="pc-form-sub">ผู้แจ้ง <span className="pc-opt">ระบบจำไว้ในเครื่องนี้ ครั้งหน้าไม่ต้องกรอกซ้ำ</span></h3>
 
               <div className="pr-row">
                 <div className="pr-field">
@@ -856,75 +971,47 @@ export default function PublicNoLoginReportView() {
                 </div>
               </div>
 
-              <div className="pr-row">
-                <div className="pr-field">
-                  <label className="pr-label" htmlFor="pr-reporter-type">ประเภทผู้แจ้ง</label>
-                  <select
-                    id="pr-reporter-type"
-                    className="pr-select"
-                    value={form.reporter_type}
-                    onChange={(e) => setField('reporter_type', e.target.value)}
-                  >
-                    {REPORTER_TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="pr-field">
-                  <label className="pr-label" htmlFor="pr-priority">ระดับความเร่งด่วน</label>
-                  <select
-                    id="pr-priority"
-                    className="pr-select"
-                    value={form.priority}
-                    onChange={(e) => setField('priority', e.target.value)}
-                  >
-                    <option value="low">Low — ไม่เร่งด่วน</option>
-                    <option value="normal">Normal — ปกติ</option>
-                    <option value="high">High — ค่อนข้างเร่งด่วน</option>
-                    <option value="critical">Critical — เร่งด่วนมาก</option>
-                  </select>
-                </div>
+              <div className="pr-field">
+                <label className="pr-label" htmlFor="pr-reporter-type">ผู้แจ้งเป็น</label>
+                <select
+                  id="pr-reporter-type"
+                  className="pr-select"
+                  value={form.reporter_type}
+                  onChange={(e) => setField('reporter_type', e.target.value)}
+                >
+                  {REPORTER_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="pr-field">
-                <label className="pr-label" htmlFor="pr-photos">
-                  แนบรูปภาพปัญหา (ไม่บังคับ, สูงสุด 3 ภาพ)
-                </label>
-                <input
-                  id="pr-photos"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="pr-file"
-                  onChange={async (e) => {
-                    const files = e.target.files;
-                    if (!files) return;
-                    try {
-                      for (const f of Array.from(files).slice(0, 3)) {
-                        const r = await api.upload(f);
-                        setPhotos((prev) => [...prev, r.url]);
-                      }
-                    } catch (err: any) { setError(err?.message || 'อัปโหลดรูปไม่สำเร็จ'); }
-                  }}
-                />
-                {photos.length > 0 && (
-                  <div className="pr-thumbs">
-                    {photos.map((u, i) => (
-                      <div className="pr-thumb" key={`${u}-${i}`}>
-                        <img src={u} alt={`รูปที่แนบ ${i + 1}`} />
-                        <button
-                          type="button"
-                          className="pr-thumb-remove"
-                          onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
-                          aria-label={`ลบรูปที่ ${i + 1}`}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <fieldset className="pr-field pc-fieldset">
+                <legend className="pr-label">ความเร่งด่วน</legend>
+                <div className="pc-seg">
+                  {PRIORITY_CHOICES.map((p) => (
+                    <label key={p.value} className={`pc-seg-item${form.priority === p.value ? ' is-on' : ''}${p.value === 'critical' ? ' is-hot' : ''}`}>
+                      <input
+                        type="radio"
+                        name="pr-priority"
+                        value={p.value}
+                        className="ph-sr-only"
+                        checked={form.priority === p.value}
+                        onChange={() => setField('priority', p.value)}
+                      />
+                      {p.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <details className="pc-extra">
+                <summary>ส่งตำแหน่งปัจจุบันให้ช่าง <span className="pc-opt">ไม่บังคับ</span></summary>
+                <p className="pr-note-hint">ช่วยให้ช่างเห็นพิกัดขณะกรอกฟอร์ม ไม่ใช่หลักฐานยืนยันที่ตั้งอุปกรณ์</p>
+                <button type="button" className="ph-btn" onClick={requestScanLocation} disabled={locationBusy}>
+                  {locationBusy ? 'กำลังระบุตำแหน่ง…' : scanLocation ? 'อัปเดตตำแหน่ง' : 'ใช้ตำแหน่งปัจจุบัน'}
+                </button>
+                {locationStatus && <p className="pr-note-hint" role="status">{locationStatus}{scanLocation ? ` · คลาดเคลื่อนประมาณ ${Math.round(scanLocation.accuracy)} เมตร` : ''}</p>}
+              </details>
 
               {error && (
                 <div className="ph-alert ph-alert-danger" role="alert">{error}</div>
@@ -939,12 +1026,12 @@ export default function PublicNoLoginReportView() {
                 disabled={submitting}
               >
                 {submitting ? <span className="ph-spinner" aria-hidden="true" /> : <SendIcon />}
-                <span>{submitting ? 'กำลังส่ง...' : 'ส่งคำร้องแจ้งซ่อม'}</span>
+                <span>{submitting ? 'กำลังส่ง…' : 'ส่งแจ้งซ่อม'}</span>
               </button>
             </form>
 
             <div className="pr-back-row">
-              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/'; }}>
+              <button type="button" className="pr-link-btn" onClick={() => { window.location.href = '/?home=1'; }}>
                 <BackIcon />
                 <span>กลับหน้าแรก</span>
               </button>

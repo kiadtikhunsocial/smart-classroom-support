@@ -8,6 +8,11 @@ import "./styles/themes.css";
 import "./styles/design-system.css";
 // เลเยอร์ธีมสุดท้าย: นิยาม token ตาม [data-mode]/[data-accent] จึงต้องอยู่หลังสุดจริง ๆ
 import "./styles/theme-tokens.css";
+// แอนิเมชันเปลี่ยนหน้า/โหลด — ใช้ token สีจากไฟล์บน จึงโหลดต่อท้าย
+import "./styles/motion.css";
+// ดีไซน์ Calm / ทางการ — เลเยอร์สุดท้าย (ถอดได้ด้วยการลบบรรทัดนี้)
+import "./styles/calm-ui.css";
+import "./styles/workspace-ui.css";
 
 // ทาธีมที่ผู้ใช้เลือกไว้ก่อน render — กันจอกระพริบเป็นธีมผิดตอนโหลด
 initTheme();
@@ -16,4 +21,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
-);
+);

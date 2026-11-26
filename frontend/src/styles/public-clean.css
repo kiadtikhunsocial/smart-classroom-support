@@ -1,0 +1,595 @@
+/* ============================================================================
+   public-clean.css — หน้าสาธารณะแบบใหม่ (pc-*) ตามแบบ design/download.png
+   ----------------------------------------------------------------------------
+   หน้าแรก: ซ้าย = หัวเรื่อง + ปุ่มแจ้งซ่อม + ติดตามงาน, ขวา = ผู้ช่วย AI ฝังในหน้า
+   ล่าง = ลิงก์ประกัน/สอบถาม, ขั้นตอน, คำถามที่พบบ่อย
+   หัวข้อ --font-display (Prompt), เนื้อหา --font-sans (Noto Sans Thai)
+   ========================================================================== */
+
+.pc-home,
+.pc-form-page {
+  --pc-radius: 12px;
+  --pc-ink: var(--ph-text);
+  --pc-muted: var(--ph-text-2);
+  --pc-faint: var(--ph-text-3);
+  --pc-line: var(--ph-line);
+  --pc-surface: var(--ph-glass-strong);
+  --pc-sunken: var(--ph-surface-soft);
+  --pc-brand: #b9a8e6;
+  --pc-brand-ink: #15111f;
+  --pc-brand-soft: rgb(185 168 230 / 0.12);
+  font-family: var(--font-sans);
+}
+
+[data-mode='light'] .pc-home,
+[data-mode='light'] .pc-form-page {
+  --pc-bg: #f6f6f9;
+  --pc-ink: #1d1b29;
+  --pc-muted: #57546a;
+  --pc-faint: #75728a;
+  --pc-line: #e2e0ea;
+  --pc-surface: #ffffff;
+  --pc-sunken: #f3f1f8;
+  --pc-brand: #4e3d6e;
+  --pc-brand-ink: #ffffff;
+  --pc-brand-soft: rgb(78 61 110 / 0.08);
+}
+
+[data-mode='light'] .pc-home { background: var(--pc-bg); }
+.pc-home .ph-bg { display: none; }
+.pc-home ::selection { background: var(--pc-brand-soft); color: var(--pc-ink); }
+
+/* ── แถบบน ─────────────────────────────────────────────────────────────── */
+
+.pc-topbar.ph-topbar {
+  padding: 14px clamp(16px, 6.5vw, 84px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-mode='light'] .pc-home .pc-topbar { background: #ffffff; border-bottom: 1px solid var(--pc-line); }
+.pc-topbar .ph-brand { gap: 10px; }
+.pc-logo { width: 36px; height: 36px; border-radius: 6px; object-fit: contain; flex: 0 0 auto; }
+.pc-topbar .ph-brand-text strong { font-size: 1rem; color: var(--pc-ink); }
+.pc-topbar .ph-brand-text small { font-size: 0.74rem; color: var(--pc-muted); }
+
+.pc-lang {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  cursor: pointer;
+}
+.pc-lang select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.pc-lang select:focus { outline: none; }
+.pc-lang:focus-within { outline: none; }
+.pc-lang select option { color: #1d1b29; background: #fff; }
+
+/* ── เลย์เอาต์หลัก ──────────────────────────────────────────────────────── */
+
+.pc-main.ph-main {
+  width: 100%;
+  max-width: 1112px;
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 36px) 16px 40px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+.pc-left { display: grid; gap: 0; align-content: start; min-width: 0; }
+.pc-right { min-width: 0; }
+
+.pc-h2 { margin: 0; font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; line-height: 1.35; color: var(--pc-ink); }
+.pc-h3 { margin: 0 0 10px; font-family: var(--font-display); font-size: 0.98rem; font-weight: 600; color: var(--pc-ink); }
+.pc-muted { margin: 2px 0 0; font-size: 0.8rem; color: var(--pc-muted); line-height: 1.5; }
+.pc-hint { margin: 10px 0 0; font-size: 0.76rem; color: var(--pc-faint); }
+.pc-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--pc-muted); }
+
+/* หัวเรื่อง */
+.pc-hero { padding: 10px 0 24px; border-bottom: 1px solid var(--pc-line); }
+.pc-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2rem, 4.3vw, 2.85rem);
+  line-height: 1.32;
+  letter-spacing: -0.01em;
+  color: var(--pc-ink);
+  text-wrap: balance;
+}
+.pc-title-accent { color: var(--pc-brand); }
+.pc-lead { margin: 14px 0 0; max-width: 34em; font-size: 0.98rem; line-height: 1.65; color: var(--pc-muted); }
+
+.pc-cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 22px; }
+.pc-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: var(--pc-brand);
+  color: var(--pc-brand-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  box-shadow: 0 6px 16px rgb(78 61 110 / 0.22);
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms ease;
+}
+.pc-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgb(78 61 110 / 0.28); }
+.pc-cta:focus-visible { outline: 3px solid var(--pc-brand); outline-offset: 3px; }
+.pc-cta-note { font-size: 0.78rem; color: var(--pc-muted); }
+
+/* ติดตามงานซ่อม */
+.pc-track { padding-top: 22px; min-width: 0; }
+.pc-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 14px; }
+.pc-input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 1rem;
+}
+.pc-input::placeholder { color: var(--pc-faint); }
+.pc-input:focus { outline: none; border-color: var(--pc-brand); box-shadow: 0 0 0 3px var(--pc-brand-soft); }
+.pc-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pc-btn-outline:hover:not(:disabled) { border-color: var(--pc-brand); color: var(--pc-brand); }
+.pc-btn-outline:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+.pc-btn-outline:disabled { opacity: 0.6; cursor: progress; }
+
+.pc-track .ph-mine { margin-top: 18px; }
+.pc-track .ph-mine-forget { display: grid; place-items: center; }
+
+/* ── ผู้ช่วย AI ฝังในหน้า ───────────────────────────────────────────────── */
+
+.pc-chat {
+  display: flex;
+  flex-direction: column;
+  height: clamp(380px, 56vh, 424px);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgb(29 27 41 / 0.05);
+}
+.pc-chat-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--pc-line); }
+.pc-chat-icon { display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 8px; background: var(--pc-sunken); color: var(--pc-brand); }
+.pc-chat-titles { flex: 1 1 auto; min-width: 0; }
+.pc-chat-titles h2 { margin: 0; font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: var(--pc-ink); }
+.pc-chat-titles p { margin: 0; font-size: 0.74rem; color: var(--pc-muted); }
+.pc-chat-restart { border: 0; background: none; color: var(--pc-muted); font: inherit; font-size: 0.76rem; cursor: pointer; padding: 6px; border-radius: 6px; }
+.pc-chat-restart:hover:not(:disabled) { color: var(--pc-brand); }
+.pc-chat-restart:focus-visible { outline: 2px solid var(--pc-brand); }
+
+.pc-chat-body { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; background: var(--pc-sunken); }
+.pc-msg { max-width: 86%; padding: 10px 12px; border-radius: 8px; font-size: 0.86rem; line-height: 1.6; }
+.pc-msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pc-msg-bot { align-self: flex-start; background: rgb(78 61 110 / 0.07); color: var(--pc-ink); }
+[data-mode='dark'] .pc-msg-bot { background: rgb(255 255 255 / 0.06); }
+.pc-msg-user { align-self: flex-end; background: var(--pc-brand); color: var(--pc-brand-ink); font-weight: 600; }
+.pc-msg-typing { color: var(--pc-muted); font-style: italic; }
+.pc-msg-link { display: inline-block; margin-top: 6px; color: var(--pc-brand); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+.pc-ai-starters { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-ai-starter {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.pc-ai-starter:hover { border-color: var(--pc-brand); color: var(--pc-brand); }
+.pc-ai-starter:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+
+.pc-chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--pc-line); background: var(--pc-surface); }
+.pc-chat-input input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 2px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 1rem;
+}
+.pc-chat-input input:focus { outline: none; border-color: var(--pc-brand); }
+.pc-chat-input button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pc-brand);
+  color: var(--pc-brand-ink);
+  cursor: pointer;
+}
+.pc-chat-input button:disabled { opacity: 0.45; cursor: not-allowed; }
+.pc-chat-input button:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+
+/* ── ลิงก์ประกัน / สอบถาม ───────────────────────────────────────────────── */
+
+.pc-links {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
+  overflow: hidden;
+}
+.pc-link-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--pc-ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pc-link-cell + .pc-link-cell { border-top: 1px solid var(--pc-line); }
+.pc-link-cell:hover { background: var(--pc-sunken); }
+.pc-link-cell:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: -2px; }
+.pc-link-icon { display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px; background: var(--pc-sunken); color: var(--pc-brand); }
+.pc-link-text { display: grid; gap: 1px; flex: 1 1 auto; min-width: 0; }
+.pc-link-text strong { font-size: 0.92rem; font-weight: 600; }
+.pc-link-text small { font-size: 0.74rem; color: var(--pc-muted); }
+.pc-arrow { flex: 0 0 auto; color: var(--pc-muted); }
+
+/* แผงประกัน (เปิดจากปุ่ม) */
+.pc-sheet { padding: 18px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius); background: var(--pc-surface); }
+.pc-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pc-icon-btn { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: none; color: var(--pc-muted); cursor: pointer; }
+.pc-icon-btn:hover { background: var(--pc-sunken); color: var(--pc-ink); }
+.pc-icon-btn:focus-visible { outline: 2px solid var(--pc-brand); }
+
+/* ── ขั้นตอน + คำถามที่พบบ่อย ──────────────────────────────────────────── */
+
+.pc-flow { padding-bottom: 18px; border-bottom: 1px solid var(--pc-line); }
+.pc-flow ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.pc-flow li { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--pc-muted); }
+.pc-flow b {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.pc-faq details { border-top: 1px solid var(--pc-line); }
+.pc-faq summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--pc-ink);
+}
+.pc-faq summary::-webkit-details-marker { display: none; }
+.pc-faq summary::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 6px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 160ms ease;
+}
+.pc-faq details[open] summary::before { transform: rotate(90deg); }
+.pc-faq summary:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; border-radius: 4px; }
+.pc-faq details p { margin: 0 0 14px 14px; font-size: 0.88rem; line-height: 1.65; color: var(--pc-muted); }
+
+/* ── ท้ายหน้า ───────────────────────────────────────────────────────────── */
+
+.pc-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 20px;
+  margin-top: auto;
+  padding: 16px clamp(16px, 6.5vw, 84px);
+  border-top: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+  font-size: 0.76rem;
+  color: var(--pc-muted);
+}
+.pc-footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.pc-footer a { display: inline-flex; align-items: center; gap: 5px; color: var(--pc-muted); text-decoration: none; }
+.pc-footer a:hover { color: var(--pc-brand); text-decoration: underline; }
+.pc-footer a:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+
+/* ── ผลการติดตามงาน: แบนราบ ไม่ซ้อนการ์ด ─────────────────────────────── */
+
+.pc-home .pc-track .ph-result {
+  margin-top: 20px;
+  padding: 20px 0 0;
+  border: 0;
+  border-top: 1px solid var(--pc-line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.pc-home .pc-track .ph-result-no-label,
+.pc-home .pc-track .ph-meta-label { letter-spacing: 0; font-size: 0.8rem; font-weight: 500; }
+.pc-home .pc-track .ph-result-no strong { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.pc-home .pc-track .ph-result-title { font-size: 1.05rem; font-weight: 600; margin: 8px 0 16px; }
+.pc-home .pc-track .ph-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.pc-home .pc-track .ph-step-label { font-size: 0.74rem; line-height: 1.3; }
+.pc-home .pc-track .ph-step-time { font-size: 0.68rem; }
+.pc-home .pc-track .ph-meta-grid { grid-template-columns: minmax(0, 1fr); gap: 0; margin-top: 20px; border-top: 1px solid var(--pc-line); }
+.pc-home .pc-track .ph-meta {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--pc-line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.pc-home .pc-track .ph-meta-label { grid-row: span 2; color: var(--pc-faint); }
+.pc-home .pc-track .ph-meta-value { font-size: 0.92rem; }
+.pc-home .pc-track .ph-meta-sub { grid-column: 2; font-size: 0.8rem; color: var(--pc-faint); }
+.pc-home .pc-track .ph-mine-list { display: grid; grid-auto-flow: row; overflow: visible; gap: 8px; }
+.pc-home .pc-track .ph-mine-list li { width: auto; min-width: 0; }
+.pc-home .pc-track .ph-result-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; }
+.pc-home .pc-track .ph-result-actions .ph-btn { min-height: 44px; }
+.pc-home.pc-home .ph-result-region:focus-visible { outline: none; }
+
+/* ── จอกว้าง ────────────────────────────────────────────────────────────── */
+
+@media (min-width: 880px) {
+  .pc-main.ph-main { grid-template-columns: minmax(0, 1fr) minmax(0, 0.88fr); column-gap: 44px; row-gap: 24px; }
+  .pc-left, .pc-right { grid-row: 1; }
+  .pc-right { align-self: start; }
+  .pc-links, .pc-sheet, .pc-flow, .pc-faq { grid-column: 1 / -1; }
+  .pc-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pc-link-cell + .pc-link-cell { border-top: 0; border-left: 1px solid var(--pc-line); }
+  .pc-flow ol { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pc-home .pc-track .ph-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+}
+
+@media (max-width: 420px) {
+  .pc-search { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-cta, .pc-faq summary::before { transition: none; }
+}
+
+/* ── ฟอร์มแจ้งซ่อม (PublicNoLoginReportView) ───────────────────────────── */
+
+.pc-form-page { font-family: var(--font-sans); }
+.pc-form-page .ph-bg-aurora-1 { animation: none; opacity: 0.35; }
+.pc-form-page .pr-title { font-family: var(--font-display); font-weight: 600; }
+.pc-form-page .ph-card-title { font-family: var(--font-display); font-weight: 600; }
+.pc-form-page.pc-form-page [tabindex='-1']:focus,
+.pc-form-page.pc-form-page [tabindex='-1']:focus-visible { outline: none; box-shadow: none; }
+
+.pc-opt { font-weight: 400; font-size: 0.8rem; color: var(--ph-text-3); }
+
+.pc-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 10px; }
+.pc-chip,
+.pc-seg-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ph-line);
+  background: var(--ph-surface-soft);
+  color: var(--ph-text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.pc-chip:hover,
+.pc-seg-item:hover { border-color: var(--ph-line-strong); }
+.pc-chip.is-on,
+.pc-seg-item.is-on {
+  border-color: var(--ph-accent-text);
+  background: rgb(var(--ph-accent-rgb) / 0.22);
+  color: var(--ph-text);
+  font-weight: 600;
+}
+.pc-seg-item.is-hot.is-on { border-color: var(--ph-danger); background: rgb(var(--ph-danger-rgb) / 0.18); }
+.pc-chip:focus-visible,
+.pc-seg-item:focus-within { outline: 2px solid var(--ph-accent-text); outline-offset: 2px; }
+
+.pc-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.pc-fieldset legend { padding: 0; margin-bottom: 8px; }
+.pc-seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pc-seg-item { border-radius: 12px; padding: 0 6px; text-align: center; font-size: 0.86rem; line-height: 1.25; }
+
+.pc-photo-btn { display: inline-flex; align-items: center; gap: 8px; width: 100%; justify-content: center; min-height: 48px; cursor: pointer; border-style: dashed; }
+.pc-photo-btn.is-disabled { opacity: 0.55; cursor: not-allowed; }
+.pc-photo-btn:focus-within { outline: 2px solid var(--ph-accent-text); outline-offset: 2px; }
+.pc-form-page .pr-thumb-remove { display: grid; place-items: center; }
+
+.pc-form-sub {
+  margin: 10px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--ph-line);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ph-text);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.pc-extra { border-top: 1px solid var(--ph-line); padding-top: 4px; }
+.pc-extra summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--ph-text-2);
+  font-size: 0.92rem;
+}
+.pc-extra summary:focus-visible { outline: 2px solid var(--ph-accent-text); outline-offset: 2px; border-radius: 6px; }
+.pc-extra[open] { padding-bottom: 8px; }
+
+.pc-form-page .pr-input,
+.pc-form-page .pr-textarea,
+.pc-form-page .pr-select { font-size: 1rem; } /* 16px กัน iOS ซูมเข้าเมื่อแตะช่องกรอก */
+
+@media (max-width: 380px) {
+  .pc-seg { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-chip, .pc-seg-item { transition: none; }
+}
+
+/* ── แถบบนบนมือถือ: แถวเดียว ไม่กินจอสองบรรทัด ─────────────────────────── */
+@media (max-width: 640px) {
+  .pc-home .ph-topbar,
+  .pc-form-page .ph-topbar { flex-wrap: nowrap; gap: 8px; }
+  .pc-home .ph-brand,
+  .pc-form-page .ph-brand { min-width: 0; flex: 1 1 auto; }
+  .pc-home .ph-brand-text,
+  .pc-form-page .ph-brand-text { min-width: 0; }
+  .pc-home .ph-brand-text strong,
+  .pc-form-page .ph-brand-text strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.92rem;
+  }
+  .pc-home .ph-topbar-right,
+  .pc-form-page .ph-topbar-right { flex-wrap: nowrap; flex: 0 0 auto; gap: 6px; }
+}
+.pc-home .pc-report .ph-action-arrow { color: inherit; opacity: 0.85; stroke: currentColor; }
+
+/* ── โหมดสว่าง: สีตัวอักษรในป้ายประกัน/กล่องเตือน ให้อ่านออกบนพื้นอ่อน ───── */
+[data-mode='light'] .pr-warranty-ok { color: #046c4e; border-color: rgb(4 108 78 / 0.35); background: rgb(4 108 78 / 0.08); }
+[data-mode='light'] .pr-warranty-warn { color: #8a4b00; border-color: rgb(138 75 0 / 0.35); background: rgb(199 119 0 / 0.10); }
+[data-mode='light'] .pr-warranty-expired { color: #a3162a; border-color: rgb(163 22 42 / 0.35); background: rgb(220 43 63 / 0.08); }
+[data-mode='light'] .pr-note .pr-label { color: #7a4300; }
+
+/* ปุ่มสลับสว่าง/มืด + ฟอนต์หัวข้อตามแบบ (Noto Sans Thai หนา) */
+.pc-mode-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  cursor: pointer;
+}
+.pc-mode-btn:hover { border-color: var(--pc-brand); color: var(--pc-brand); }
+.pc-mode-btn:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 2px; }
+.pc-home { --font-display: var(--font-sans); }
+.pc-home .pc-title { font-weight: 700; }
+
+/* ── ปุ่มภาษา: ทุกภาษาเรียงในแถบเดียว แตะครั้งเดียวเปลี่ยน ─────────────── */
+.pc-lang.pc-lang {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  min-height: 38px;
+  padding: 3px;
+  border: 1px solid var(--pc-line);
+  border-radius: 10px;
+  background: var(--pc-surface);
+  cursor: default;
+}
+.pc-lang-btn {
+  min-width: 38px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--pc-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.pc-lang-btn:hover { color: var(--pc-ink); background: var(--pc-sunken); }
+.pc-lang-btn.is-on { background: var(--pc-brand); color: var(--pc-brand-ink); }
+.pc-lang-btn:focus-visible { outline: 2px solid var(--pc-brand); outline-offset: 1px; }
+
+@media (max-width: 640px) {
+  /* มือถือ: ซ่อนชื่อระบบไว้เหลือโลโก้ เพื่อให้ปุ่มภาษาครบทุกภาษาในแถวเดียว */
+  .pc-home .pc-topbar .ph-brand-text { display: none; }
+  .pc-lang-btn { min-width: 34px; padding: 0 6px; font-size: 0.78rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-lang-btn { transition: none; }
+}
+.pc-chat-restart { white-space: nowrap; flex: 0 0 auto; }

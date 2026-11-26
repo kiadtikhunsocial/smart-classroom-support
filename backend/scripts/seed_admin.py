@@ -2,7 +2,7 @@
 """seed_admin.py — ล้างข้อมูลทั้งหมด แล้วสร้างบัญชี super_admin เริ่มต้น
 
 ⚠ สคริปต์นี้ลบข้อมูล "ทุกตาราง" — สำรองฐานข้อมูลก่อนทุกครั้ง:
-      DATABASE_URL='<neon>' PYTHONPATH=. python scripts/backup_db.py
+      DATABASE_URL='<production-url>' PYTHONPATH=. python scripts/backup_db.py
 
 ใช้:
     # ในเครื่อง (รันจากโฟลเดอร์ backend)

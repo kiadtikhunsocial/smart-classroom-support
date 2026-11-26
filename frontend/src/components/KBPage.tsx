@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalOverlay from './ModalOverlay';
 import { api } from '../api/client';
 import '../styles/chatbot-review.css';
 
@@ -143,7 +144,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
           </div>
         </div>
         <div className="top-bar-actions">
-          <input className="form-input" style={{ width: 200 }} placeholder="ค้นหาบทความ..." value={q}
+          <input className="form-input" style={{ width: 200 }} placeholder="ค้นหาบทความ…" value={q}
             onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
           <button className="btn btn-secondary btn-icon" onClick={load} aria-label="โหลดใหม่" title="โหลดใหม่">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -165,7 +166,7 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
         <div><span className="bot-review-kicker">ปรับคำตอบได้ด้วยตัวเอง</span>
           <h2>ทบทวนคำถาม → เพิ่มความรู้ → ทดสอบ → เผยแพร่</h2>
           <p>เขียนขั้นตอนที่ตรวจสอบได้พร้อมคำค้นหลายรูปแบบ บันทึกเป็นฉบับร่างก่อน ทวนข้อมูลกับผู้เชี่ยวชาญ แล้วจึงเปิด “เผยแพร่” และทดสอบในสภาพแวดล้อมทดสอบ</p>
-          <p>ปรับน้ำเสียงรวมที่ <code>backend/chatbot_extra_prompt.txt</code> หรือปรับแยกงานที่ <code>backend/chatbot_prompts/</code> เช่น intent, kb_match, line_reply แล้วทดสอบและ deploy backend ใหม่ วิธีแก้ให้แก้เป็นบทความที่นี่ ไม่ใช่ใส่ใน prompt</p></div>
+          <p>ปรับน้ำเสียงและคำแนะนำ AI ได้ทันทีที่เมนู “จัดการ AI / LINE OA” → แท็บ “คำแนะนำ AI” (ไม่ต้อง deploy) ค่าเริ่มต้นอยู่ในไฟล์ <code>backend/chatbot_prompts/</code> วิธีแก้ให้แก้เป็นบทความที่นี่ ไม่ใช่ใส่ใน prompt</p></div>
         {canReviewBot && <button className="btn" type="button" onClick={() => void toggleReview()} aria-expanded={botReviewOpen}>{botReviewOpen ? 'ซ่อนคำถามที่ควรตรวจ' : 'ดูคำถามที่บอตตอบไม่ชัด'}</button>}
       </section>
       {botReviewOpen && <section className="bot-review-panel" aria-label="คุณภาพแชตบอต">
@@ -227,8 +228,8 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
 
       {/* ─── Panel ดูบทความ (slide จากขวา) ─── */}
       {selected && (
-        <div className="panel-overlay" onClick={() => setSelected(null)}>
-          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="รายละเอียดบทความ" onClose={() => setSelected(null)}>
+          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <div>
                 <h3 className="repair-panel-title">{selected.title}</h3>
@@ -300,13 +301,13 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
               </div>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ─── Panel ฟอร์มเพิ่ม/แก้ไข (slide จากขวา) ─── */}
       {showForm && (
-        <div className="panel-overlay" onClick={() => setShowForm(false)}>
-          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }} onClick={(e) => e.stopPropagation()}>
+        <ModalOverlay label="ข้อมูลบทความ" onClose={() => setShowForm(false)}>
+          <div className="repair-panel" style={{ width: 560, maxWidth: '95vw' }}>
             <div className="repair-panel-header">
               <h3 className="repair-panel-title">{editing ? 'แก้ไขบทความ' : 'เพิ่มบทความใหม่'}</h3>
               <button className="repair-panel-close" onClick={() => setShowForm(false)}>
@@ -342,11 +343,11 @@ export default function KBPage({ onBack, userRole, userOrgId }: { onBack: () => 
                 </label>
                 <div style={{ flex: 1 }} />
                 <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>ยกเลิก</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'กำลังบันทึก...' : (editing ? 'บันทึก' : 'เพิ่ม')}</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'กำลังบันทึก…' : (editing ? 'บันทึก' : 'เพิ่ม')}</button>
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

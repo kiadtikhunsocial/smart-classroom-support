@@ -82,3 +82,16 @@
 @media (prefers-reduced-motion: reduce) {
   .ph-hero-cta a, .ph-hero-cta button, .ph-customer-cta { transition: none; }
 }
+
+/* Staff entry on public pages: same pill as the customer link. */
+.ph-staff-entry { color: var(--ph-accent-text, var(--ph-blue)); font-size: 0.82rem; font-weight: 700; text-decoration: none; padding: 9px 13px; border: 1px solid var(--ph-line-strong); border-radius: 999px; white-space: nowrap; }
+.ph-staff-entry:hover { color: var(--ph-blue); }
+
+/* Phones: keep the top bar to brand + staff link + theme toggle. */
+@media (max-width: 610px) {
+  .ph-hide-sm { display: none !important; }
+  .ph-staff-entry { font-size: .72rem; padding: 7px 9px; }
+}
+
+/* Step headings get focus by script after each step; no ring for that. */
+.ph-card-title[tabindex="-1"]:focus, .pr-success-title[tabindex="-1"]:focus { outline: none; }

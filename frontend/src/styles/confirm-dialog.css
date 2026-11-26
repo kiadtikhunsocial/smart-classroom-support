@@ -1,0 +1,28 @@
+/* กล่องยืนยันของระบบ (components/ConfirmDialog.tsx) — แทน window.confirm() */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.55);
+}
+
+.confirm-box {
+  width: min(420px, 100%);
+  padding: 22px 22px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 20px 50px rgb(0 0 0 / 0.35);
+}
+
+.confirm-title { margin: 0 0 8px; font-size: 1.05rem; font-weight: 700; }
+.confirm-message { margin: 0 0 18px; color: var(--color-text-secondary); font-size: 0.92rem; line-height: 1.55; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .confirm-actions .btn { flex: 1 1 0; min-height: 44px; }
+}

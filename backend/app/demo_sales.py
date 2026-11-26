@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ข้อมูลขายตัวอย่าง (ปลอม ติดป้าย DEMO)
+# ถูกเรียกจาก  : scripts/import_sales_demo.py (ตอน Render start), scripts/seed_sales_mockup.py
+# เชื่อมต่อไป  : ตาราง sales_leads / sales_records
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Clearly labelled, fictional customer and sales examples.
 
 These rows have no contact details and must never trigger LINE or Sheet sync.

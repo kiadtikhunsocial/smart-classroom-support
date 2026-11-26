@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : บันทึกคะแนนประเมินบอท/เจ้าหน้าที่ที่ลูกค้าพิมพ์ใน LINE
+# ถูกเรียกจาก  : chatbot_core
+# เชื่อมต่อไป  : ตาราง line_service_ratings
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Persist explicit LINE ratings; no model inference and no cross-customer ticket rating."""
 import re
 

@@ -112,7 +112,7 @@ export default function QRBatchPage({ onBack }: { onBack: () => void }) {
             ))}
           </select>
           <button className="btn btn-secondary" onClick={genAll} disabled={generating || visibleDevices.length === 0}>
-            {generating ? 'กำลังสร้าง...' : 'สร้าง QR ทั้งหมด'}
+            {generating ? 'กำลังสร้าง…' : 'สร้าง QR ทั้งหมด'}
           </button>
           <button className="btn btn-primary" onClick={printBatch} disabled={Object.keys(qrMap).length === 0}>พิมพ์ ({visibleDevices.length})</button>
         </div>

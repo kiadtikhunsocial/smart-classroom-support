@@ -7,7 +7,7 @@
 * ตาราง ``device_health_flags``  — ผลลัพธ์ของ Rule Engine (สร้างด้วย create_all)
 * ตารางอื่นที่ยังไม่มีในฐานข้อมูล — create_all สร้างเฉพาะตารางที่หายไป
 
-ต่างจาก ``scripts/migrate.py`` ที่ hardcode ``/app`` ไว้สำหรับรันในคอนเทนเนอร์
+(แทน scripts/migrate.py รุ่นเก่าที่ hardcode ``/app`` ซึ่งลบออกแล้ว)
 ไฟล์นี้รันจากเครื่องนักพัฒนาได้ตรง ๆ::
 
     backend/.venv/Scripts/python.exe backend/scripts/migrate_pm.py

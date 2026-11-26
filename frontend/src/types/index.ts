@@ -92,7 +92,12 @@ export interface Ticket {
   reporter_email: string | null;
   reporter_phone: string | null;
   reporter_type: string | null;
-  assigned_to: number | null;
+  /** ชื่อผู้รับผิดชอบ (ข้อความ) — เดิมประกาศเป็น number แต่ API ส่งชื่อมาเสมอ */
+  assigned_to: string | null;
+  assigned_user_id?: number | null;
+  assigned_at?: string | null;
+  /** true = ระบบเสนองานให้ ยังรอช่างกดรับ */
+  auto_assigned?: boolean;
   assigned_user?: User | null;
   created_by: number | null;
   created_by_user?: User | null;
@@ -204,4 +209,88 @@ export interface Room {
   organization_id: number;
   organization?: Organization | null;
   device_count?: number;
+}
+
+// ─── ระบบส่งงาน (แบบ Grab) ─────────────────────────────────────────
+export interface DispatchOffer {
+  ticket_id: string;
+  title: string;
+  priority: string;
+  device_id: string;
+  device_label: string;
+  organization_name: string | null;
+  created_at: string;
+  offered_at: string | null;
+  expires_at: string | null;
+  tried?: number;
+}
+
+export interface DispatchMe {
+  can_receive: boolean;
+  on_duty: boolean;
+  line_linked: boolean;
+  offer_minutes: number;
+  open: number;
+  /** งานที่กำลังทำ (assigned/in_progress) — ใช้ตัดสินว่าว่างหรือยุ่ง */
+  active?: number;
+  done_today: number;
+  free?: boolean;
+  offers: DispatchOffer[];
+  /** งานค้างของทีม (ทุกคนยุ่ง) — แจ้งเตือนแบบไม่บังคับ รับได้ถ้าสะดวก */
+  pool?: DispatchOffer[];
+}
+
+export interface DispatchStaff {
+  id: number;
+  name: string;
+  username: string;
+  organization_id: number | null;
+  on_duty: boolean;
+  line_linked: boolean;
+  state: 'free' | 'busy' | 'off';
+  /** false = ระบบจะไม่เสนองาน (ไม่ผูก LINE และไม่ได้เปิดเว็บใน 10 นาที) */
+  reachable: boolean;
+  open: number;
+  done_today: number;
+  offers: number;
+  active?: number;
+  picture_url?: string | null;
+  /** งานที่กำลังทำล่าสุด */
+  current?: { ticket_id: string; title: string; status: string } | null;
+}
+export interface StaffTicketRow {
+  ticket_id: string; title: string; status: string; priority: string;
+  device_id: string; device_label: string; organization_name: string | null; reporter_name: string | null;
+  created_at: string; assigned_at: string | null; resolved_at: string | null; closed_at: string | null;
+  sla_due_at: string | null; rating: number | null;
+  last_update?: { note: string | null; at: string; by: string | null } | null;
+}
+export interface StaffDetail {
+  id: number; name: string; username: string; email: string | null; picture_url: string | null;
+  organization_name: string; on_duty: boolean; line_linked: boolean; reachable: boolean;
+  last_seen_at: string | null; state: 'free' | 'busy' | 'off';
+  load: { open: number; active: number; done_today: number; done_7d: number; done_30d: number;
+    avg_hours_30d: number | null; avg_rating_30d: number | null; sla_met_30d: number; sla_total_30d: number };
+  open_tickets: StaffTicketRow[];
+  recent_done: StaffTicketRow[];
+}
+
+export interface DispatchSummary {
+  auto_assign: boolean;
+  line_push_configured: boolean;
+  offer_minutes: number;
+  staff: DispatchStaff[];
+  tickets: { unclaimed: number; offering: number; in_progress: number; done_today: number };
+  unclaimed: DispatchOffer[];
+}
+
+/** สถานะย่อของใบงานสำหรับผู้แจ้ง (POST /api/public/tickets/status) */
+export interface PublicTicketStatus {
+  ticket_no: string;
+  status: string;
+  status_label: string;
+  title: string;
+  device_label: string;
+  created_at: string;
+  updated_at: string;
 }

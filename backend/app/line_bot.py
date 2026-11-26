@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ส่งข้อความเข้า LINE (reply/push) + ตัวช่วยเรียก Gemini สำหรับข้อความ LINE
+# ถูกเรียกจาก  : chatbot_core, chatbot_helpers, chatbot_sales, dispatch, line_report_link, ticket_rating_invite, main
+# เชื่อมต่อไป  : LINE Messaging API api.line.me (ส่งตรง ไม่ผ่าน n8n), ai_client
+# env ที่อ่าน  : LINE_CHANNEL_TOKEN, LINE_GROUP_ID, GEMINI_API_KEY, GEMINI_MODEL
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 line_bot.py — LINE chatbot + AI troubleshooting ครบวงจร (ทำงานฝั่ง backend)
 รับข้อความจาก n8n webhook → จัด session multi-turn → Gemini คุยถามข้อมูล

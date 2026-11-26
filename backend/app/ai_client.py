@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ตัวเรียก Google Gemini (REST) ที่ทุกส่วน AI ใช้ร่วมกัน
+# ถูกเรียกจาก  : gemini_service, line_bot, web_agent, chatbot_i18n, main
+# เชื่อมต่อไป  : Gemini API generativelanguage.googleapis.com (หรือ Vertex endpoint ถ้าตั้ง GEMINI_TUNED_ENDPOINT)
+# env ที่อ่าน  : GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TUNED_ENDPOINT
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Small, defensive Gemini REST client shared by the chatbot.
 
 The chatbot has several optional AI steps. Keeping the transport, retries,
@@ -34,8 +41,10 @@ _VERTEX_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 # Multi-region / global Vertex endpoints are served from the unprefixed host.
 _GLOBAL_LOCATIONS = {"us", "eu", "global"}
 
+# local_address=0.0.0.0 บังคับ IPv4: Docker Desktop/เครือข่ายบางแห่งไม่มีเส้นทาง IPv6
+# แล้ว googleapis.com ที่ resolve เป็น AAAA จะล้มแบบสุ่ม ("Network is unreachable")
 _client = httpx.Client(
-    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+    transport=httpx.HTTPTransport(local_address="0.0.0.0", limits=httpx.Limits(max_connections=20, max_keepalive_connections=10)),
 )
 
 _token_lock = threading.Lock()
@@ -144,7 +153,8 @@ def _response_text(data: dict[str, Any] | None) -> str | None:
     """Extract text defensively from Gemini's response envelope."""
     for candidate in (data or {}).get("candidates", []):
         parts = ((candidate or {}).get("content") or {}).get("parts") or []
-        text = "".join(str(part.get("text", "")) for part in parts if isinstance(part, dict))
+        # ข้ามส่วน "thought" ของโมเดลที่คิดก่อนตอบ ไม่ให้ความคิดภายในหลุดไปเป็นคำตอบ
+        text = "".join(str(part.get("text", "")) for part in parts if isinstance(part, dict) and not part.get("thought"))
         if text.strip():
             return text.strip()
     return None

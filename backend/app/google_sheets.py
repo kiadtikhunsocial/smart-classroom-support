@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : ส่งข้อมูลสมัครสมาชิก/lead/ยอดขายเข้า Google Sheet
+# ถูกเรียกจาก  : chatbot_helpers, main
+# เชื่อมต่อไป  : Google Sheets API (service account)
+# env ที่อ่าน  : GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_JSON/FILE, GOOGLE_SHEET_*_RANGE
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Google Sheet connector — ส่งข้อมูลการสมัครสมาชิกไปต่อท้ายชีต
 
 ใช้เฉพาะไลบรารีที่โปรเจกต์มีอยู่แล้ว (google-auth + httpx) จึงไม่ต้องเพิ่ม

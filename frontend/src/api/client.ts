@@ -1,5 +1,10 @@
+// ── แผนที่ไฟล์ ──────────────────────────────────────────────
+// หน้าที่     : จุดเดียวที่ frontend เรียก backend (ทุกฟังก์ชันใน `api`) + เก็บ JWT (localStorage sc_token)
+// ส่งไปที่    : backend FastAPI บน Render (VITE_API_URL) -> backend/app/main.py
+// ภาพรวมระบบ : docs/SYSTEM_MAP.md
+// ─────────────────────────────────────────────────────────
 import { User } from '../types/user';
-import type { PublicOptions } from '../types';
+import type { DispatchMe, DispatchSummary, StaffDetail, PublicOptions, PublicTicketStatus, Ticket } from '../types';
 
 // ─── API base URL ───────────────────────────────────────────────────────
 // ลำดับ: ค่าที่ฝังตอน build (__VITE_API_URL__) → import.meta.env → same-origin '/api'
@@ -38,6 +43,23 @@ export function setToken(token: string | null) {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await send(path, options);
+  return res.json();
+}
+
+/** เหมือน request() แต่คืน header ด้วย — ใช้อ่าน X-Total-Count ของรายการแบบแบ่งหน้า */
+async function requestWithHeaders<T>(path: string, options?: RequestInit): Promise<{ data: T; headers: Headers }> {
+  const res = await send(path, options);
+  return { data: (await res.json()) as T, headers: res.headers };
+}
+
+function toQuery(params: Record<string, string>): string {
+  const qs = new URLSearchParams(params).toString();
+  return qs ? `?${qs}` : '';
+}
+
+/** ยิง request พร้อม token แล้วแปลง error เป็น Error ที่มี status/code/detail (ใช้ร่วมกัน) */
+async function send(path: string, options?: RequestInit): Promise<Response> {
   const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
     headers: {
@@ -60,7 +82,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     err.detail = detail;
     throw err;
   }
-  return res.json();
+  return res;
 }
 
 async function collectPages<T>(fetchPage: (offset: number, limit: number) => Promise<T[]>, limit: number): Promise<T[]> {
@@ -97,6 +119,19 @@ export const api = {
 
   listAllTickets: (params?: { status?: string; priority?: string; device_id?: string; device_type?: string; device_category?: string; organization_id?: number }) =>
     collectPages((offset, limit) => api.listTickets({ ...params, offset, limit }), 200),
+
+  /** หนึ่งหน้าของรายการใบงาน + จำนวนทั้งหมดที่ตรงตัวกรอง (จาก header X-Total-Count) */
+  listTicketsPage: async (params: Record<string, string>): Promise<{ items: Ticket[]; total: number }> => {
+    const { data, headers } = await requestWithHeaders<Ticket[]>(`/tickets${toQuery(params)}`);
+    const header = Number(headers.get('X-Total-Count'));
+    return { items: data, total: Number.isFinite(header) && headers.has('X-Total-Count') ? header : data.length };
+  },
+
+  /** จำนวนใบงานแยกสถานะ ด้วยตัวกรองชุดเดียวกับรายการ (ไม่ส่งสถานะ/หน้า — แท็บต้องเห็นทุกสถานะ) */
+  ticketCounts: (params: Record<string, string>) => {
+    const { status: _status, limit: _limit, offset: _offset, ...rest } = params;
+    return request<{ total: number; by_status: Record<string, number>; mine_open?: number }>(`/tickets/counts${toQuery(rest)}`);
+  },
 
   getTicket: (ticketId: string) => request<any>(`/tickets/${ticketId}`),
 
@@ -143,6 +178,9 @@ export const api = {
   listChatbotPrompts: () => request<any[]>('/chatbot/manage/prompts'),
   updateChatbotPrompt: (task: string, data: { guidance: string; enabled: boolean }) =>
     request<any>(`/chatbot/manage/prompts/${encodeURIComponent(task)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // ลบค่าที่บันทึกจากเว็บ แล้วกลับไปใช้ไฟล์ backend/chatbot_prompts/<task>.txt
+  resetChatbotPrompt: (task: string) =>
+    request<any>(`/chatbot/manage/prompts/${encodeURIComponent(task)}`, { method: 'DELETE' }),
   getLineRatings: (days = 30) => request<any>(`/chatbot/manage/ratings?days=${days}`),
   getChatbotRuntime: () => request<any>('/chatbot/manage/runtime'),
   previewChatbot: (message: string) => request<any>('/chatbot/manage/preview', { method: 'POST', body: JSON.stringify({ message }) }),
@@ -369,10 +407,25 @@ export const api = {
 
   // ─── Ticket lifecycle actions (Batch 1 backend) ──────────────────
     trackTicket: (ticketNo: string) => request<any>(`/tickets/track/${encodeURIComponent(ticketNo)}`),
-    assignTicket: (ticketId: string, data: { assignee: string; note?: string }) =>
+    /** สถานะของ "งานแจ้งซ่อมของฉัน" หลายใบในคำขอเดียว (เลขที่ไม่พบถูกข้าม) */
+    publicTicketStatuses: (ticketNos: string[]) =>
+      request<PublicTicketStatus[]>('/public/tickets/status', { method: 'POST', body: JSON.stringify({ ticket_nos: ticketNos }) }),
+    assignTicket: (ticketId: string, data: { assignee?: string; assignee_user_id?: number; note?: string }) =>
       request<any>(`/tickets/${ticketId}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     acceptTicket: (ticketId: string) =>
       request<any>(`/tickets/${ticketId}/accept`, { method: 'POST' }),
+    // ─── ระบบส่งงาน (แบบ Grab) ───
+    declineTicket: (ticketId: string) =>
+      request<any>(`/tickets/${ticketId}/decline`, { method: 'POST' }),
+    dispatchMe: () => request<DispatchMe>('/dispatch/me'),
+    setMyDuty: (on_duty: boolean) =>
+      request<{ on_duty: boolean; passed_on: number }>('/me/duty', { method: 'PATCH', body: JSON.stringify({ on_duty }) }),
+    lineLinkCode: () => request<{ code: string; expires_at: string; message: string }>('/me/line-link-code', { method: 'POST' }),
+    unlinkLine: () => request<{ line_linked: boolean }>('/me/line-link', { method: 'DELETE' }),
+    dispatchSummary: () => request<DispatchSummary>('/dispatch/summary'),
+  dispatchStaff: (userId: number) => request<StaffDetail>(`/dispatch/staff/${userId}`),
+    setStaffDuty: (userId: number, on_duty: boolean) =>
+      request<{ id: number; on_duty: boolean }>(`/staff/${userId}/duty`, { method: 'PATCH', body: JSON.stringify({ on_duty }) }),
     resolveTicket: (ticketId: string, data: any) =>
       request<any>(`/tickets/${ticketId}/resolve`, { method: 'POST', body: JSON.stringify(data) }),
     closeTicket: (ticketId: string, data: { rating?: number; feedback?: string }) =>

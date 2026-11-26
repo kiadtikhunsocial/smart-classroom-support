@@ -1,0 +1,294 @@
+/* ============================================================================
+   tickets.css — หน้าใบงานซ่อม (components/tickets/*)
+   ใช้ token ของระบบเท่านั้น (--color-*, --radius-*, --spacing-*, --accent-rgb)
+   จึงตามโหมดสว่าง/มืดและสีเน้นที่ผู้ใช้เลือกเองโดยไม่ต้องมีสีในไฟล์นี้
+   ========================================================================== */
+
+.tk-icon { margin-right: 6px; vertical-align: -2px; }
+
+/* ── แถบค้นหา + ตัวกรอง ─────────────────────────────────────────────────── */
+.tk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.tk-search { flex: 1 1 260px; min-width: 200px; max-width: 420px; }
+
+.tk-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.tk-filters { flex: 1 1 560px; }
+.tk-filters .form-select { flex: 1 1 150px; min-width: 140px; max-width: 220px; }
+
+/* ปุ่ม "ตัวกรอง" มีเฉพาะจอเล็ก — จอใหญ่เห็น dropdown ครบอยู่แล้ว
+   สโคปใต้ .tk-toolbar เพื่อชนะ .btn { display: inline-flex } ของ design-system */
+.tk-toolbar .tk-filter-toggle { display: none; }
+
+.tk-filter-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* ── แท็บสถานะ ──────────────────────────────────────────────────────────── */
+.tk-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: 2px;
+}
+
+.tk-tabs::-webkit-scrollbar { display: none; }
+
+.tk-tab {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tk-tab:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+
+.tk-tab.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.tk-tab:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.tk-tab-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken, var(--color-bg));
+  color: inherit;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.tk-tab.is-active .tk-tab-count { background: rgb(var(--accent-rgb) / 0.16); }
+
+/* ── ผลลัพธ์ ────────────────────────────────────────────────────────────── */
+.tk-alert { margin-bottom: var(--spacing-md); }
+
+/* ระหว่างโหลดหน้าใหม่ ยังเห็นรายการเดิมแบบจาง — ไม่กระพริบเป็นหน้าว่าง */
+.tk-results { transition: opacity 0.15s ease; }
+.tk-results.is-busy { opacity: 0.55; pointer-events: none; }
+
+.tk-empty { padding: 32px 16px; }
+
+/* แถวเดียวต่อใบงาน: เลขใบงาน/รหัสอุปกรณ์ไม่ตัดบรรทัด รายละเอียดอุปกรณ์ 1 บรรทัด หัวข้อไม่เกิน 2
+   (ข้อความเต็มดูได้ในแผงรายละเอียด) — เดิมแถวสูง ~130px เพราะคอลัมน์อุปกรณ์ตัดเป็น 4–5 บรรทัด */
+.tk-page .data-table td { vertical-align: middle; }
+.tk-page .table-id,
+.tk-device-id,
+.tk-reporter { white-space: nowrap; }
+.tk-page .clickable-data-row { cursor: pointer; }
+.tk-device-id { font-weight: 500; }
+
+.tk-page .table-meta-row,
+.tk-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tk-page .table-meta-row { -webkit-line-clamp: 1; max-width: 280px; }
+.tk-title { -webkit-line-clamp: 2; max-width: 240px; }
+.tk-priority { margin-top: 4px; }
+
+.tk-page .tk-status-select { width: 150px; padding: 5px 8px; font-size: 0.8rem; }
+
+.tk-date { color: var(--color-text-tertiary); font-size: 0.8rem; white-space: nowrap; }
+
+.tk-skeleton { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.tk-skeleton-row {
+  height: 56px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--color-surface-sunken, var(--color-bg)) 25%, var(--color-border) 50%, var(--color-surface-sunken, var(--color-bg)) 75%);
+  background-size: 200% 100%;
+  animation: tk-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes tk-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ── เปลี่ยนหน้า ────────────────────────────────────────────────────────── */
+.tk-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.tk-pager-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.tk-pager-page { font-weight: 600; color: var(--color-text); }
+
+/* ── แผงรายละเอียด ─────────────────────────────────────────────────────── */
+.tk-sheet { width: 760px; max-width: 96vw; }
+
+.tk-sheet-footer { align-items: center; }
+.tk-footer-spacer { flex: 1 1 auto; }
+
+/* ฟอร์มสั้นของขั้นตอนงาน (วิธีแก้ไข / เหตุผล) — อยู่เหนือ footer มองเห็นเสมอไม่ต้องเลื่อน */
+.tk-action-form {
+  display: grid;
+  gap: 8px;
+  padding: 14px 28px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+}
+.tk-action-form textarea { resize: vertical; min-height: 64px; }
+.tk-action-form-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+
+.tk-action-error {
+  margin: 0;
+  padding: 10px 28px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  font-size: 0.875rem;
+}
+
+.tk-danger-zone { border-top: 1px dashed var(--color-border); padding-top: 14px; }
+
+.tk-link-danger {
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--color-danger);
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.tk-link-danger:disabled { opacity: 0.5; cursor: default; }
+.tk-link-danger:focus-visible { outline: 2px solid var(--color-danger); outline-offset: 2px; border-radius: 4px; }
+
+@media (max-width: 640px) {
+  .tk-action-form, .tk-action-error { padding-left: 20px; padding-right: 20px; }
+  .tk-sheet-footer .btn { min-height: 44px; }
+}
+
+/* ── การ์ดใบงาน (จอมือถือ) ─────────────────────────────────────────────── */
+.tk-cards { display: none; list-style: none; margin: 0; padding: 0; }
+
+.tk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tk-card:active { background: var(--color-surface-raised); }
+.tk-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.tk-card-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tk-card-date { margin-left: auto; font-size: 0.78rem; color: var(--color-text-tertiary); white-space: nowrap; }
+
+.tk-card-title,
+.tk-card-device,
+.tk-card-meta {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tk-card-title { -webkit-line-clamp: 2; font-weight: 600; font-size: 0.98rem; line-height: 1.4; }
+.tk-card-device { -webkit-line-clamp: 1; font-size: 0.85rem; color: var(--color-text-secondary); }
+.tk-card-meta { -webkit-line-clamp: 1; font-size: 0.8rem; color: var(--color-text-tertiary); }
+.tk-card-id { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78rem; color: var(--color-text-tertiary); }
+
+/* ── จอเล็ก: การ์ดแทนตาราง, ตัวกรองยุบใต้ปุ่มเดียว, ปุ่มสูงพอให้นิ้วกด ───── */
+@media (max-width: 640px) {
+  .tk-cards { display: grid; gap: 10px; }
+  .tk-table-wrap { display: none; }
+
+  .tk-toolbar { flex-wrap: wrap; }
+  .tk-search { flex: 1 1 0; min-width: 0; max-width: none; min-height: 44px; }
+  .tk-toolbar .tk-filter-toggle { display: inline-flex; align-items: center; min-height: 44px; }
+
+  .tk-filters { display: none; flex: 1 1 100%; flex-direction: column; align-items: stretch; }
+  .tk-filters.is-open { display: flex; }
+  .tk-filters .form-select { max-width: none; min-height: 44px; }
+
+  .tk-tab { min-height: 44px; }
+
+  .tk-pager { flex-wrap: wrap; }
+  .tk-pager-info { order: -1; flex: 1 1 100%; }
+  .tk-pager-btn { flex: 1 1 0; min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-skeleton-row { animation: none; }
+  .tk-results { transition: none; }
+}
+
+/* ── แถบสีความเร่งด่วน (หน้าแถว/การ์ด) ───────────────────────────────────
+   สีเดียวกับ badge ความเร่งด่วน: เร่งด่วนมาก=แดง สูง=ส้ม ปกติ=ฟ้า ต่ำ=เขียว
+   เร่งด่วนมาก/สูง มีพื้นแถวจาง ๆ ให้สะดุดตาเวลาไล่ดูรายการ */
+.tk-prio-critical { --tk-prio: var(--color-danger, #dc2b3f); }
+.tk-prio-high     { --tk-prio: var(--color-warning, #d97706); }
+.tk-prio-normal   { --tk-prio: var(--color-info, #0b84d6); }
+.tk-prio-low      { --tk-prio: var(--color-success, #0f9d6e); }
+
+.data-table tr.tk-prio > td:first-child { box-shadow: inset 5px 0 0 var(--tk-prio, transparent); padding-inline-start: 18px; }
+.data-table tr.tk-prio-critical > td { background: color-mix(in srgb, var(--tk-prio) 9%, transparent); }
+.data-table tr.tk-prio-high > td { background: color-mix(in srgb, var(--tk-prio) 6%, transparent); }
+
+.tk-card.tk-prio { border-inline-start: 5px solid var(--tk-prio, transparent); }
+.tk-card.tk-prio-critical { background: color-mix(in srgb, var(--tk-prio) 8%, var(--color-surface)); }
+.tk-card.tk-prio-high { background: color-mix(in srgb, var(--tk-prio) 5%, var(--color-surface)); }
+
+.tk-prio-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; padding: 0; list-style: none; color: var(--color-text-secondary); font-size: .78rem; }
+.tk-prio-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.tk-prio-legend li::before { content: ''; width: 5px; height: 14px; border-radius: 2px; background: var(--tk-prio); }

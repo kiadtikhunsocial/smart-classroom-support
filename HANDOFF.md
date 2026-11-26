@@ -1,6 +1,13 @@
-# HANDOFF — ระบบ Smart Classroom Support (สถานะ 14 ก.ย. 2026)
+# HANDOFF — ระบบ Smart Classroom Support (สถานะ 26 พ.ย. 2026)
 
 เอกสารนี้สำหรับผู้ที่จะรับช่วงดูแลระบบต่อ อ่านจบแล้วแก้ต่อได้เลย
+
+**เริ่มที่นี่:**
+1. [`docs/SYSTEM_MAP.md`](docs/SYSTEM_MAP.md) — ส่วนไหนอยู่ที่ไหน เชื่อมกับอะไร ข้อมูลไหลทางไหน ตัวแปร env ทั้งหมด
+2. [`frontend/README.md`](frontend/README.md) — URL → หน้า → API
+3. [`backend/chatbot_prompts/README.md`](backend/chatbot_prompts/README.md) — prompt AI ทั้งหมด และวิธีแก้
+4. [`backend/scripts/README.md`](backend/scripts/README.md) — สคริปต์ดูแลระบบ ตัวไหนเขียนข้อมูลจริง
+5. ทุกไฟล์ใน `backend/app/` มีหัว "แผนที่ไฟล์" บอกหน้าที่ / ใครเรียก / เชื่อมไปไหน / env ที่อ่าน
 
 ---
 
@@ -10,8 +17,8 @@
 |---|---|---|
 | Frontend | Vercel — `https://iwasmart-service.vercel.app` | React + Vite (static) |
 | Backend | Render — `https://smart-classroom-backend-3tv7.onrender.com` | FastAPI, free tier **หลับหลังไม่มีคนใช้ ~15 นาที** |
-| Database | Neon — `neondb` (ผู้ให้บริการ Postgres) | ต่อผ่าน `DATABASE_URL` ใน Render env |
-| n8n | Railway — `https://n8n-production-3bcb9.up.railway.app` | มี volume `n8n-volume` แล้ว (ข้อมูลไม่หายเมื่อ redeploy) |
+| Database | **Supabase** — โปรเจกต์ `smart-classroom-support` (Singapore, ฟรี) | ย้ายจาก Neon เมื่อ 26 พ.ย. 2026 — ต่อผ่าน `DATABASE_URL` ใน Render env |
+| n8n | Railway — `https://n8n-production-3bcb9.up.railway.app` | มี volume `n8n-volume` (ข้อมูลไม่หายเมื่อ redeploy) |
 | ไฟล์อัปโหลด | Cloudflare R2 (`STORAGE_BACKEND=cloud`) | Render free ไม่มี disk ถาวร |
 | ไลน์ | LINE OA → **n8n** → backend | backend เป็นเจ้าของบทสนทนา, n8n ทำหน้าที่ส่งต่อ + cron + แจ้งเตือน |
 
@@ -20,22 +27,22 @@
 
 ---
 
-## 2. ⚠️ งานค้างที่ต้องทำก่อนบอทตอบผู้ใช้ได้จริง
+## 2. ฐานข้อมูล Supabase
 
-**LINE Channel Access Token หมดอายุ** (ทดสอบแล้วได้ `401 Authentication failed`)
-
-ตอนนี้ระบบทำงานครบทุกส่วน **ยกเว้นการตอบกลับเข้า LINE จริง** เพราะ token ใช้ไม่ได้
-
-วิธีแก้:
-1. เข้า LINE Developers Console → Messaging API channel → **Channel access token (long-lived)** → Issue
-2. นำ token ใหม่ไปตั้ง **2 ที่** (ต้องตรงกันทั้งคู่):
-   - Render → service `smart-classroom-backend` → Environment → `LINE_CHANNEL_TOKEN`
-   - Railway → service `n8n` → Variables → `LINE_CHANNEL_TOKEN`
-3. ทดสอบ: ส่งข้อความหา OA แล้วดูว่า backend มี log (ตาราง `chatbot_logs`) และมีข้อความตอบกลับใน LINE
+- **ต้องใช้ “Session pooler”** (Supabase → Connect → Direct → Session pooler, port 5432, ผู้ใช้ `postgres.<project-ref>`)
+  ห้ามใช้ Direct connection (`db.<ref>.supabase.co`) เพราะเป็น IPv6 อย่างเดียว Render และ Docker ต่อไม่ได้
+  ต่อท้าย URL ด้วย `?sslmode=require`
+- **Data API ปิดอยู่** และ **เปิด RLS ทุกตาราง** — backend ต่อเป็น `postgres` จึงไม่ติด RLS แต่คนนอกอ่านตารางผ่าน API ของ Supabase ไม่ได้
+  ถ้าเพิ่มตารางใหม่ Supabase เปิด RLS ให้อัตโนมัติ (ตั้งไว้ตอนสร้างโปรเจกต์) รัน `migrate_to_supabase.sh lock` ซ้ำได้ถ้าไม่แน่ใจ
+- **โปรเจกต์ฟรีถูกหยุดถ้าไม่มีการใช้งาน 7 วัน** — n8n เรียก SLA check ทุก 15 นาทีซึ่งแตะฐานข้อมูลอยู่แล้ว
+  ถ้าโดนหยุด: เข้า Supabase dashboard → กด Restore (ควรเช็คก่อนวันนำเสนองาน)
+- เครื่องมือ: `bash backend/scripts/migrate_to_supabase.sh check|dump|restore|verify|lock|backup`
+  อ่าน URL จาก `.env.migrate` (ไม่ขึ้น git) ต้องมี Docker (ใช้ image `postgres:18` เพราะ Neon เดิมเป็น PG18, Supabase เป็น PG17)
+- **ถอยกลับ Neon**: เปลี่ยน `DATABASE_URL` ใน Render กลับเป็นของ Neon (ฐานข้อมูล Neon ยังอยู่ ไม่ได้ลบ แต่ข้อมูลหยุดที่ 26 พ.ย. 2026)
 
 ---
 
-## 3. n8n — workflow ที่ติดตั้งอยู่ (4 ตัว, active ทั้งหมด)
+## 3. n8n — workflow ที่ติดตั้งอยู่ (active ทั้งหมด)
 
 | ชื่อ | ทำงานอะไร |
 |---|---|
@@ -45,30 +52,26 @@
 | `Keep-alive backend (ทุก 10 นาที)` | ยิง `/health` กัน Render หลับ (ไม่งั้น LINE ตอบช้า/error) |
 | `Smart Classroom - All-in-One (WF1-WF5)` | webhook เสริม: `qr-scan`, `web-report`, `ticket-status`, `ticket-update` (สาขา LINE ตัดออกแล้ว) |
 
-**การแก้ workflow** (n8n 2.38):
+ไฟล์ต้นฉบับอยู่ใน `n8n_workflows/` (ค่าลับแทนด้วย `<N8N_SHARED_SECRET>`) วิธี import ดู `n8n_workflows/README.md`:
 ```bash
 railway ssh --service n8n -- "n8n import:workflow --input=/tmp/ชื่อไฟล์.json"
 railway ssh --service n8n -- "n8n publish:workflow --id=<workflow-uuid>"
 railway restart --service n8n --yes     # ต้อง restart ไม่งั้น webhook ยัง 404
 ```
-- ไฟล์ JSON ต้นทางอยู่ในโฟลเดอร์ `_n8n_restore/` ของโปรเจกต์
-- ดูรายการ: `railway ssh --service n8n -- "n8n list:workflow"`
-- `n8n update:workflow --all --active=true` **ใช้ไม่ได้แล้ว** ในเวอร์ชันนี้
 
 ---
 
 ## 4. กับดักที่ต้องรู้ (เจอจริงมาแล้ว)
 
-1. **Render `PUT /v1/services/{id}/env-vars` = ลบตัวแปรอื่นทั้งหมด** — ให้ใช้
-   `PUT /v1/services/{id}/env-vars/{KEY}` ทีละตัว แล้ว `GET` ตรวจว่ายังครบ
+1. **Render `PUT /v1/services/{id}/env-vars` = ลบตัวแปรอื่นทั้งหมด** — ใช้ `PUT /v1/services/{id}/env-vars/{KEY}` ทีละตัว
 2. **Railway redeploy = ข้อมูล service หาย ถ้าไม่มี volume** (n8n เคยหายมาแล้วครั้งหนึ่ง)
-3. **Render free หลับ** → request แรกอาจช้า 30-60 วิ หรือได้หน้า "Application loading"
-   (มี workflow keep-alive แก้ไว้แล้ว)
-4. **n8n re-serialize body ของ LINE** → `X-Line-Signature` ของ LINE ใช้ไม่ได้
-   จึงใช้ shared secret ระหว่าง n8n กับ backend (header `X-N8N-Secret` หรือ query `?k=`)
-   ค่าอยู่ใน `_n8n_secret.txt` (gitignore) และใน env ของ Render (`N8N_SHARED_SECRET`) + workflow JSON
-5. **`create_all()` ไม่ ALTER ตารางเดิม** — เพิ่มคอลัมน์ต้อง `ALTER TABLE` เอง
-6. **sequence ของ Postgres** หลัง migrate ข้อมูลต้อง `setval` ไม่งั้น INSERT ตอบ 500
+3. **Render free หลับ** → request แรกอาจช้า 30-60 วิ (มี workflow keep-alive แก้ไว้แล้ว)
+4. **n8n re-serialize body ของ LINE** → `X-Line-Signature` ใช้ไม่ได้ จึงใช้ shared secret ระหว่าง n8n กับ backend
+   (header `X-N8N-Secret` หรือ query `?k=`) ค่าอยู่ใน env ของ Render (`N8N_SHARED_SECRET`) + workflow ใน n8n
+5. **`create_all()` ไม่ ALTER ตารางเดิม** — เพิ่มคอลัมน์ต้องเขียน migration (ดู `backend/scripts/migrate_*.py`)
+6. **ย้ายฐานข้อมูลด้วยการ INSERT เอง ต้อง `setval` sequence** — ใช้ `migrate_to_supabase.sh` (pg_dump) จะถูกต้องเอง
+7. **prompt AI ที่บันทึกบนเว็บชนะไฟล์** — แก้ไฟล์ `chatbot_prompts/*.txt` แล้วไม่เห็นผล ให้กด “กลับไปใช้ค่าจากไฟล์” บนเว็บ
+8. **repo เป็น PUBLIC** — ห้าม commit ค่าลับเด็ดขาด (`.env`, `.env.migrate`, token, API key)
 
 ---
 
@@ -81,60 +84,64 @@ railway restart --service n8n --yes     # ต้อง restart ไม่งั�
 | `admin_school` | เฉพาะโรงเรียนตัวเอง (จัดการอุปกรณ์/user/KB เฉพาะของตัวเอง) |
 | `it_support` (ไม่มีสังกัด) | ทุกโรงเรียน |
 | `it_support` (มีสังกัด) | เฉพาะโรงเรียนตัวเอง + ไม่มีปุ่มแก้ไข KB |
-| `teacher`, `student` | เฉพาะโรงเรียนตัวเอง |
+
+ผู้แจ้งซ่อม (ครู/นักเรียน) ไม่มีบัญชี — แจ้งผ่านฟอร์ม QR สาธารณะ (บทบาท teacher/student ยกเลิกแล้ว)
 
 ---
 
-## 6. สคริปต์ทดสอบที่มีให้ (ใน `backend/scripts/`)
+## 6. รันในเครื่อง และทดสอบ
 
 ```bash
+docker compose up -d postgres redis backend frontend   # ห้าม `up` เฉย ๆ (image minio หายจาก Docker Hub)
+# เว็บ http://127.0.0.1:5173   API http://127.0.0.1:8000/docs
+```
+
+**เทสต์อัตโนมัติ** (ทุกไฟล์อยู่ใน `backend/tests/`; ชี้ฐานข้อมูลในเครื่องเท่านั้น):
+```bash
+docker run --rm --network smart-classroom-support_default -v "$PWD/backend:/app" -w /app \
+  -e DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/smart_classroom \
+  -e JWT_SECRET=test -e DISPATCH_SWEEP_DISABLED=1 smart-classroom-support-backend \
+  sh -c "pip install -q pytest==8.3.4 && python -m pytest -q"
+docker exec smart_classroom_frontend npx tsc --noEmit
+docker exec smart_classroom_frontend npx vitest run
+```
+ผลล่าสุด (26 พ.ย. 2026): backend 198 passed / 15 skipped, vitest 27 passed, tsc ผ่าน
+
+**Smoke test กับระบบจริง** (เขียนข้อมูลจริง อ่าน `backend/scripts/README.md` ก่อน):
+```bash
 cd backend
-DATABASE_URL='<neon>' JWT_SECRET=x PYTHONPATH=. .venv/Scripts/python.exe scripts/smoke_chatbot.py    # ทดสอบบอท 9 สถานการณ์
-DATABASE_URL='<neon>' JWT_SECRET=x PYTHONPATH=. .venv/Scripts/python.exe scripts/smoke_line_real.py   # เคสจริงจาก log LINE
-DATABASE_URL='<neon>' JWT_SECRET=x PYTHONPATH=. .venv/Scripts/python.exe scripts/verify_secure_line.py # ตรวจว่า endpoint ล็อกถูก
-DATABASE_URL='<neon>' JWT_SECRET=x PYTHONPATH=. .venv/Scripts/python.exe scripts/cleanup_test_data.py  # ล้างข้อมูลทดสอบ
+DATABASE_URL='<production-url>' JWT_SECRET=x PYTHONPATH=. python scripts/smoke_chatbot.py
+DATABASE_URL='<production-url>' JWT_SECRET=x PYTHONPATH=. python scripts/cleanup_test_data.py
 ```
 
 ---
 
 ## 7. ลำดับการ deploy
 
-- **Backend (Render)**: push ขึ้น `main` แล้ว Render deploy อัตโนมัติ หรือสั่งผ่าน API
-- **Frontend (Vercel)**: `cd frontend && npm run build && vercel --prod`
+- **Backend (Render)**: push ขึ้น `main` แล้ว Render deploy อัตโนมัติ (startCommand รัน migration ที่จำเป็นให้ก่อน)
+- **Frontend (Vercel)**: deploy จาก GitHub หรือ `cd frontend && npm run build && vercel --prod`
 - **n8n**: import + publish + restart (ดูข้อ 3)
 
 ---
 
-## 8. การสำรองข้อมูล (สำคัญ — ทำก่อนแก้อะไรใหญ่ๆ)
+## 8. การสำรองข้อมูล (สำคัญ — ทำก่อนแก้อะไรใหญ่ ๆ)
 
 | ต้องสำรอง | ที่เก็บ | วิธี |
 |---|---|---|
-| ฐานข้อมูล (Neon) | `backups/neondb_<วันเวลา>.sql` / `.json` | `cd backend` แล้ว `DATABASE_URL='<neon>' PYTHONPATH=. .venv/Scripts/python.exe scripts/backup_db.py` |
+| ฐานข้อมูล (แนะนำ) | `backups/supabase_<วันเวลา>.dump` + `.counts.txt` | `bash backend/scripts/migrate_to_supabase.sh backup` (ใช้ `SUPABASE_URL` ใน `.env.migrate`) |
+| ฐานข้อมูล (แบบ SQL อ่านง่าย) | `backups/db_<วันเวลา>.sql/.json` | `cd backend && DATABASE_URL='<url>' PYTHONPATH=. python scripts/backup_db.py` |
 | n8n workflows | `n8n_workflows/` (ใน git) | ดึงจาก n8n แล้วบันทึกทับ (ดู README ในโฟลเดอร์) |
 | โค้ด | GitHub | `git push` |
-| ค่าตั้งค่า/ความลับ | `.env` ในเครื่อง + env ของ Render/Railway | ไม่ขึ้น git — เก็บสำเนาไว้ในที่ปลอดภัย |
+| ค่าตั้งค่า/ความลับ | `.env`, `.env.migrate` ในเครื่อง + env ของ Render/Railway | ไม่ขึ้น git — เก็บสำเนาไว้ในที่ปลอดภัย |
 
-**กู้คืนฐานข้อมูล**: ให้ backend รันหนึ่งครั้งเพื่อสร้างสคีมา แล้ว `psql < backups/neondb_xxx.sql`
-(ไฟล์สำรองเป็นข้อมูลอย่างเดียว ไม่รวมสคีมา — สคีมาสร้างจาก models.py)
-
-**บทเรียน**: ก่อน redeploy service ที่ไม่มี volume (เช่น n8n) ต้องสำรองก่อนทุกครั้ง — เคยทำข้อมูล n8n หายมาแล้วครั้งหนึ่ง
+**บทเรียน**: ก่อน redeploy service ที่ไม่มี volume (เช่น n8n) ต้องสำรองก่อนทุกครั้ง
 
 ---
 
-## 9. Checklist ก่อน deploy จริง
+## 9. งานค้าง / สิ่งที่ต้องทำต่อ
 
-| # | รายการ | สถานะ |
-|---|---|---|
-| 1 | `JWT_SECRET` บน Render เป็นค่าสุ่มจริง (ไม่ใช่ค่า dev) | ✅ ตั้งแล้ว (ยาว 64) |
-| 2 | `N8N_SHARED_SECRET` บน Render ตั้งแล้ว | ✅ ตั้งแล้ว (ยาว 43) |
-| 3 | workflow ใน n8n มีค่าลับจริง (ไม่ใช่ placeholder) ครบทุกจุด | ✅ ตรวจแล้ว |
-| 4 | LINE Channel Access Token ใหม่ ตั้งทั้ง Render + Railway n8n | ✅ ตั้งแล้ว |
-| 5 | สำรองฐานข้อมูลล่าสุด | ✅ `backups/` (995 แถว) |
-| 6 | n8n มี volume ถาวร | ✅ `n8n-volume` |
-| 7 | ทดสอบสาย LINE → n8n → backend | ✅ ผ่าน |
-| 8 | ทดสอบ webhook เสริม (qr-scan / ticket-status / web-report / ticket-update) | ✅ ผ่าน |
-| 9 | ทดสอบด้วย LINE จริงจากมือถือ (คนส่งเอง) | ⬜ ต้องมีคนทดสอบ |
-| 10 | ข้อความแจ้งเตือนเข้ากลุ่ม LINE เจ้าหน้าที่จริง | ⬜ ต้องยืนยันด้วยข้อความจริง |
-
-**หมายเหตุ**: ไฟล์ใน `n8n_workflows/` แทนค่าลับด้วย `<N8N_SHARED_SECRET>` โดยเจตนา (กันความลับขึ้น git)
-ก่อน import ให้รัน `python n8n_workflows/prepare_import.py` เพื่อแทนค่าจริงกลับ
+| # | รายการ |
+|---|---|
+| 1 | **เปลี่ยนค่าลับที่หลุดในประวัติ git (repo สาธารณะ)** — สคริปต์เก่าที่ลบไปแล้วเคยฝังไว้ และยังอยู่ในประวัติ git การลบไฟล์ไม่ได้แก้ปัญหานี้ ต้องเปลี่ยนค่า: (ก) n8n API key ทุกตัว: n8n → Settings → n8n API → ลบ key เก่า (ข) LINE Channel Access Token ที่ขึ้นต้น `NcoCcY`: ถ้ายังใช้อยู่ ให้ออกใหม่ใน LINE Developers แล้วตั้งทั้ง Render + n8n (ตรวจ 26 พ.ย. 2026: ไม่พบ `N8N_SHARED_SECRET` หรือ Gemini key ในประวัติ) |
+| 2 | ทดสอบด้วย LINE จริงจากมือถือ และข้อความแจ้งเตือนเข้ากลุ่ม LINE เจ้าหน้าที่ |
+| 3 | Render ต้องตั้ง `GEMINI_API_KEY` / `GEMINI_MODEL` / `ENABLE_GEMINI_*` ให้แชต AI หน้าเว็บตอบแบบสนทนาได้ |

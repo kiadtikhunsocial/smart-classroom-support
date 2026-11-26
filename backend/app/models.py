@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : โครงสร้างตารางฐานข้อมูลทั้งหมด (SQLAlchemy) + การเชื่อมต่อฐานข้อมูล
+# ถูกเรียกจาก  : ทุกโมดูลที่อ่าน/เขียนข้อมูล และ backend/scripts/*
+# เชื่อมต่อไป  : PostgreSQL ตาม DATABASE_URL (production = Supabase Session pooler)
+# env ที่อ่าน  : DATABASE_URL
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """app/models.py — Database models for Smart Classroom Support System
 PostgreSQL only — connection string มาจาก env DATABASE_URL
 """
@@ -7,9 +14,11 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -34,7 +43,7 @@ from sqlalchemy.orm import (
 
 # โปรเจกต์นี้ผูกกับ PostgreSQL: models ใช้ JSONB และ query ใน main.py ใช้ ILIKE /
 # SUBSTRING(... FROM 'regex') ซึ่ง SQLite ไม่รองรับ — จึงไม่มี fallback เป็นไฟล์ .db
-# production (Render/Neon) ตั้งค่าผ่าน env DATABASE_URL เสมอ
+# production (Render -> Supabase) ตั้งค่าผ่าน env DATABASE_URL เสมอ — ดู docs/SYSTEM_MAP.md
 DEFAULT_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/smart_classroom"
 DATABASE_URL = os.getenv("DATABASE_URL") or DEFAULT_DATABASE_URL
 
@@ -70,6 +79,26 @@ def init_db():
             connection.execute(text(
                 "ALTER TABLE devices ALTER COLUMN device_type TYPE VARCHAR(64) USING device_type::text"
             ))
+        # คอลัมน์ของระบบส่งงานอัตโนมัติ — create_all ไม่เพิ่มคอลัมน์ให้ตารางที่มีอยู่แล้ว
+        for ddl in _DISPATCH_COLUMNS:
+            connection.execute(text(ddl))
+
+
+_DISPATCH_COLUMNS = (
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS on_duty BOOLEAN NOT NULL DEFAULT true",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_push_id VARCHAR(64)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_link_code VARCHAR(6)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS line_link_code_expires_at TIMESTAMPTZ",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS ix_users_line_push_id ON users (line_push_id)",
+    "CREATE INDEX IF NOT EXISTS ix_users_line_link_code ON users (line_link_code)",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER "
+    "REFERENCES users(id) ON DELETE SET NULL",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS auto_assigned BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE repair_tickets ADD COLUMN IF NOT EXISTS offer_tried TEXT",
+    "CREATE INDEX IF NOT EXISTS ix_repair_tickets_assigned_user_id ON repair_tickets (assigned_user_id)",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +282,11 @@ class Device(Base):
 
 class RepairTicket(Base):
     __tablename__ = "repair_tickets"
+    # ตรงกับ ORDER BY ของรายการใบงาน (ใหม่สุดก่อน) — หน้าแบ่งหน้าอ่านจาก index ได้ตรง ๆ
+    # ฐานข้อมูลที่มีอยู่แล้ว: create_all ไม่เพิ่ม index ให้ ต้องรัน scripts/migrate_ticket_indexes.py
+    __table_args__ = (
+        Index("ix_repair_tickets_created_at_id", text("created_at DESC"), text("ticket_id DESC")),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ticket_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
@@ -278,6 +312,15 @@ class RepairTicket(Base):
         ticket_status_enum, default=TicketStatus.NEW, nullable=False, index=True
     )
     assigned_to: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # ผู้รับผิดชอบเป็นบัญชีจริง (assigned_to ยังเก็บชื่อไว้แสดงผลเหมือนเดิม)
+    assigned_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # True = ระบบเสนองานให้เอง ยังรอช่างกดรับ; แอดมินมอบหมายเอง = False (ระบบไม่ย้าย)
+    auto_assigned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    # id ช่างที่ระบบเคยเสนองานนี้ให้แล้ว (JSON list) — เสนอครบทุกคนแล้วหยุด ไม่วนทั้งคืน
+    offer_tried: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     channel: Mapped[Optional[str]] = mapped_column(String(32), default="qr", nullable=True)
     symptom_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     ai_category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
@@ -416,6 +459,14 @@ class User(Base):
         default=UserRole.IT_SUPPORT, nullable=False, index=True
     )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # ระบบส่งงาน (แบบ Grab): ระบบเสนองานให้เฉพาะช่างที่ "พร้อมรับงาน"
+    on_duty: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    # LINE userId จริง (U...) — ได้จากการส่งรหัสผูกบัญชีเข้า LINE OA ใช้ส่งข้อความส่วนตัว
+    line_push_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    line_link_code: Mapped[Optional[str]] = mapped_column(String(6), nullable=True, index=True)
+    line_link_code_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # หน้าเว็บของช่างถามงานล่าสุดเมื่อไร — ใช้ตัดสินว่า "ออนไลน์" (ระบบเสนองานให้ได้)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

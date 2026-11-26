@@ -67,3 +67,6 @@ tmp_db.sqlite-*
 
 /.vercel/
 /.env.local
+.impeccable/before/
+.impeccable/after/
+.impeccable/review/

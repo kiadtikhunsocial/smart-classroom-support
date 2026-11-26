@@ -14,6 +14,7 @@ const PROMPT_LABELS: Record<string, string> = {
   intent: 'เข้าใจเจตนาลูกค้า', field_extraction: 'จับข้อมูลจากข้อความ', kb_match: 'จับคู่ฐานความรู้',
   kb_explanation: 'อธิบายวิธีแก้', orchestration: 'วางลำดับบทสนทนา',
   repair_reply: 'ตอบเรื่องแจ้งซ่อม', slot_question: 'ถามข้อมูลที่ขาด', line_reply: 'รูปแบบคำตอบ LINE',
+  web_chat: 'แชต AI บนหน้าเว็บ',
 };
 const EMPTY = { question: '', answer: '', aliases: '', source_label: '', source_url: '', is_published: false };
 
@@ -87,6 +88,17 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
     finally { setBusy(false); }
   };
 
+  // DELETE /api/chatbot/manage/prompts/{task} → backend ใช้ค่าจากไฟล์ chatbot_prompts/<task>.txt อีกครั้ง
+  const resetPrompt = async () => {
+    setError(''); setNotice(''); setBusy(true);
+    try {
+      const updated = await api.resetChatbotPrompt(selectedTask);
+      setPrompts((old) => old.map((p) => p.task === selectedTask ? updated : p));
+      setNotice('กลับไปใช้ค่าจากไฟล์แล้ว');
+    } catch (err: any) { setError(err.message || 'รีเซ็ตไม่สำเร็จ'); }
+    finally { setBusy(false); }
+  };
+
   const runPreview = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setError(''); setPreview(null);
     try { setPreview(await api.previewChatbot(testMessage.trim())); }
@@ -127,7 +139,7 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
           <label>แหล่งข้อมูล / ผู้ยืนยัน<input className="form-input" maxLength={160} value={form.source_label} onChange={(e) => setForm({ ...form, source_label: e.target.value })} placeholder="เช่น คู่มือผู้ผลิต รุ่น X ฉบับ 2026 หรือฝ่ายบริการ" /></label>
           <label>ลิงก์อ้างอิง (ถ้ามี)<input className="form-input" type="url" maxLength={500} value={form.source_url} onChange={(e) => setForm({ ...form, source_url: e.target.value })} placeholder="https://..." /></label>
           <label className="studio-check"><input type="checkbox" checked={form.is_published} onChange={(e) => setForm({ ...form, is_published: e.target.checked })} /> เผยแพร่ให้ LINE ตอบได้</label>
-          <div className="studio-actions"><button className="btn btn-primary" disabled={busy}>{busy ? 'กำลังบันทึก...' : 'บันทึกลงฐานข้อมูล'}</button>{editingId != null && <button type="button" className="btn btn-ghost" onClick={() => { setEditingId(null); setForm(EMPTY); }}>ยกเลิกแก้ไข</button>}</div>
+          <div className="studio-actions"><button className="btn btn-primary" disabled={busy}>{busy ? 'กำลังบันทึก…' : 'บันทึกลงฐานข้อมูล'}</button>{editingId != null && <button type="button" className="btn btn-ghost" onClick={() => { setEditingId(null); setForm(EMPTY); }}>ยกเลิกแก้ไข</button>}</div>
         </form>
       </section>
       <section className="panel-card"><h2>คำตอบที่มีอยู่ ({knowledge.length})</h2>
@@ -159,14 +171,17 @@ export default function ChatbotStudioPage({ onBack, onNavigate, ratingsOnly = fa
         <label>คำแนะนำเพิ่มเติม<textarea className="form-input" rows={10} maxLength={2000} value={guidance} onChange={(e) => setGuidance(e.target.value)} placeholder="เช่น ตอบอย่างกระชับ ใช้ภาษาไทยสุภาพ และถามทีละประเด็น" /></label>
         <div className="studio-help">{guidance.length}/2000 ตัวอักษร · ค่าเดิมจาก {prompts.find((p) => p.task === selectedTask)?.source === 'database' ? 'ฐานข้อมูล' : 'ไฟล์เริ่มต้น'}</div>
         <label className="studio-check"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> เปิดใช้คำแนะนำนี้</label>
-        <button className="btn btn-primary" disabled={busy || prompts.length === 0}>{busy ? 'กำลังบันทึก...' : 'บันทึกคำแนะนำ'}</button>
+        <button className="btn btn-primary" disabled={busy || prompts.length === 0}>{busy ? 'กำลังบันทึก…' : 'บันทึกคำแนะนำ'}</button>
+        {prompts.find((p) => p.task === selectedTask)?.source === 'database' &&
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void resetPrompt()}>กลับไปใช้ค่าจากไฟล์</button>}
+        <p className="studio-help">ค่าที่บันทึกที่นี่ชนะไฟล์ <code>backend/chatbot_prompts/{selectedTask}.txt</code> เสมอ ถ้าแก้ไฟล์แล้วอยากให้มีผล ให้กด “กลับไปใช้ค่าจากไฟล์”</p>
       </form>
     </section>}
 
     {tab === 'test' && <section className="panel-card studio-prompt"><h2>ทดลองถามก่อนเผยแพร่</h2>
       <p className="studio-help">พรีวิวนี้ตรวจชั้นกฎ คำตอบที่เผยแพร่ และประกันตามรหัสจริงเท่านั้น ไม่ส่งข้อความไป LINE ไม่สร้างใบงาน ไม่บันทึกบทสนทนาลูกค้า และไม่เรียก Gemini คำตอบจริงอาจต่างเมื่อมีบริบทแชต</p>
       <div className="studio-examples">{['ช่วยด้วย', 'ขอเคลมอุปกรณ์', 'จอเสียอยากซื้อใหม่', 'รอเจ้าหน้าที่ติดต่อกลับอยู่', 'ตรวจประกันได้ไหม'].map((example) => <button type="button" className="btn btn-secondary" key={example} onClick={() => { setTestMessage(example); setPreview(null); }}>{example}</button>)}</div>
-      <form onSubmit={runPreview} className="studio-form"><label>ข้อความตัวอย่าง<input className="form-input" required maxLength={1000} value={testMessage} onChange={(e) => setTestMessage(e.target.value)} placeholder="เช่น จอเสียอยากซื้อใหม่ หรือ ประกัน SCH01-..." /></label><button className="btn btn-primary" disabled={busy || !testMessage.trim()}>{busy ? 'กำลังตรวจ...' : 'ตรวจเส้นทางคำตอบ'}</button></form>
+      <form onSubmit={runPreview} className="studio-form"><label>ข้อความตัวอย่าง<input className="form-input" required maxLength={1000} value={testMessage} onChange={(e) => setTestMessage(e.target.value)} placeholder="เช่น จอเสียอยากซื้อใหม่ หรือ ประกัน SCH01-..." /></label><button className="btn btn-primary" disabled={busy || !testMessage.trim()}>{busy ? 'กำลังตรวจ…' : 'ตรวจเส้นทางคำตอบ'}</button></form>
       {preview && <div className="studio-preview" role="status"><strong>เส้นทาง: {preview.route} · เจตนา: {preview.intent}</strong><p>{preview.reply || 'ข้อความนี้จะเข้าสู่บทสนทนาจริง จึงไม่มีคำตอบจำลองในพรีวิว'}</p><small>{preview.note}</small></div>}
     </section>}
 

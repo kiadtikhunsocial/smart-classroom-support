@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : สมองหลักของแชตบอต LINE: ตัดสินว่าข้อความคืออะไร แล้วตอบ / สร้าง Ticket / ส่งต่อ
+# ถูกเรียกจาก  : main (POST /api/line/webhook และ /api/line/bot ที่ n8n ส่งมา, แชตเว็บแบบ fallback)
+# เชื่อมต่อไป  : gemini_service (AI), kb_loader (ฐานความรู้), dispatch (ส่งงานให้ช่าง), line_bot (ตอบ LINE), Supabase
+# env ที่อ่าน  : ENABLE_GEMINI_CLASSIFIER, ENABLE_GEMINI_ORCHESTRATION, REPORT_FORM_URL, ENVIRONMENT
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """
 chatbot_core.py — logic หลักตัดสินใจบทสนทนา chatbot
 
@@ -238,6 +245,9 @@ def _is_symptom(msg: str) -> bool:
         return True
     # สำนวนอาการชัดเจน (มีคำอาการปน)
     if re.search(r"(จอ|เครื่อง|ไฟ|เสียง|ภาพ|แป้น|เมาส์|เน็ต|wifi|โปรเจก|ลำโพง|ไมค์|กล้อง|แท็บเล็ต|interactive display)\s*(ไม่|ไม่มี|เสีย|พัง|ค้าง|ดำ|เพี้ยน|ดัง|เข้า)", m):
+        return True
+    # อาการแบบสัมผัส/กดไม่ติด: ปุ่มตัวอย่างบนหน้าแรก "ทัชสกรีนกดไม่ได้" ต้องเข้า flow วินิจฉัย ไม่ใช่ถูกปัดเป็นนอกขอบเขต
+    if re.search(r"(ทัช|สัมผัส|touch|หน้าจอ|จอ).{0,6}(กดไม่ได้|แตะไม่ได้|ไม่ตอบสนอง|ไม่ติด|ไม่ทำงาน|ไม่ไว)|กดไม่ได้|แตะไม่ติด", m):
         return True
     return False
 
@@ -800,6 +810,8 @@ def _create_ticket_from_fields(fields: dict, line_user_id: str | None = None):
                             note="สร้างจาก LINE chatbot", author_name=fields.get("name"),
                             author_role="reporter"))
         db.commit()
+        from app.dispatch import enqueue_dispatch
+        enqueue_dispatch(ticket.id)
         return ticket.ticket_id, None
     except Exception as e:
         db.rollback()

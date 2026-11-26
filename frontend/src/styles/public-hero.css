@@ -1,0 +1,276 @@
+/* Hero เต็มความกว้าง + สไลด์พื้นหลัง + คลื่นคั่น + พิมพ์ดีด + เดโม
+   โหลดหลัง public-clean.css เสมอ — ใช้ .pc-home นำหน้าเพื่อชนะ specificity */
+
+/* ── พิมพ์ดีด ───────────────────────────────────────────────────────────── */
+.tw { position: relative; display: inline; text-wrap: wrap; }
+.tw-rest { visibility: hidden; }
+.tw-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tw-caret { display: inline-block; width: 0; height: 1em; vertical-align: -0.12em; border-left: 2px solid currentColor; margin-right: -2px; animation: tw-blink 1s steps(1) infinite; }
+.tw-caret.is-typing { animation: none; }
+.tw-caret:not(.is-typing) { animation: tw-end 1.6s steps(1) forwards; }
+@keyframes tw-end { 0% { opacity: 1; } 25% { opacity: 0; } 50% { opacity: 1; } 75%, 100% { opacity: 0; } }
+@keyframes tw-blink { 50% { opacity: 0; } }
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.pc-home .pc-hero-full {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: clamp(440px, 66vh, 640px);
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #2b1c55, #4e3d6e 60%, #6a4fb0);
+  color: #fff;
+}
+.pc-hero-inner {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1112px;
+  margin: 0 auto;
+  padding: 56px 16px 120px;
+  box-sizing: border-box;
+}
+.pc-home .pc-hero-inner .pc-title {
+  color: #fff;
+  max-width: 15em;
+  text-shadow: 0 2px 18px rgb(14 8 32 / 0.55);
+}
+.pc-home .pc-hero-inner .pc-title-accent { color: #e2d8ff; }
+.pc-home .pc-hero-inner .pc-lead {
+  color: rgb(255 255 255 / 0.92);
+  max-width: 34em;
+  text-shadow: 0 1px 12px rgb(14 8 32 / 0.6);
+}
+.pc-home .pc-hero-inner .pc-cta {
+  background: #fff;
+  color: #3b2a66;
+  box-shadow: 0 8px 22px rgb(10 5 30 / 0.35);
+  position: relative;
+  overflow: hidden;
+}
+.pc-home .pc-hero-inner .pc-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgb(124 92 220 / 0.28) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: pc-shimmer 3.8s ease-in-out 1.6s infinite;
+}
+@keyframes pc-shimmer { 60%, 100% { transform: translateX(120%); } }
+.pc-home .pc-hero-inner .pc-cta-note { color: rgb(255 255 255 / 0.85); text-shadow: 0 1px 8px rgb(14 8 32 / 0.6); }
+.pc-home .pc-hero-inner .pc-cta-row { animation: pc-rise 0.7s 0.5s both cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes pc-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+/* สไลด์ */
+.hs { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.hs-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: 60% 50%; will-change: transform, opacity; }
+.hs-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgb(24 14 52 / 0.86) 0%, rgb(24 14 52 / 0.62) 48%, rgb(24 14 52 / 0.32) 100%),
+    linear-gradient(0deg, rgb(24 14 52 / 0.35), transparent 40%);
+}
+.hs-dots { position: absolute; z-index: 3; right: clamp(16px, 6.5vw, 84px); bottom: 96px; display: flex; gap: 8px; }
+.hs-dots button { width: 22px; height: 4px; padding: 0; border: 0; border-radius: 4px; background: rgb(255 255 255 / 0.4); cursor: pointer; transition: width 0.3s, background 0.3s; }
+.hs-dots button.is-on { width: 38px; background: #fff; }
+
+/* คลื่นคั่น */
+.hw { position: absolute; z-index: 2; left: 0; right: 0; bottom: -1px; width: 100%; height: clamp(60px, 9vw, 110px); display: block; pointer-events: none; }
+
+/* header เกาะบนสุด + เบลอเมื่อเลื่อน */
+.pc-topbar.ph-topbar { position: sticky; top: 0; z-index: 20; transition: box-shadow 0.25s, background 0.25s; }
+.pc-topbar.ph-topbar.is-scrolled { box-shadow: 0 6px 22px rgb(30 20 60 / 0.12); }
+[data-mode='light'] .pc-home .pc-topbar.is-scrolled { background: rgb(255 255 255 / 0.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+
+.pc-home .pc-main.ph-main { padding-top: 8px; animation: none; }
+.pc-demo-wrap { grid-column: 1 / -1; }
+
+/* ── เดโมการใช้งาน ──────────────────────────────────────────────────────── */
+.pc-demo { padding: 22px 0 6px; border-top: 1px solid var(--pc-line); }
+.pc-demo-head { margin-bottom: 14px; }
+.pc-demo-head .pc-h3 { margin-bottom: 2px; }
+.pc-demo-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 24px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--pc-line);
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--pc-surface), var(--pc-sunken));
+}
+.pc-demo-tabs { display: grid; gap: 8px; }
+.pc-demo-tab {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: 10px;
+  background: var(--pc-surface);
+  color: var(--pc-muted);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.pc-demo-tab:hover { transform: translateX(3px); }
+.pc-demo-tab b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--pc-sunken); color: var(--pc-ink); font-size: 0.82rem; transition: background 0.2s, color 0.2s; }
+.pc-demo-tab.is-on { color: var(--pc-ink); border-color: var(--pc-brand); box-shadow: 0 6px 18px var(--pc-brand-soft); }
+.pc-demo-tab.is-on b { background: var(--pc-brand); color: var(--pc-brand-ink); }
+.pc-demo-prog { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--pc-brand); transform-origin: left; animation: pc-prog 5.2s linear forwards; }
+@keyframes pc-prog { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.pc-demo-cap { margin: 6px 2px 0; min-height: 2.8em; font-size: 0.86rem; line-height: 1.55; color: var(--pc-muted); }
+
+.pc-phone {
+  position: relative;
+  width: 220px;
+  height: 300px;
+  margin: 0 auto;
+  border: 6px solid #2a2438;
+  border-radius: 28px;
+  background: #fff;
+  color: #1d1b29;
+  box-shadow: 0 18px 40px rgb(40 24 90 / 0.22);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.pc-phone-notch { position: absolute; top: 6px; left: 50%; width: 54px; height: 6px; margin-left: -27px; border-radius: 6px; background: #2a2438; }
+.pc-scan, .pc-form, .pc-track-demo { width: 100%; padding: 28px 18px 18px; box-sizing: border-box; animation: pc-rise 0.45s both cubic-bezier(0.22, 1, 0.36, 1); }
+.pc-scan-box { position: relative; width: 140px; height: 140px; margin: 0 auto; padding: 22px; box-sizing: border-box; border-radius: 12px; background: #f3f1f8; }
+.pc-qr { width: 100%; height: 100%; fill: #3b2a66; }
+.pc-scan-box span { position: absolute; width: 22px; height: 22px; border: 3px solid #6a4fb0; }
+.pc-scan-box .c1 { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+.pc-scan-box .c2 { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 10px 0 0; }
+.pc-scan-box .c3 { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 10px; }
+.pc-scan-box .c4 { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+.pc-scan-line { position: absolute; left: 8px; right: 8px; top: 10px; height: 3px; border-radius: 3px; background: #7c5cdc; box-shadow: 0 0 12px 3px rgb(124 92 220 / 0.6); animation: pc-scanmove 1.8s ease-in-out infinite alternate; }
+@keyframes pc-scanmove { to { top: calc(100% - 13px); } }
+.pc-form small, .pc-track-demo small { display: block; margin-bottom: 8px; color: #75728a; font-size: 0.74rem; }
+.pc-form-field { min-height: 78px; padding: 10px; border: 1.5px solid #7c5cdc; border-radius: 10px; background: #faf9fd; font-size: 0.86rem; line-height: 1.5; }
+.pc-form-btn { margin-top: 14px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: #cfc8e4; color: #fff; font-weight: 700; transition: background 0.3s, transform 0.3s; }
+.pc-form-btn.is-ready { background: #4e3d6e; transform: scale(1.03); }
+.pc-track-demo ol { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 14px; }
+.pc-track-demo li { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; color: #8b88a0; transition: color 0.3s; }
+.pc-track-demo li b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #ece9f5; font-size: 0.8rem; transition: background 0.3s, color 0.3s, transform 0.3s; }
+.pc-track-demo li.is-done { color: #1d1b29; font-weight: 600; }
+.pc-track-demo li.is-done b { background: #4e3d6e; color: #fff; transform: scale(1.12); }
+
+/* ── การ์ดหลักและลิงก์: ลูกเล่นเมื่อ hover ─────────────────────────────── */
+.pc-home .pc-link-cell { transition: background 0.2s, transform 0.2s; }
+.pc-home .pc-link-cell:hover { transform: translateY(-2px); }
+.pc-home .pc-link-cell:hover .pc-arrow { transform: translateX(4px); }
+.pc-home .pc-arrow { transition: transform 0.2s; }
+
+/* ── มือถือ ─────────────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .pc-hero-inner { padding: 36px 16px 96px; }
+  .hs-dots { right: 16px; bottom: 72px; }
+  .hs-shade { background: linear-gradient(0deg, rgb(24 14 52 / 0.88), rgb(24 14 52 / 0.6)); }
+  .pc-demo-body { grid-template-columns: 1fr; padding: 14px; }
+  .pc-phone { width: 200px; height: 270px; }
+}
+
+/* ── ลดการเคลื่อนไหว ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .pc-home .pc-hero-inner .pc-cta::after,
+  .pc-scan-line,
+  .pc-demo-prog { animation: none; }
+  .pc-home .pc-hero-inner .pc-cta-row,
+  .pc-scan, .pc-form, .pc-track-demo { animation: none; }
+  .tw-caret { animation: none; }
+}
+
+/* ── ตัวอย่างการติดตามงาน (เติมช่องว่างใต้ช่องค้นหา) ───────────────────── */
+.pc-prev { margin-top: 20px; padding: 16px; border: 1px dashed var(--pc-line); border-radius: 14px; background: linear-gradient(160deg, var(--pc-surface), var(--pc-sunken)); animation: pc-rise 0.6s both cubic-bezier(0.22, 1, 0.36, 1); }
+.pc-prev-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.pc-prev-no { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.82rem; font-weight: 600; color: var(--pc-ink); }
+.pc-prev-badge { padding: 2px 8px; border-radius: 999px; background: var(--pc-brand-soft); color: var(--pc-brand); font-size: 0.7rem; font-weight: 700; }
+.pc-prev-status { margin-left: auto; padding: 3px 10px; border-radius: 999px; background: var(--pc-brand); color: var(--pc-brand-ink); font-size: 0.76rem; font-weight: 600; animation: pc-pop 0.4s both cubic-bezier(0.34, 1.56, 0.64, 1); }
+.pc-prev-status.is-done { background: #1f8a5b; color: #fff; }
+@keyframes pc-pop { from { transform: scale(0.7); opacity: 0; } to { transform: none; opacity: 1; } }
+.pc-prev-dev { display: grid; gap: 2px; margin: 10px 0 16px; font-size: 0.82rem; color: var(--pc-muted); }
+.pc-prev-dev b { color: var(--pc-ink); font-size: 0.9rem; }
+
+.pc-prev-steps { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); text-align: center; }
+.pc-prev-line { position: absolute; left: 10%; right: 10%; top: 13px; height: 3px; border-radius: 3px; background: var(--pc-line); overflow: hidden; }
+.pc-prev-line i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--pc-brand), #8b6fe0); transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
+.pc-prev-step { position: relative; display: grid; justify-items: center; gap: 6px; font-size: 0.72rem; color: var(--pc-faint); }
+.pc-prev-step b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-surface); border: 2px solid var(--pc-line); color: var(--pc-faint); font-size: 0.76rem; transition: all 0.35s; }
+.pc-prev-step.is-past b, .pc-prev-step.is-now b { background: var(--pc-brand); border-color: var(--pc-brand); color: var(--pc-brand-ink); }
+.pc-prev-step.is-now { color: var(--pc-ink); font-weight: 600; }
+.pc-prev-step.is-now b { transform: scale(1.15); animation: pc-ring 1.6s ease-out infinite; }
+@keyframes pc-ring { 0% { box-shadow: 0 0 0 0 rgb(124 92 220 / 0.55); } 100% { box-shadow: 0 0 0 12px rgb(124 92 220 / 0); } }
+
+.pc-prev-log { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 7px; min-height: 134px; align-content: start; }
+.pc-prev-log li { display: flex; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 8px; background: var(--pc-surface); border: 1px solid var(--pc-line); font-size: 0.8rem; color: var(--pc-muted); }
+.pc-prev-log li.is-new { border-color: var(--pc-brand); color: var(--pc-ink); animation: pc-slide 0.45s both cubic-bezier(0.22, 1, 0.36, 1); }
+.pc-prev-log time { flex: none; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.74rem; color: var(--pc-brand); font-weight: 600; }
+@keyframes pc-slide { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.pc-prev-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 0.78rem; color: var(--pc-muted); }
+.pc-prev-dot { width: 8px; height: 8px; border-radius: 50%; background: #e0a030; animation: pc-blink 1.2s ease-in-out infinite; }
+.pc-prev-dot.is-done { background: #1f8a5b; animation: none; }
+@keyframes pc-blink { 50% { opacity: 0.3; } }
+@media (max-width: 480px) { .pc-prev-step span { font-size: 0.66rem; } .pc-prev-log { min-height: 160px; } }
+@media (prefers-reduced-motion: reduce) {
+  .pc-prev, .pc-prev-status, .pc-prev-step.is-now b, .pc-prev-log li.is-new, .pc-prev-dot { animation: none; }
+  .pc-prev-line i { transition: none; }
+}
+.pc-prev-log { min-height: 0; }
+.pc-prev-log li.is-future { visibility: hidden; }
+
+/* ── ป๊อปอัปตรวจสอบประกัน (ไม่ดันเลย์เอาต์หน้าแรก) ─────────────────────── */
+.pc-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; overflow-y: auto; background: rgb(20 12 40 / 0.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); animation: pc-fade 0.2s both; }
+.pc-modal .pc-sheet { grid-column: auto; width: min(620px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 24px 60px rgb(10 5 30 / 0.4); animation: pc-pop 0.3s both cubic-bezier(0.34, 1.3, 0.64, 1); }
+@keyframes pc-fade { from { opacity: 0; } }
+
+/* ── หน้ารายละเอียดใบงาน (?ticket=) ────────────────────────────────────── */
+.pc-home .pc-main.pc-trackpage.ph-main { grid-template-columns: minmax(0, 1fr); max-width: 1112px; padding-top: 28px; min-height: 60vh; align-content: start; }
+.pc-trackpage .pc-left { grid-column: 1 / -1; }
+.pt-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; color: var(--pc-brand); font-weight: 600; font-size: 0.86rem; text-decoration: none; }
+.pt-back svg { transform: rotate(180deg); transition: transform 0.2s; }
+.pt-back:hover svg { transform: rotate(180deg) translateX(4px); }
+.pt-cols { display: grid; gap: 24px; margin-top: 18px; align-items: start; }
+.pt-main, .pt-side { min-width: 0; }
+@media (min-width: 880px) {
+  .pt-cols { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 32px; }
+  .pt-side { position: sticky; top: 88px; padding: 18px; border: 1px solid var(--pc-line); border-radius: 14px; background: var(--pc-surface); }
+  .pc-trackpage .pt-side .ph-meta-grid { grid-template-columns: minmax(0, 1fr); margin-top: 0; border-top: 0; }
+  .pc-trackpage .pc-track { max-width: none; }
+}
+.pc-trackpage .ph-result { animation: pc-rise 0.5s both cubic-bezier(0.22, 1, 0.36, 1); }
+.pc-trackpage .ph-step-dot { transition: transform 0.3s, background 0.3s; }
+.pc-trackpage .ph-step.is-current .ph-step-dot { animation: pc-ring 1.8s ease-out infinite; }
+.pc-trackpage .ph-progress-fill { transition: width 1s cubic-bezier(0.22, 1, 0.36, 1); }
+.pc-trackpage .ph-timeline-item { animation: pc-slide 0.4s both cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .pc-modal, .pc-modal .pc-sheet, .pc-trackpage .ph-result, .pc-trackpage .ph-step.is-current .ph-step-dot, .pc-trackpage .ph-timeline-item { animation: none; }
+}
+
+/* ── ติดตามงาน + ผู้ช่วย AI สูงเท่ากันบนจอกว้าง ───────────────────────── */
+@media (min-width: 880px) {
+  .pc-home .pc-main:not(.pc-trackpage) .pc-left { display: flex; flex-direction: column; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-track { flex: 1; display: flex; flex-direction: column; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-track .pc-prev { flex: 1; display: flex; flex-direction: column; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-track .pc-prev-log { flex: 1; }
+  /* ความสูงแถวกำหนดโดยฝั่งซ้าย; แชตเต็มช่อง เลื่อนข้อความภายในเอง */
+  .pc-home .pc-main:not(.pc-trackpage) .pc-right { align-self: stretch; position: relative; min-height: 440px; }
+  .pc-home .pc-main:not(.pc-trackpage) .pc-right .pc-chat { position: absolute; inset: 0; height: auto; }
+}
+
+/* ฝั่งซ้ายเป็นการ์ดเหมือนแผงแชต ขอบบน/ล่างตรงกัน */
+.pc-home .pc-main:not(.pc-trackpage) .pc-track {
+  padding: 18px;
+  box-sizing: border-box;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
+  box-shadow: 0 4px 18px rgb(29 27 41 / 0.05);
+}

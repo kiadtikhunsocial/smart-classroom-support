@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : คำถาม-คำตอบที่คนตรวจแล้ว (ตรงกันทุกตัวอักษร) จากหน้า จัดการ AI / LINE OA
+# ถูกเรียกจาก  : chatbot_core, main
+# เชื่อมต่อไป  : ตาราง chatbot_knowledge_entries ใน Supabase
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Human-reviewed LINE answers for exact, normalized questions only.
 
 Never use this store for warranty, prices, payments, repair state, or identity

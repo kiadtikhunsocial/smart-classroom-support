@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : กฎบำรุงรักษาเชิงป้องกัน (PM) และวันหมดประกัน
+# ถูกเรียกจาก  : main, chatbot_warranty
+# เชื่อมต่อไป  : Supabase (devices, pm_plans, pm_tasks)
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """app/pm_rules.py — PM Rule Engine (Blueprint §38)
 
 สามกฎตาม Blueprint:

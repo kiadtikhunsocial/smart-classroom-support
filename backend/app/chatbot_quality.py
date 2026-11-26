@@ -1,3 +1,10 @@
+# ── แผนที่ไฟล์ ──────────────────────────────────────────────
+# หน้าที่      : รายการคำถามที่บอทตอบไม่ชัด ให้คนทบทวน
+# ถูกเรียกจาก  : main (หน้า ฐานความรู้แชตบอต)
+# เชื่อมต่อไป  : ตาราง chatbot_logs ใน Supabase, gemini_service
+# env ที่อ่าน  : -
+# ภาพรวมระบบ  : docs/SYSTEM_MAP.md
+# ─────────────────────────────────────────────────────────
 """Small, deterministic review queue for improving chatbot knowledge.
 
 This is a candidate list for human review, not an automatic accuracy score.

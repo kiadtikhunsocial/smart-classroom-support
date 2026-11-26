@@ -1,12 +1,12 @@
-"""backup_db.py — สำรองข้อมูลทั้งหมดจาก PostgreSQL (Neon) เป็นไฟล์ .sql + .json
+"""backup_db.py — สำรองข้อมูลทั้งหมดจาก PostgreSQL (production = Supabase) เป็นไฟล์ .sql + .json
 
 ใช้งาน:
     DATABASE_URL='postgresql://...' python scripts/backup_db.py [outdir]
 
 ได้ไฟล์ (ใน backups/):
-    neondb_<YYYYmmdd_HHMM>.sql   — INSERT ทุกตาราง (กู้คืนได้)
-    neondb_<YYYYmmdd_HHMM>.json  — สำเนาแบบ JSON (อ่าน/ตรวจง่าย)
-    neondb_<YYYYmmdd_HHMM>.txt   — สรุปจำนวนแถวแต่ละตาราง
+    db_<YYYYmmdd_HHMM>.sql   — INSERT ทุกตาราง (กู้คืนได้)
+    db_<YYYYmmdd_HHMM>.json  — สำเนาแบบ JSON (อ่าน/ตรวจง่าย)
+    db_<YYYYmmdd_HHMM>.txt   — สรุปจำนวนแถวแต่ละตาราง
 """
 import json
 import os
@@ -37,9 +37,9 @@ OUTDIR = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backups")
 os.makedirs(OUTDIR, exist_ok=True)
 stamp = datetime.now().strftime("%Y%m%d_%H%M")
-sql_path = os.path.join(OUTDIR, f"neondb_{stamp}.sql")
-json_path = os.path.join(OUTDIR, f"neondb_{stamp}.json")
-sum_path = os.path.join(OUTDIR, f"neondb_{stamp}.txt")
+sql_path = os.path.join(OUTDIR, f"db_{stamp}.sql")
+json_path = os.path.join(OUTDIR, f"db_{stamp}.json")
+sum_path = os.path.join(OUTDIR, f"db_{stamp}.txt")
 
 conn = psycopg2.connect(URL)
 conn.set_session(readonly=True)
@@ -50,7 +50,7 @@ cur.execute("""SELECT table_name FROM information_schema.tables
 tables = [r[0] for r in cur.fetchall()]
 
 sql_lines = [
-    f"-- สำรองข้อมูล Smart Classroom (Neon) {datetime.now().isoformat(timespec='seconds')}",
+    f"-- สำรองข้อมูล Smart Classroom {datetime.now().isoformat(timespec='seconds')}",
     "-- วิธีกู้คืน: ให้แอปสร้างสคีมาก่อน (รัน backend หนึ่งครั้ง) แล้วรัน psql < ไฟล์นี้",
     "BEGIN;",
 ]

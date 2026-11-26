@@ -6,39 +6,56 @@
     <link rel="apple-touch-icon" href="/logo.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="ระบบจัดการแจ้งซ่อมอุปกรณ์ห้องเรียนอัจฉริยะ — แจ้งซ่อม ติดตามสถานะ และดูแลอุปกรณ์ในที่เดียว" />
-    <!-- ธีมของแอปถูกเลือกจากหน้าตั้งค่า (theme.ts) ไม่ใช่จาก prefers-color-scheme
-         ของ OS จึงตั้ง theme-color เป็น navy ค่าเดียวให้ตรงกับค่าเริ่มต้น (dark)
-         ถ้าผู้ใช้สลับเป็นโหมดสว่าง applyThemePrefs() จะอัปเดต tag นี้ตอน runtime -->
-    <meta name="theme-color" content="#050B1C" />
-    <meta name="color-scheme" content="dark light" />
-    <!-- พื้นก่อน CSS ภายนอกโหลดเสร็จ — กันจอขาวกระพริบหนึ่งเฟรมตอนเปิดแอป
-         (initTheme() ใน main.tsx ทำงานหลัง bundle โหลด ซึ่งช้ากว่า paint ครั้งแรก)
-         html:not([data-mode]) = ช่วงก่อน initTheme() ทาธีม → ใช้ navy ตามค่าเริ่มต้น
-         หลัง initTheme() attribute ถูกตั้ง → กฎด้านล่างเข้าคุม จึงไม่มี navy
-         โผล่ที่ขอบล่างเมื่อผู้ใช้เลือกโหมดสว่างและเนื้อหาสั้นกว่าจอ -->
+    <!-- ค่าเริ่มต้น = โหมดสว่าง (ดีไซน์ Calm) — สคริปต์ด้านล่างอ่านโหมดที่ผู้ใช้เลือกไว้
+         แล้วทาลง <html> ก่อน paint แรก จอจึงไม่กระพริบสลับสี -->
+    <meta name="theme-color" content="#F4F6F9" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var p = JSON.parse(localStorage.getItem('sc_theme_prefs_v2') || 'null');
+          var m = p && p.mode === 'dark' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-mode', m);
+          document.documentElement.setAttribute('data-accent', (p && p.accent) || 'purple');
+        } catch (e) {
+          document.documentElement.setAttribute('data-mode', 'light');
+          document.documentElement.setAttribute('data-accent', 'purple');
+        }
+      })();
+    </script>
     <style>
-      html,
-      body {
-        margin: 0;
-      }
-      html:not([data-mode]),
-      html[data-mode='dark'] {
-        background-color: #050b1c;
-      }
-      html[data-mode='light'] {
-        background-color: #f7f8fb;
-      }
+      html, body { margin: 0; }
+      html, html[data-mode='light'] { background-color: #f4f6f9; }
+      html[data-mode='dark'] { background-color: #12161d; }
+      .boot { --boot-ink: #1b2333; --boot-muted: #4a5568; --boot-line: #d6dee8; --boot-surface: #fff; --boot-accent: #25476e; position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; font: 500 .95rem/1.5 "Noto Sans Thai", Tahoma, system-ui, sans-serif; color: var(--boot-ink); }
+      html[data-mode='dark'] .boot { --boot-ink: #e4e8ee; --boot-muted: #b8c2d0; --boot-line: #3a4655; --boot-surface: #1b222c; --boot-accent: #9ab6d8; }
+      .boot-inner { display: grid; justify-items: center; gap: 10px; width: min(100%, 320px); box-sizing: border-box; padding: 28px 18px; border: 1px solid var(--boot-line); border-radius: 16px; background: var(--boot-surface); text-align: center; }
+      .boot-logo { width: 52px; height: 52px; border-radius: 10px; object-fit: contain; background: #fff; }
+      .boot-name { font-weight: 700; }
+      .boot-sub { color: var(--boot-muted); font-size: .88rem; }
+      .boot-spin { width: 21px; height: 21px; margin-top: 4px; border-radius: 50%; border: 2px solid var(--boot-line); border-top-color: var(--boot-accent); animation: boot-spin 1s linear infinite; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .boot-spin { animation: none; } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600&family=Inter:wght@400;500;600;700&display=swap"
     />
     <title>IWA Smart Classroom Support</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-live="polite">
+        <div class="boot-inner">
+          <img class="boot-logo" src="/logo.jpg" alt="" width="52" height="52" fetchpriority="high" />
+          <span class="boot-name">IWA Smart Classroom Support</span>
+          <span class="boot-spin" aria-hidden="true"></span>
+          <span class="boot-sub">กำลังเปิดระบบ…</span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
